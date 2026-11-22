@@ -1,0 +1,214 @@
+{
+  "slug": "order-now",
+  "text": "สั่งซื้อเลย",
+  "fill": "#FFD400",
+  "stroke": "#111111",
+  "fps": 30,
+  "duration": 3,
+  "timing": {
+    "popUp": 0.3,
+    "settle": 0.5,
+    "fadeStart": 2.5,
+    "fadeEnd": 2.966666666666667
+  },
+  "parts": {
+    "introSeconds": 0.8,
+    "outroSeconds": 0.5,
+    "holdFrame": 30
+  },
+  "renderedAt": "2026-11-22T08:08:55.012Z",
+  "formats": {
+    "mp4_green": {
+      "ext": "mp4",
+      "label": "MP4 พื้นเขียว (Chroma Key)"
+    },
+    "mp4_black": {
+      "ext": "mp4",
+      "label": "MP4 พื้นดำ (Screen/Add)"
+    },
+    "prores4444": {
+      "ext": "mov",
+      "label": "MOV ProRes 4444 โปร่งใส"
+    },
+    "webm_alpha": {
+      "ext": "webm",
+      "label": "WebM VP9 โปร่งใส"
+    },
+    "parts_green": {
+      "ext": "mp4",
+      "label": "ส่วนเข้า/ออก MP4 พื้นเขียว"
+    },
+    "parts_prores": {
+      "ext": "mov",
+      "label": "ส่วนเข้า/ออก MOV ProRes 4444 โปร่งใส"
+    },
+    "still_png": {
+      "ext": "png",
+      "label": "ภาพนิ่ง PNG โปร่งใส (ยืดได้)"
+    }
+  },
+  "files": [
+    {
+      "format": "mp4_green",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "order-now_mp4_green_1080x1920.mp4",
+      "bytes": 138705
+    },
+    {
+      "format": "mp4_black",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "order-now_mp4_black_1080x1920.mp4",
+      "bytes": 100017
+    },
+    {
+      "format": "prores4444",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "order-now_prores4444_1080x1920.mov",
+      "bytes": 14080058
+    },
+    {
+      "format": "webm_alpha",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "order-now_webm_alpha_1080x1920.webm",
+      "bytes": 149405
+    },
+    {
+      "format": "parts_green",
+      "part": "intro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "order-now_parts_green_intro_1080x1920.mp4",
+      "bytes": 118483
+    },
+    {
+      "format": "parts_prores",
+      "part": "intro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "order-now_parts_prores_intro_1080x1920.mov",
+      "bytes": 3621477
+    },
+    {
+      "format": "parts_green",
+      "part": "outro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "order-now_parts_green_outro_1080x1920.mp4",
+      "bytes": 27724
+    },
+    {
+      "format": "parts_prores",
+      "part": "outro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "order-now_parts_prores_outro_1080x1920.mov",
+      "bytes": 2288387
+    },
+    {
+      "format": "still_png",
+      "part": "hold",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "order-now_still_1080x1920.png",
+      "bytes": 33880
+    },
+    {
+      "format": "mp4_green",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "order-now_mp4_green_1920x1080.mp4",
+      "bytes": 142999
+    },
+    {
+      "format": "mp4_black",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "order-now_mp4_black_1920x1080.mp4",
+      "bytes": 103453
+    },
+    {
+      "format": "prores4444",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "order-now_prores4444_1920x1080.mov",
+      "bytes": 14086083
+    },
+    {
+      "format": "webm_alpha",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "order-now_webm_alpha_1920x1080.webm",
+      "bytes": 151566
+    },
+    {
+      "format": "parts_green",
+      "part": "intro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "order-now_parts_green_intro_1920x1080.mp4",
+      "bytes": 122184
+    },
+    {
+      "format": "parts_prores",
+      "part": "intro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "order-now_parts_prores_intro_1920x1080.mov",
+      "bytes": 3637390
+    },
+    {
+      "format": "parts_green",
+      "part": "outro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "order-now_parts_green_outro_1920x1080.mp4",
+      "bytes": 27882
+    },
+    {
+      "format": "parts_prores",
+      "part": "outro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "order-now_parts_prores_outro_1920x1080.mov",
+      "bytes": 2286098
+    },
+    {
+      "format": "still_png",
+      "part": "hold",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "order-now_still_1920x1080.png",
+      "bytes": 32631
+    }
+  ]
+}

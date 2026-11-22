@@ -1,0 +1,17 @@
+{
+  "_comment": "ฟอนต์ที่ลูกค้าเลือกได้ตอนปรับแต่ง ทุกตัวใช้สัญญา SIL Open Font License (ใช้เชิงพาณิชย์ได้) ไฟล์อยู่ที่ public/fonts/thai/<id>/ คู่กับ OFL.txt · weight คือน้ำหนักที่ใช้วาด",
+  "fonts": [
+    { "id": "kanit", "label": "Kanit", "file": "Kanit-Bold.ttf", "weight": 700, "mood": "หัวกลม ทันสมัย อ่านง่าย" },
+    { "id": "prompt", "label": "Prompt", "file": "Prompt-Bold.ttf", "weight": 700, "mood": "เรขาคณิต สะอาด" },
+    { "id": "mitr", "label": "Mitr", "file": "Mitr-Bold.ttf", "weight": 700, "mood": "อวบ เป็นมิตร" },
+    { "id": "sarabun", "label": "Sarabun", "file": "Sarabun-Bold.ttf", "weight": 700, "mood": "ทางการ มีหัว" },
+    { "id": "notosansthai", "label": "Noto Sans Thai", "file": "NotoSansThai.ttf", "weight": 700, "mood": "เรียบ มาตรฐาน" },
+    { "id": "chakrapetch", "label": "Chakra Petch", "file": "ChakraPetch-Bold.ttf", "weight": 700, "mood": "เหลี่ยม เทคโนโลยี" },
+    { "id": "baijamjuree", "label": "Bai Jamjuree", "file": "BaiJamjuree-Bold.ttf", "weight": 700, "mood": "หัวตัด โมเดิร์น" },
+    { "id": "athiti", "label": "Athiti", "file": "Athiti-Bold.ttf", "weight": 700, "mood": "ผอมสูง สง่า" },
+    { "id": "pridi", "label": "Pridi", "file": "Pridi-Bold.ttf", "weight": 700, "mood": "มีเชิง หรูหรา" },
+    { "id": "mali", "label": "Mali", "file": "Mali-Bold.ttf", "weight": 700, "mood": "ลายมือ น่ารัก" },
+    { "id": "itim", "label": "Itim", "file": "Itim-Regular.ttf", "weight": 400, "mood": "ลายมือ สนุก" },
+    { "id": "sriracha", "label": "Sriracha", "file": "Sriracha-Regular.ttf", "weight": 400, "mood": "ลายมือ พู่กัน" }
+  ]
+}

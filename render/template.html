@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<style>
+  /* ฟอนต์ใส่มาเป็น data URL จาก render.js · ประกาศช่วงน้ำหนัก 100–900 กันเบราว์เซอร์ทำตัวหนาปลอม */
+  @font-face {
+    font-family: "RenderFont";
+    src: url("__FONT_URL__");
+    font-weight: 100 900;
+  }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+  #stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #text {
+    display: grid;
+    font-family: "RenderFont", sans-serif;
+    font-synthesis: none;
+    white-space: nowrap;
+    /* line-height เผื่อที่ให้สระบน/วรรณยุกต์ และสระล่าง ไม่ถูกตัด */
+    line-height: 1.6;
+    padding: 0.3em 0.4em;
+    transform-origin: 50% 50%;
+    will-change: transform, opacity;
+  }
+  /* ขอบ/เงาสร้างด้วย SVG filter (ดู public/motion.js) ขอบของสระ/วรรณยุกต์รวมเป็นชิ้นเดียวกับพยัญชนะ */
+  #text .fill { color: var(--fill); }
+</style>
+</head>
+<body>
+<div id="filters"></div>
+<div id="stage"><div id="text"><span class="fill"></span></div></div>
+<script>__MOTION_JS__</script>
+<script>
+  document.getElementById('filters').innerHTML = TTMotion.filterMarkup('outline');
+  var el = document.getElementById('text');
+  window.setup = function (opts) {
+    return TTMotion.setup(el, Object.assign({ fontFamily: 'RenderFont', width: window.innerWidth, height: window.innerHeight, filterId: 'outline' }, opts));
+  };
+  window.setTime = function (t, timing) { TTMotion.setTime(el, t, timing); };
+</script>
+</body>
+</html>

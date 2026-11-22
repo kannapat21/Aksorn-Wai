@@ -1,0 +1,14 @@
+node_modules/
+.env
+data/
+storage/verify/
+*.db
+*.db-*
+storage/custom/
+storage/user-fonts/
+storage/packages/
+# ข้อมูลลูกค้าและไฟล์ที่สร้างขึ้นตอนใช้งาน
+*.log
+logs/
+.DS_Store
+storage/**/*.part
