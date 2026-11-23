@@ -105,6 +105,19 @@ function loadConfig(overrides = {}) {
     customStorageMb: Number(env.CUSTOM_STORAGE_MB || 3000), // พื้นที่เก็บ "เวอร์ชันของฉัน" ต่อบัญชี
     userFontDir: path.resolve(ROOT, env.USER_FONT_DIR || 'storage/user-fonts'),
     userFontMax: Number(env.USER_FONT_MAX || 20), // ฟอนต์ที่อัปโหลดได้ต่อบัญชี
+    // ซับอัตโนมัติ: ลูกค้าอัปคลิป ร้านถอดเสียงด้วย Whisper ในเครื่อง แล้วเบิร์นซับด้วยแบบในคลัง
+    subtitles: {
+      engine: env.SUBTITLE_ENGINE || 'auto', // auto | mlx | faster-whisper | off
+      python: env.SUBTITLE_PYTHON || (fs.existsSync(path.join(ROOT, '.venv-stt', 'bin', 'python')) ? path.join(ROOT, '.venv-stt', 'bin', 'python') : 'python3'),
+      model: env.SUBTITLE_MODEL || '', // ว่าง = whisper-large-v3-turbo
+      dir: path.resolve(ROOT, env.SUBTITLE_DIR || 'storage/subtitles'),
+      maxMb: Number(env.SUBTITLE_MAX_MB || 300), // ขนาดคลิปสูงสุด
+      maxSeconds: Number(env.SUBTITLE_MAX_SECONDS || 180), // ความยาวคลิปสูงสุด (วินาที)
+      dailyLimit: Number(env.SUBTITLE_DAILY_LIMIT || 5), // อัปคลิปได้กี่คลิปต่อบัญชีต่อ 24 ชม. (0 = ไม่จำกัด)
+      retentionHours: Number(env.SUBTITLE_RETENTION_HOURS || 24), // ลบคลิปลูกค้าและไฟล์ที่ได้อัตโนมัติหลังกี่ชั่วโมง
+      concurrency: Number(env.SUBTITLE_CONCURRENCY || 1),
+      asrTimeoutMin: Number(env.SUBTITLE_ASR_TIMEOUT_MIN || 20),
+    },
     fonts: loadFonts(),
     products: overrides.products || loadJson('config/products.json'),
     editorsConfig: overrides.editorsConfig || loadJson('config/editors.json'),
@@ -144,6 +157,11 @@ function loadConfig(overrides = {}) {
     if (cfg.mail.mode === 'smtp' && (!cfg.mail.host || !cfg.mail.user || !cfg.mail.pass)) problems.push('ตั้ง SMTP_HOST / SMTP_USER / SMTP_PASS ให้ครบ');
     if (!cfg.legal.name || !cfg.legal.contactEmail) problems.push('ตั้ง LEGAL_NAME และ CONTACT_EMAIL สำหรับหน้านโยบาย');
   }
+  const S = cfg.subtitles;
+  if (!['auto', 'mlx', 'faster-whisper', 'off'].includes(S.engine)) problems.push('SUBTITLE_ENGINE ต้องเป็น auto / mlx / faster-whisper / off');
+  if (!(S.maxMb >= 5 && S.maxMb <= 4000)) problems.push('SUBTITLE_MAX_MB ต้องอยู่ระหว่าง 5–4000');
+  if (!(S.maxSeconds >= 10 && S.maxSeconds <= 1800)) problems.push('SUBTITLE_MAX_SECONDS ต้องอยู่ระหว่าง 10–1800');
+  if (!(S.retentionHours >= 1 && S.retentionHours <= 720)) problems.push('SUBTITLE_RETENTION_HOURS ต้องอยู่ระหว่าง 1–720');
   if (problems.length) {
     const e = new Error('ตั้งค่าไม่ครบ:\n - ' + problems.join('\n - '));
     e.configProblems = problems;

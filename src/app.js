@@ -12,6 +12,8 @@ const { createMailer } = require('./mailer');
 const { getProvider, WebhookSignatureError } = require('./payments');
 const custom = require('./customizer');
 const renderTools = require('../render/tools');
+const { createSubtitles } = require('./subtitles');
+const { createTranscriber } = require('./transcribe');
 
 const MIN_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * MIN_MS;
@@ -54,7 +56,7 @@ function createApp(cfg, opts = {}) {
       'X-Frame-Options': 'DENY',
       // ลิงก์ดาวน์โหลดมีลายเซ็นใน URL ห้ามส่ง Referer ออกนอกเว็บ (ภายในเว็บส่งได้ ใช้ตัดสินว่าแสดงหน้าโหลดไหม)
       'Referrer-Policy': 'same-origin',
-      'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; media-src 'self'; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; media-src 'self' blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Resource-Policy': 'same-origin',
@@ -129,6 +131,25 @@ function createApp(cfg, opts = {}) {
     renderer: opts.renderer || custom.createRenderer(cfg),
     toolsOk: () => tools().ok,
   });
+
+  // ---------- ซับอัตโนมัติ ----------
+  const transcriber = opts.transcriber || createTranscriber(cfg);
+  const subRender = opts.subtitleRenderer || (() => {
+    const R = require('../render/subtitles');
+    return { render: (o) => R.renderSubtitled(o), extractAudio: R.extractAudio, probe: R.probe };
+  })();
+  const subtitles = createSubtitles({
+    db, cfg, log, now, transcriber, renderer: subRender,
+    toolsOk: () => tools().ok,
+    resolveFont: (job) => {
+      const f = customizer.resolveFont(job);
+      if (f.user) f.chars = (customizer.userFonts.get(job.font.slice(2), job.user_id) || {}).chars || '';
+      return f;
+    },
+  });
+  let subReady = { ok: false, reason: 'กำลังตรวจ' };
+  const subCheck = async () => { subReady = opts.transcriber ? { ok: true } : await transcriber.check().catch(() => ({ ok: false })); return subReady; };
+  subCheck().then((r) => log(r.ok ? `ซับอัตโนมัติ: พร้อม (${r.engine || 'whisper'})` : `ซับอัตโนมัติ: ยังไม่พร้อม (${r.reason || ''}) ดูวิธีติดตั้งใน README หัวข้อ "ซับอัตโนมัติ"`));
 
   // ---------- บัญชีแอดมิน (สร้าง/ซิงก์จาก .env ทุกครั้งที่เปิดร้าน) ----------
   // แอดมินเข้าสู่ระบบที่หน้าเข้าสู่ระบบปกติ แล้วเปิด /admin ได้ ลูกค้าทั่วไปเข้าไม่ได้
@@ -287,6 +308,8 @@ function createApp(cfg, opts = {}) {
     fontUpload: limiter('font-upload', 20, HOUR, byUser),
     styles: limiter('styles', 60, MIN15, byUser),
     confirm: limiter('transfer-confirm', 6, HOUR, byUser), // แจ้งโอนได้ 6 ครั้งต่อชั่วโมงต่อบัญชี
+    subUpload: limiter('subtitle-upload', 20, HOUR, byUser),
+    subSave: limiter('subtitle-save', 240, MIN15, byUser),
   };
 
   // ---------- อีเมลยืนยัน / ลืมรหัสผ่าน ----------
@@ -638,7 +661,7 @@ function createApp(cfg, opts = {}) {
 
   // ---------- Omise: เลือกวิธีจ่าย (PromptPay / บัตร) ----------
   // หน้าจ่ายเงินโหลด Omise.js จาก cdn.omise.co (เลขบัตรส่งตรงไป vault.omise.co ไม่ผ่านเซิร์ฟเวอร์ร้าน)
-  const OMISE_CSP = "default-src 'self'; img-src 'self' data:; media-src 'self'; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' https://cdn.omise.co; connect-src 'self' https://vault.omise.co https://api.omise.co; frame-src https://*.omise.co; object-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
+  const OMISE_CSP = "default-src 'self'; img-src 'self' data:; media-src 'self' blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' https://cdn.omise.co; connect-src 'self' https://vault.omise.co https://api.omise.co; frame-src https://*.omise.co; object-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
   const isOmise = () => provider.name === 'omise';
   function payableOrder(req, res) {
     if (!isOmise()) { notFound(req, res); return null; }
@@ -1100,6 +1123,182 @@ function createApp(cfg, opts = {}) {
     res.redirect(303, '/library/fonts');
   });
 
+  // ---------- ซับอัตโนมัติ: อัปคลิป → ถอดเสียง → แก้คำ → เบิร์นซับด้วยแบบในคลัง ----------
+  const ownedItems = (userId) => q.libraryOrders.all(userId).map((o) => ({ order: o, p: productsBySlug.get(o.product_slug) })).filter((x) => x.p);
+  const subFonts = (userId) => customizer.fontsFor(userId).filter((f) => !f.user || f.thai !== 'none');
+  function ownSub(req) {
+    const job = subtitles.get(req.params.id);
+    return job && req.user && job.user_id === req.user.id && job.status !== 'expired' ? job : null;
+  }
+  // หน้าตาเริ่มต้น: ค่าที่ใช้ล่าสุดตอนปรับแต่ง ไม่งั้นสีของแบบนั้นในร้าน
+  function defaultStyle(user, item) {
+    let last = {};
+    try { last = JSON.parse(user.last_custom || '{}') || {}; } catch { last = {}; }
+    const mf = item.p.manifest || {};
+    return {
+      order: item.order.id, font: last.font || 'kanit', fill: (last.fill || mf.fill || '#ffffff').toLowerCase(), stroke: (last.stroke || mf.stroke || '#111111').toLowerCase(),
+      outline: last.outline || 'medium', shadow: last.shadow !== undefined ? Boolean(last.shadow) : true, size: 'md', position: 'bottom',
+    };
+  }
+
+  app.get('/subtitles', requireUser, async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    await subCheck();
+    send(req, res, 'subtitlesHome', {
+      owned: ownedItems(req.user.id), jobs: subtitles.byUser(req.user.id), limits: subtitles.limits(req.user.id),
+      ready: { ok: subReady.ok && tools().ok }, now: now(), picked: String(req.query.style || ''),
+    });
+  });
+
+  // อัปโหลดเป็นไฟล์ดิบแบบสตรีม (ไม่เก็บทั้งไฟล์ในหน่วยความจำ) · CSRF และแบบที่เลือกส่งมาใน header
+  app.post('/subtitles/upload', limit.subUpload, async (req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    const fail = (status, error) => { req.resume(); return res.status(status).set('Connection', 'close').json({ error }); };
+    try {
+      if (!req.user) return fail(401, 'กรุณาเข้าสู่ระบบ');
+      if (!auth.safeEqual(req.get('x-csrf-token'), req.csrf)) return fail(403, 'หมดเวลาแบบฟอร์ม กรุณาโหลดหน้าใหม่');
+      const S = cfg.subtitles;
+      if (!(await subCheck()).ok || !tools().ok) return fail(503, 'ระบบใส่ซับยังไม่พร้อมใช้งาน ลองใหม่ภายหลัง');
+      const lim = subtitles.limits(req.user.id);
+      if (lim.active > 0) return fail(409, 'มีคลิปที่กำลังทำอยู่ รอให้เสร็จก่อนแล้วค่อยอัปคลิปใหม่');
+      if (lim.maxPerDay > 0 && lim.today >= lim.maxPerDay) return fail(429, `วันนี้อัปครบ ${lim.maxPerDay} คลิปแล้ว อัปเพิ่มได้อีกครั้งพรุ่งนี้`);
+      const max = S.maxMb * 1024 * 1024;
+      const len = Number(req.get('content-length') || 0);
+      if (!len) return fail(411, 'ไม่พบไฟล์คลิป');
+      if (len > max) return fail(413, `ไฟล์ใหญ่เกิน ${S.maxMb} MB ลองส่งออกคลิปเป็น 1080p แล้วอัปใหม่`);
+      const owned = ownedItems(req.user.id).map((x) => x.order);
+      const item = ownedItems(req.user.id).find((x) => x.order.id === String(req.get('x-style') || ''));
+      if (!item) return fail(400, 'กรุณาเลือกแบบตัวอักษรจากคลังของคุณ');
+      const st = subtitles.validateStyle(defaultStyle(req.user, item), { owned, fonts: subFonts(req.user.id) });
+      const style = st.value || subtitles.validateStyle({ ...defaultStyle(req.user, item), font: 'kanit' }, { owned, fonts: subFonts(req.user.id) }).value;
+      let name = '';
+      try { name = decodeURIComponent(String(req.get('x-filename') || '')).slice(0, 200); } catch { name = ''; }
+      const tmp = path.join(subtitles.tmpDir(), `${crypto.randomBytes(12).toString('hex')}.part`);
+      const out = fs.createWriteStream(tmp, { mode: 0o600 });
+      let bytes = 0;
+      let aborted = false;
+      const cleanup = () => { out.destroy(); fs.rmSync(tmp, { force: true }); };
+      req.on('data', (chunk) => {
+        bytes += chunk.length;
+        if (bytes > max && !aborted) { aborted = true; req.unpipe(out); cleanup(); res.status(413).set('Connection', 'close').json({ error: `ไฟล์ใหญ่เกิน ${S.maxMb} MB` }); }
+      });
+      req.on('aborted', () => { aborted = true; cleanup(); });
+      req.pipe(out);
+      out.on('error', (e) => { if (!aborted) { aborted = true; cleanup(); next(e); } });
+      out.on('finish', async () => {
+        if (aborted) return;
+        try {
+          const r = await subtitles.receive({ user: req.user, style, tmpFile: tmp, name, bytes, probe: subRender.probe });
+          if (r.error) { fs.rmSync(tmp, { force: true }); return res.status(400).json({ error: r.error }); }
+          log('[subtitles] ลูกค้าอัปคลิป');
+          res.json({ ok: true, url: `/subtitles/${r.job.id}` });
+        } catch (e) { fs.rmSync(tmp, { force: true }); next(e); }
+      });
+    } catch (e) { next(e); }
+  });
+
+  function subLayout(job) {
+    const R = require('../render/subtitles');
+    const { w, h } = R.outSize(job.width, job.height);
+    const sizes = {};
+    for (const k of ['sm', 'md', 'lg']) for (const pos of ['top', 'middle', 'bottom']) sizes[`${k}:${pos}`] = R.layoutFor(w, h, { size: k, position: pos });
+    return { w, h, sizes };
+  }
+
+  app.get('/subtitles/:id', requireUser, (req, res) => {
+    const job = ownSub(req);
+    if (!job) return notFound(req, res, 'ไม่พบคลิปนี้ (คลิปถูกลบอัตโนมัติเมื่อครบเวลาเก็บ)');
+    res.set('Cache-Control', 'no-store');
+    send(req, res, 'subtitleJob', {
+      job, cues: subtitles.cuesOf(job), owned: ownedItems(req.user.id), fonts: subFonts(req.user.id),
+      layoutInfo: subLayout(job), position: subtitles.position(job), now: now(),
+    });
+  });
+
+  app.get('/subtitles/:id/status', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const job = ownSub(req);
+    if (!job) return res.status(404).json({ error: 'ไม่พบคลิปนี้' });
+    res.json({ status: job.status, progress: job.progress, stage: job.stage, position: subtitles.position(job) });
+  });
+
+  // คลิปต้นฉบับ (ใช้เล่นในหน้าแก้ซับ รองรับเลื่อนเวลาแบบ Range) เจ้าของเท่านั้น
+  app.get('/subtitles/:id/source', requireUser, (req, res) => {
+    const job = ownSub(req);
+    if (!job || !fs.existsSync(subtitles.srcOf(job))) return res.status(404).end();
+    const type = { mov: 'video/quicktime', webm: 'video/webm', mkv: 'video/x-matroska', m4v: 'video/mp4' }[job.src_ext] || 'video/mp4';
+    res.set({ 'Cache-Control': 'private, no-store', 'Content-Type': type });
+    res.sendFile(subtitles.srcOf(job));
+  });
+
+  function applyBody(job, body) {
+    const owned = ownedItems(job.user_id).map((x) => x.order);
+    if (body.style) {
+      const st = subtitles.validateStyle(body.style, { owned, fonts: subFonts(job.user_id) });
+      if (st.error) return { error: st.error };
+      subtitles.setStyle(job, st.value);
+    }
+    if (body.cues) {
+      const r = subtitles.saveCues(job, body.cues);
+      if (r.error) return r;
+      return { cues: r.cues };
+    }
+    return { cues: subtitles.cuesOf(job) };
+  }
+
+  app.post('/subtitles/:id/save', limit.subSave, express.json({ limit: '512kb' }), (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!req.user) return res.status(401).json({ error: 'กรุณาเข้าสู่ระบบ' });
+    if (!auth.safeEqual(req.get('x-csrf-token'), req.csrf)) return res.status(403).json({ error: 'หมดเวลาแบบฟอร์ม กรุณาโหลดหน้าใหม่' });
+    const job = ownSub(req);
+    if (!job) return res.status(404).json({ error: 'ไม่พบคลิปนี้' });
+    if (!['review', 'failed'].includes(job.status)) return res.status(409).json({ error: 'คลิปนี้กำลังสร้างอยู่ แก้ไม่ได้ตอนนี้' });
+    const r = applyBody(job, req.body || {});
+    if (r.error) return res.status(400).json({ error: r.error });
+    if (req.query.render === '1') {
+      if (!tools().ok) return res.status(503).json({ error: 'ระบบสร้างคลิปยังไม่พร้อม ลองใหม่ภายหลัง' });
+      if (!r.cues.length) return res.status(400).json({ error: 'ยังไม่มีข้อความซับ เพิ่มอย่างน้อย 1 บรรทัด' });
+      if (!subtitles.queueRender(subtitles.get(job.id))) return res.status(409).json({ error: 'เริ่มสร้างคลิปไม่ได้ ลองโหลดหน้าใหม่' });
+      log('[subtitles] ลูกค้าสั่งสร้างคลิป');
+    }
+    res.json({ ok: true, cues: r.cues });
+  });
+
+  app.post('/subtitles/:id/edit', requireUser, requireCsrf, (req, res) => {
+    const job = ownSub(req);
+    if (!job) return notFound(req, res, 'ไม่พบคลิปนี้');
+    subtitles.reopen(job);
+    res.redirect(303, `/subtitles/${job.id}`);
+  });
+
+  app.get('/subtitles/:id/srt', requireUser, (req, res) => {
+    const job = ownSub(req);
+    if (!job || !job.cues_json) return notFound(req, res, 'ยังไม่มีซับของคลิปนี้');
+    const base = (job.src_name || 'clip').replace(/\.[a-z0-9]{2,4}$/i, '');
+    res.set({ 'Content-Type': 'application/x-subrip; charset=utf-8', 'Cache-Control': 'private, no-store',
+      'Content-Disposition': `attachment; filename="subtitles.srt"; filename*=UTF-8''${encodeURIComponent(base)}.srt` });
+    res.send('﻿' + require('./subcues').toSrt(subtitles.cuesOf(job)));
+  });
+
+  app.get('/subtitles/:id/download', requireUser, limit.download, (req, res) => {
+    const job = ownSub(req);
+    if (!job || job.status !== 'done' || !fs.existsSync(subtitles.outOf(job))) return notFound(req, res, 'ยังไม่มีคลิปพร้อมซับ');
+    const base = (job.src_name || 'clip').replace(/\.[a-z0-9]{2,4}$/i, '');
+    res.set({ 'Content-Type': 'video/mp4', 'Cache-Control': 'private, no-store' });
+    if (req.query.inline !== '1') res.set('Content-Disposition', `attachment; filename="subtitled.mp4"; filename*=UTF-8''${encodeURIComponent(`${base}-ซับ`)}.mp4`);
+    res.sendFile(subtitles.outOf(job));
+  });
+
+  app.post('/subtitles/:id/delete', requireUser, requireCsrf, (req, res) => {
+    const job = ownSub(req);
+    if (!job) return notFound(req, res, 'ไม่พบคลิปนี้');
+    if (!subtitles.remove(job.id, req.user.id)) {
+      return send(req, res, 'message', { title: 'ลบตอนนี้ไม่ได้', text: 'คลิปนี้กำลังประมวลผลอยู่ รอให้เสร็จก่อนแล้วลบได้ (หรือรอลบอัตโนมัติ)' }, 409);
+    }
+    log('[subtitles] ลูกค้าลบคลิป');
+    res.redirect(303, '/subtitles');
+  });
+
   app.get('/library/:orderId', requireUser, (req, res) => {
     const it = libraryItem(req, res);
     if (!it) return;
@@ -1273,7 +1472,7 @@ function createApp(cfg, opts = {}) {
     send(req, res, 'message', { title: 'เกิดข้อผิดพลาด', text: 'กรุณาลองใหม่อีกครั้ง' }, 500);
   });
 
-  return { app, db, mailer, provider, applyPaymentEvent, customizer };
+  return { app, db, mailer, provider, applyPaymentEvent, customizer, subtitles };
 }
 
 module.exports = { createApp };

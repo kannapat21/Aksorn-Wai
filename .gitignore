@@ -12,3 +12,6 @@ storage/packages/
 logs/
 .DS_Store
 storage/**/*.part
+storage/subtitles/
+.venv-stt/
+sample-clips/
