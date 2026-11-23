@@ -51,6 +51,7 @@ before(async () => {
     DATABASE_FILE: ':memory:',
     DOWNLOAD_LINK_SECRET: crypto.randomBytes(32).toString('hex'),
     PAYMENT_WEBHOOK_SECRET: crypto.randomBytes(32).toString('hex'),
+    ADMIN_EMAIL: 'Admin@Aksornwai.Local',
     ADMIN_PASSWORD: 'test-admin-password-123',
     PAYMENT_PROVIDER: 'mock',
     MAIL_MODE: 'console',
@@ -59,6 +60,9 @@ before(async () => {
     DOWNLOAD_DAILY_LIMIT: '60',
     CUSTOM_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'shop-custom-')),
     CUSTOM_STORAGE_MB: '1',
+    RATE_GLOBAL_PER_MIN: '0', // เทสต์ยิงคำขอเยอะจาก IP เดียว (มีเทสต์ตัวจำกัดแยกด้านล่าง)
+    RATE_SIGNUP_PER_HOUR: '1000',
+    LEGAL_NAME: 'ร้านทดสอบ จำกัด',
     USER_FONT_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'shop-fonts-')),
   });
   ctx = createApp(cfg, { now: () => clock, log: () => {}, renderer: fakeRenderer, renderTools });
@@ -289,7 +293,7 @@ test('webhook ซ้ำ (event เดิม และ event ใหม่ขอ�
   assert.equal(results.filter((r) => r.result === 'duplicate').length, 4);
   assert.equal((await (await sendWebhook(mock.buildEvent(order(orderId), { eventId: 'evt_dup_test_2' }))).json()).result, 'already_paid');
   await new Promise((res) => setTimeout(res, 20));
-  assert.equal(ctx.mailer.sent.filter((m) => m.to === 'dup@example.com').length, 1);
+  assert.equal(ctx.mailer.sent.filter((m) => m.to === 'dup@example.com' && /ยืนยันการสั่งซื้อ/.test(m.subject)).length, 1);
 });
 
 // ---------- คลัง ----------
@@ -303,7 +307,7 @@ test('คลัง: ปุ่มไฟล์ตามโปรแกรมที
   assert.doesNotMatch(cap, /ProRes ·/);
   assert.match(cap, /ใช้ได้ตลอด/);
   const pr = await (await c.req(`/library/${orderId}?editor=premiere`)).text();
-  assert.match(pr, /MOV โปร่งใส \(ProRes\) · 14\.\d MB/);
+  assert.match(pr, /MOV โปร่งใส \(ProRes\) · \d+\.\d MB/);
   assert.equal(user('lib@example.com').editor, 'premiere');
   // ครั้งหน้าไม่ระบุโปรแกรม → ใช้ที่เลือกล่าสุด
   assert.match(await (await c.req(`/library/${orderId}`)).text(), /MOV โปร่งใส \(ProRes\) ·/);
@@ -420,17 +424,78 @@ test('หน้าสาธารณะ: /license, สัญญาฟอนต�
   assert.equal((await fetch(`${base}/orders/lookup`)).status, 404);
 });
 
-test('หลังบ้าน: ต้องใช้รหัสผ่าน แสดงคำสั่งซื้อและจำนวนสมาชิก', async () => {
-  assert.equal((await fetch(`${base}/admin`)).status, 401);
-  const bad = 'Basic ' + Buffer.from('admin:wrong').toString('base64');
-  assert.equal((await fetch(`${base}/admin`, { headers: { authorization: bad } })).status, 401);
-  const auth = 'Basic ' + Buffer.from(`admin:${cfg.adminPassword}`).toString('base64');
-  const page = await fetch(`${base}/admin`, { headers: { authorization: auth } });
+async function adminClient() {
+  const c = client();
+  const r = await c.login(cfg.adminEmail, cfg.adminPassword);
+  assert.equal(r.status, 303);
+  return c;
+}
+
+test('หลังบ้าน: แอดมินเข้าสู่ระบบที่หน้าปกติ (อีเมล+รหัสจาก .env) ลูกค้าเข้าไม่ได้ ไม่มีกล่องถามรหัสแยกแล้ว', async () => {
+  // บัญชีแอดมินถูกสร้างจาก .env: ยืนยันอีเมลแล้ว รหัสเก็บเป็น scrypt
+  const a = user(cfg.adminEmail);
+  assert.equal(a.role, 'admin');
+  assert.ok(a.email_verified_at);
+  assert.match(a.password_hash, /^scrypt\$/);
+  assert.ok(!a.password_hash.includes(cfg.adminPassword));
+  assert.equal(count("SELECT COUNT(*) n FROM users WHERE role = 'admin'"), 1);
+
+  // ยังไม่ล็อกอิน → พาไปหน้าเข้าสู่ระบบ (ไม่มี Basic auth) · Basic auth ใช้ไม่ได้อีก
+  const anon = client();
+  const r0 = await anon.req('/admin');
+  assert.equal(r0.status, 303);
+  assert.equal(r0.headers.get('location'), '/login?next=%2Fadmin');
+  assert.equal(r0.headers.get('www-authenticate'), null);
+  const basic = 'Basic ' + Buffer.from(`admin:${cfg.adminPassword}`).toString('base64');
+  assert.equal((await fetch(`${base}/admin`, { redirect: 'manual', headers: { authorization: basic } })).status, 303);
+
+  // ลูกค้าทั่วไปเข้าไม่ได้ (ตอบเหมือนไม่มีหน้านี้) และไม่เห็นลิงก์หลังบ้าน
+  const cust = await newUser('not-admin@example.com');
+  assert.equal((await cust.req('/admin')).status, 404);
+  assert.doesNotMatch(await (await cust.req('/library')).text(), /href="\/admin"/);
+  assert.equal(user('not-admin@example.com').role, 'customer');
+  // สมัครด้วยอีเมลแอดมินไม่ได้ และรหัสผิดเข้าไม่ได้
+  assert.equal((await client().signup(cfg.adminEmail)).status, 400);
+  assert.equal((await client().login(cfg.adminEmail, 'wrong-password-1')).status, 401);
+
+  // แอดมินล็อกอินปกติ: เห็นลิงก์หลังบ้านในเมนู เข้า /admin ได้
+  const adm = await adminClient();
+  const lib = await (await adm.req('/library')).text();
+  assert.match(lib, /href="\/admin"/);
+  assert.doesNotMatch(lib, /class="verify-bar"/, 'อีเมลแอดมินยืนยันแล้ว');
+  const page = await adm.req('/admin');
   assert.equal(page.status, 200);
+  assert.equal(page.headers.get('cache-control'), 'no-store');
   const html = await page.text();
   assert.match(html, /สมาชิก/);
   assert.match(html, /owner@example\.com/);
   assert.match(html, /Premiere Pro/); // สถิติโปรแกรมจากประวัติการโหลด
+  // จำนวนสมาชิกไม่นับแอดมิน
+  assert.equal(Number(/สมาชิก<\/span><b>(\d+)/.exec(html)[1]), count("SELECT COUNT(*) n FROM users WHERE role != 'admin'"));
+  // ออกจากระบบแล้วเข้าไม่ได้อีก
+  assert.equal((await adm.post('/logout')).status, 303);
+  assert.equal((await adm.req('/admin')).status, 303);
+});
+
+test('หลังบ้าน: ลืมรหัสผ่านของแอดมินไม่ส่งลิงก์ และเปลี่ยนรหัสใน .env แล้วเปิดร้านใหม่ รหัสใหม่ใช้ได้ รหัสเก่าใช้ไม่ได้', async () => {
+  const n = ctx.mailer.sent.length;
+  const r = await client().post('/forgot', { email: cfg.adminEmail });
+  assert.equal(r.status, 200);
+  assert.match(await r.text(), /ถ้าอีเมลนี้มีบัญชีอยู่/);
+  assert.equal(ctx.mailer.sent.length, n, 'ไม่ส่งลิงก์ตั้งรหัสของแอดมิน');
+  // จำลองเปิดร้านใหม่ด้วยรหัสแอดมินใหม่ (ฐานข้อมูลเดียวกัน)
+  const cfg2 = { ...cfg, adminPassword: 'brand-new-admin-pass-77' };
+  const ctx2 = createApp(cfg2, { db: ctx.db, now: () => clock, log: () => {}, renderer: fakeRenderer, renderTools });
+  const s2 = await new Promise((res) => { const sv = ctx2.app.listen(0, '127.0.0.1', () => res(sv)); });
+  try {
+    const b2 = `http://127.0.0.1:${s2.address().port}`;
+    const login = (pw) => fetch(`${b2}/login`, { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: 'csrf=' + 'c'.repeat(43) }, body: new URLSearchParams({ csrf: 'c'.repeat(43), email: cfg.adminEmail, password: pw }) });
+    assert.equal((await login('brand-new-admin-pass-77')).status, 303);
+    assert.equal((await login(cfg.adminPassword)).status, 401);
+  } finally { s2.close(); }
+  // คืนรหัสเดิมให้เทสต์อื่น
+  createApp(cfg, { db: ctx.db, now: () => clock, log: () => {}, renderer: fakeRenderer, renderTools });
+  assert.equal((await client().login(cfg.adminEmail, cfg.adminPassword)).status, 303);
 });
 
 test('ไฟล์สินค้าไม่อยู่ในโฟลเดอร์ public', async () => {
@@ -506,6 +571,9 @@ test('ปรับแต่ง: สั่งเรนเดอร์ → คิ�
   const page = await (await c.req(`/library/${orderId}/customize`)).text();
   assert.match(page, /สร้างไฟล์ของฉัน/);
   assert.match(page, /tt-mali/);
+  // มือถือ: ฟอร์มแบ่งเป็น 5 ขั้น มีแถบปุ่มล่างและสคริปต์ทีละขั้น · ท่าเคลื่อนไหวของสินค้าส่งถึงพรีวิวสด
+  assert.equal((page.match(/class="cz-step" data-step=/g) || []).length, 5);
+  assert.match(page, /data-wiz-bar/); assert.match(page, /\/wizard\.js/); assert.match(page, /data-motion="(pop|drop)"/);
   assert.equal((await c.req(`/library/${orderId}/customize`, { method: 'POST', form: { text: 'x' } })).status, 403); // ไม่มี CSRF
   assert.equal((await c.post(`/library/${orderId}/customize`, { text: '<b>hi</b>', font: 'kanit', fill: '#ffffff', stroke: '#000000', outline: 'thin', editor: 'premiere' })).status, 400);
 
@@ -620,7 +688,7 @@ test('ปรับแต่ง: ไม่จำกัดจำนวนครั
   try {
     assert.equal((await c.post(`/library/${orderId}/customize`, body(16))).status, 503);
     assert.match(await (await c.req(`/library/${orderId}/customize`)).text(), /ระบบสร้างไฟล์ยังไม่พร้อม/);
-    const admin = await (await fetch(`${base}/admin`, { headers: { authorization: 'Basic ' + Buffer.from(`admin:${cfg.adminPassword}`).toString('base64') } })).text();
+    const admin = await (await (await adminClient()).req('/admin')).text();
     assert.match(admin, /ยังไม่พร้อม/);
   } finally { renderTools.ok = true; }
 });
@@ -853,4 +921,656 @@ test('ใช้ง่าย: อัปโหลดฟอนต์แล้วไ
   const other = await newUser('easy-other@example.com');
   const otherOrder = await buy(other);
   assert.doesNotMatch(await (await other.req(`/library/${otherOrder}/customize?font=u-${json.id}`)).text(), new RegExp(json.id));
+});
+
+// ---------- อีเมลยืนยัน / ลืมรหัสผ่าน / กันสแปม / นโยบาย ----------
+
+const lastMailTo = (email) => [...ctx.mailer.sent].reverse().find((m) => m.to === email);
+const linkIn = (m, p) => new RegExp(`http://shop\\.test(${p}\\?t=[\\w-]+)`).exec(m.text)[1];
+
+test('ยืนยันอีเมล: สมัครแล้วได้อีเมลลิงก์ ใช้ได้ครั้งเดียว และมีแถบเตือนจนกว่าจะยืนยัน', async () => {
+  const c = await newUser('verify@example.com');
+  await new Promise((r) => setTimeout(r, 20));
+  const m = lastMailTo('verify@example.com');
+  assert.ok(m, 'ส่งอีเมลยืนยัน');
+  assert.match(m.subject, /ยืนยันอีเมล/);
+  assert.match((await (await c.req('/library')).text()), /class="verify-bar"/);
+  const link = linkIn(m, '/verify-email');
+  // ฐานข้อมูลไม่เก็บโทเคนตรงๆ
+  assert.equal(count('SELECT COUNT(*) n FROM email_tokens WHERE id = ?', new URL('http://x' + link).searchParams.get('t')), 0);
+  assert.equal((await fetch(base + link.replace(/t=.{4}/, 't=AAAA'))).status, 400);
+  assert.equal((await fetch(base + link)).status, 200);
+  assert.ok(user('verify@example.com').email_verified_at);
+  assert.equal((await fetch(base + link)).status, 400, 'ใช้ซ้ำไม่ได้');
+  assert.doesNotMatch((await (await c.req('/library')).text()), /class="verify-bar"/);
+  // ส่งใหม่ต้องมี CSRF
+  const d = await newUser('verify2@example.com');
+  assert.equal((await d.req('/verify-email/resend', { method: 'POST', form: {} })).status, 403);
+  assert.equal((await d.post('/verify-email/resend')).status, 200);
+  // ลิงก์ใหม่ทำให้ลิงก์เก่าใช้ไม่ได้
+  const all = ctx.mailer.sent.filter((x) => x.to === 'verify2@example.com');
+  assert.equal(all.length, 2);
+  assert.equal((await fetch(base + linkIn(all[0], '/verify-email'))).status, 400);
+  assert.equal((await fetch(base + linkIn(all[1], '/verify-email'))).status, 200);
+});
+
+test('ลืมรหัสผ่าน: ไม่บอกว่าอีเมลไหนมีบัญชี ลิงก์ใช้ครั้งเดียว หมดอายุ 30 นาที และออกจากระบบทุกเครื่อง', async () => {
+  const c = await newUser('reset@example.com');
+  const sidBefore = c.jar.sid;
+  const anon = client();
+  const n = ctx.mailer.sent.length;
+  const unknown = await anon.post('/forgot', { email: 'nobody-here@example.com' });
+  const known = await anon.post('/forgot', { email: 'RESET@example.com' });
+  assert.equal(unknown.status, 200);
+  assert.equal(known.status, 200);
+  const msg = /ถ้าอีเมลนี้มีบัญชีอยู่[^<]*/;
+  assert.equal(msg.exec(await unknown.text())[0], msg.exec(await known.text())[0], 'ข้อความเหมือนกัน');
+  assert.equal(ctx.mailer.sent.length, n + 1, 'ส่งเฉพาะอีเมลที่มีบัญชี');
+  const link = linkIn(lastMailTo('reset@example.com'), '/reset');
+  // กดขอซ้ำทันที → ไม่ส่งเพิ่ม (กันกดรัว)
+  await anon.post('/forgot', { email: 'reset@example.com' });
+  assert.equal(ctx.mailer.sent.length, n + 1);
+  assert.equal((await anon.req(link)).status, 200);
+  const token = new URL('http://x' + link).searchParams.get('t');
+  assert.equal((await anon.post('/reset', { t: token, password: 'short' })).status, 400);
+  assert.equal((await anon.req('/reset', { method: 'POST', form: { t: token, password: 'new-password-123' } })).status, 403); // ไม่มี CSRF
+  const ok = await anon.post('/reset', { t: token, password: 'new-password-123' });
+  assert.equal(ok.status, 303);
+  assert.equal(ok.headers.get('location'), '/login?reset=1');
+  assert.equal((await anon.post('/reset', { t: token, password: 'another-pass-456' })).status, 400, 'ใช้ซ้ำไม่ได้');
+  // เซสชันเดิมใช้ไม่ได้ รหัสเก่าใช้ไม่ได้ รหัสใหม่ใช้ได้
+  assert.equal((await fetch(`${base}/library`, { redirect: 'manual', headers: { cookie: `sid=${sidBefore}` } })).status, 303);
+  assert.equal((await client().login('reset@example.com')).status, 401);
+  assert.equal((await client().login('reset@example.com', 'new-password-123')).status, 303);
+  assert.ok(user('reset@example.com').email_verified_at, 'รับอีเมลได้ = ยืนยันแล้ว');
+  // ลิงก์หมดอายุหลัง 30 นาที
+  const saved = clock;
+  try {
+    clock = saved + 5 * MIN;
+    await anon.post('/forgot', { email: 'reset@example.com' });
+    const link2 = linkIn(lastMailTo('reset@example.com'), '/reset');
+    clock += 31 * MIN;
+    assert.equal((await anon.req(link2)).status, 400);
+  } finally { clock = saved; }
+});
+
+test('กันสแปม: ขอลิงก์ลืมรหัสผ่านถี่เกินไป → 429 และมีส่วนหัวความปลอดภัย', async () => {
+  const saved = clock;
+  try {
+    clock = saved + 3 * 60 * MIN; // เริ่มช่วงนับใหม่
+    const anon = client();
+    let last;
+    for (let i = 0; i < 6; i++) last = await anon.post('/forgot', { email: `spam${i}@example.com` });
+    assert.equal(last.status, 429);
+    assert.ok(last.headers.get('retry-after'));
+  } finally { clock = saved; }
+  const r = await fetch(`${base}/`);
+  assert.match(r.headers.get('content-security-policy'), /object-src 'none'/);
+  assert.match(r.headers.get('permissions-policy'), /camera=\(\)/);
+  assert.equal(r.headers.get('cross-origin-opener-policy'), 'same-origin');
+  assert.equal(r.headers.get('x-frame-options'), 'DENY');
+});
+
+test('หน้านโยบาย: เงื่อนไข / คืนเงิน / ความเป็นส่วนตัว มีลิงก์ท้ายเว็บและตอนซื้อ ช่องที่ยังไม่กรอกถูกทำเครื่องหมาย', async () => {
+  for (const [p, h] of [['/terms', 'เงื่อนไขการใช้งาน'], ['/refund', 'นโยบายคืนเงิน'], ['/privacy', 'PDPA']]) {
+    const r = await fetch(base + p);
+    assert.equal(r.status, 200, p);
+    const html = await r.text();
+    assert.match(html, new RegExp(h));
+    assert.match(html, /ร้านทดสอบ จำกัด/);
+    assert.match(html, /class="fill-me">\[กรอก อีเมลติดต่อ\]/);
+  }
+  const home = await (await fetch(`${base}/`)).text();
+  assert.match(home, /href="\/terms"/);
+  assert.match(home, /href="\/privacy"/);
+  const c = await newUser('legal@example.com');
+  assert.match(await (await c.req('/p/order-now')).text(), /การกดซื้อถือว่ายอมรับ <a href="\/terms">/);
+});
+
+// ---------- แอปบนมือถือ (PWA) ----------
+
+test('แอป (PWA): manifest ไอคอน service worker หน้าออฟไลน์ และไม่เก็บหน้าส่วนตัว/ไฟล์ดาวน์โหลด', async () => {
+  const m = await fetch(`${base}/manifest.webmanifest`);
+  assert.equal(m.status, 200);
+  assert.match(m.headers.get('content-type'), /manifest\+json/);
+  const man = await m.json();
+  assert.equal(man.display, 'standalone');
+  assert.equal(man.short_name, 'อักษรไหว');
+  assert.ok(man.icons.some((i) => i.sizes === '512x512' && i.purpose === 'maskable'));
+  for (const i of man.icons) assert.equal((await fetch(base + i.src)).status, 200, i.src);
+  assert.equal((await fetch(`${base}/icons/apple-touch-icon.png`)).status, 200);
+  const sw = await fetch(`${base}/sw.js`);
+  assert.equal(sw.status, 200);
+  assert.equal(sw.headers.get('cache-control'), 'no-cache');
+  const code = await sw.text();
+  assert.doesNotMatch(code, /__VERSION__/);
+  // แคชได้เฉพาะไฟล์หน้าตาร้าน (ไม่มีคลัง หลังบ้าน ลิงก์ดาวน์โหลด ฟอนต์ของลูกค้า)
+  const STATIC = new Function(`return (${/const STATIC = (.*);/.exec(code)[1]});`)();
+  for (const p of ['/style.css', '/app.js', '/fonts/Kanit-Bold.ttf', '/icons/icon-192.png', '/offline.html']) assert.ok(STATIC.test(p), p);
+  for (const p of ['/library', '/library/abc/download', '/admin', '/d/x/f/y.mp4', '/c/x/f/y.mov', '/library/fonts/abc/file', '/account', '/previews/order-now_horizontal.mp4']) assert.ok(!STATIC.test(p), p);
+  assert.match(code, /req\.mode === 'navigate'[\s\S]*offline\.html/);
+  assert.equal((await fetch(`${base}/offline.html`)).status, 200);
+  assert.equal((await fetch(`${base}/sw.template.js`)).status, 404);
+  // หัวหน้าเว็บมีลิงก์ manifest และแถบเมนูล่าง
+  const home = await (await fetch(`${base}/`)).text();
+  assert.match(home, /rel="manifest" href="\/manifest\.webmanifest"/);
+  assert.match(home, /class="tabbar"/);
+});
+
+test('แท็บบัญชี: ยังไม่ล็อกอินเห็นปุ่มเข้าสู่ระบบ ล็อกอินแล้วเห็นอีเมล คลัง สไตล์ ฟอนต์ และออกจากระบบ', async () => {
+  const guest = await (await client().req('/account')).text();
+  assert.match(guest, /href="\/login\?next=%2Faccount"/);
+  const c = await newUser('acct@example.com');
+  await buy(c);
+  const page = await c.req('/account');
+  assert.equal(page.headers.get('cache-control'), 'no-store');
+  const html = await page.text();
+  assert.match(html, /acct@example\.com/);
+  assert.match(html, /คลังของฉัน[\s\S]*1 รายการ/);
+  assert.match(html, /href="\/library\/styles"/);
+  assert.match(html, /action="\/logout"/);
+  assert.doesNotMatch(html, /href="\/admin"/);
+});
+
+// ---------- ปุ่มจำลองจ่าย: คนภายนอก (ผ่านลิงก์สาธารณะ) กดไม่ได้ ----------
+
+test('โหมด mock: คนที่เข้าผ่านลิงก์สาธารณะกดจำลองจ่ายไม่ได้ (แอดมินกดได้)', async () => {
+  const c = await newUser('public-mock@example.com');
+  const { orderId } = await checkout(c);
+  const viaTunnel = { 'x-forwarded-for': '203.0.113.7' };
+  const page = await (await c.req(`/pay/mock/${orderId}`, { headers: viaTunnel })).text();
+  assert.match(page, /ปุ่มจำลองจ่ายใช้ได้เฉพาะเจ้าของร้าน/);
+  const r = await c.req(`/pay/mock/${orderId}/simulate`, { method: 'POST', form: { csrf: await c.csrf() }, headers: viaTunnel });
+  assert.equal(r.status, 403);
+  assert.equal(order(orderId).status, 'pending');
+});
+
+// ---------- Omise (เซิร์ฟเวอร์ Omise จำลอง) ----------
+
+const omiseMod = require('../src/payments/omise');
+const express = require('express');
+
+test('Omise: ตั้งค่าคีย์ผิดหรือใช้คีย์จริงนอก production ไม่ยอมเปิดร้าน', () => {
+  const baseEnv = { OMISE_PUBLIC_KEY: '', OMISE_SECRET_KEY: '', OMISE_WEBHOOK_SECRET: '', NODE_ENV: 'test', DATABASE_FILE: ':memory:', DOWNLOAD_LINK_SECRET: 'x'.repeat(40), PAYMENT_WEBHOOK_SECRET: 'y'.repeat(40) };
+  assert.throws(() => loadConfig({ ...baseEnv, PAYMENT_PROVIDER: 'omise' }), /OMISE_PUBLIC_KEY/);
+  assert.throws(() => loadConfig({ ...baseEnv, PAYMENT_PROVIDER: 'omise', OMISE_PUBLIC_KEY: 'pkey_5abc', OMISE_SECRET_KEY: 'skey_5abc', OMISE_WEBHOOK_SECRET: 'c2VjcmV0' }), /คีย์จริง/);
+  assert.throws(() => loadConfig({ ...baseEnv, PAYMENT_PROVIDER: 'mock', OMISE_SECRET_KEY: 'skey_5live' }), /ห้ามใช้ PAYMENT_PROVIDER=mock/);
+  assert.doesNotThrow(() => loadConfig({ ...baseEnv, PAYMENT_PROVIDER: 'omise', OMISE_PUBLIC_KEY: 'pkey_test_1', OMISE_SECRET_KEY: 'skey_test_1', OMISE_WEBHOOK_SECRET: 'c2VjcmV0' }));
+});
+
+test('Omise: ตรวจลายเซ็น webhook ตามคู่มือ (HMAC-SHA256 ของ timestamp.body ด้วย secret ที่ถอด base64 รองรับ 2 ลายเซ็น)', () => {
+  const secret = Buffer.from('my-webhook-secret').toString('base64');
+  const body = '{"object":"event","id":"evnt_test_1"}';
+  const h = omiseMod.signPayload(secret, body);
+  assert.doesNotThrow(() => omiseMod.verifySignature({ rawBody: body, headers: h, secret }));
+  assert.doesNotThrow(() => omiseMod.verifySignature({ rawBody: body, headers: { ...h, 'omise-signature': `deadbeef,${h['omise-signature']}` }, secret }));
+  assert.throws(() => omiseMod.verifySignature({ rawBody: body + ' ', headers: h, secret }), /ไม่ถูกต้อง/);
+  assert.throws(() => omiseMod.verifySignature({ rawBody: body, headers: { ...h, 'omise-signature-timestamp': String(Math.floor(Date.now() / 1000) - 3600) }, secret }), /หมดอายุ/);
+  assert.throws(() => omiseMod.verifySignature({ rawBody: body, headers: {}, secret }), /ไม่มีลายเซ็น/);
+});
+
+test('Omise: PromptPay QR → webhook ที่เซ็นแล้ว + ดึง charge จริง → เข้าคลัง · บัตร (สำเร็จ / ไม่สำเร็จ / 3DS) · หมดอายุ · คืนเงิน', async () => {
+  // ----- เซิร์ฟเวอร์ Omise จำลอง -----
+  const SKEY = 'skey_test_5xyz';
+  const charges = new Map();
+  let seq = 0;
+  const fake = express();
+  fake.use(express.urlencoded({ extended: true }));
+  fake.use((req, res, next) => {
+    const ok = req.headers.authorization === 'Basic ' + Buffer.from(`${SKEY}:`).toString('base64');
+    if (!ok) return res.status(401).json({ object: 'error', code: 'authentication_failure', message: 'bad key' });
+    next();
+  });
+  let fakeBase;
+  fake.post('/charges', (req, res) => {
+    const id = `chrg_test_${(++seq).toString(36)}x`;
+    const b = req.body;
+    const ch = { object: 'charge', id, livemode: false, amount: Number(b.amount), currency: String(b.currency).toLowerCase(), status: 'pending', paid: false,
+      refunded_amount: 0, metadata: b.metadata || {}, failure_code: null, failure_message: null, authorize_uri: null, expires_at: b.expires_at || null, source: null };
+    if (b.source && b.source.type === 'promptpay') {
+      ch.source = { object: 'source', type: 'promptpay', scannable_code: { object: 'barcode', type: 'qr', image: { object: 'document', download_uri: `${fakeBase}/charges/${id}/documents/docu_test_1/downloads/qr` } } };
+    } else if (b.card === 'tokn_test_ok') { ch.status = 'successful'; ch.paid = true; }
+    else if (b.card === 'tokn_test_fail') { ch.status = 'failed'; ch.failure_code = 'insufficient_fund'; ch.failure_message = 'insufficient funds in the account'; }
+    else if (b.card === 'tokn_test_3ds') { ch.authorize_uri = `https://api.omise.co/payments/paym_test_${id}/authorize`; ch.return_uri = b.return_uri; }
+    else return res.status(400).json({ object: 'error', code: 'invalid_card', message: 'invalid card token' });
+    charges.set(id, ch);
+    res.json(ch);
+  });
+  fake.get('/charges/:id', (req, res) => (charges.has(req.params.id) ? res.json(charges.get(req.params.id)) : res.status(404).json({ object: 'error', code: 'not_found', message: 'no charge' })));
+  fake.get('/charges/:id/documents/:doc/downloads/qr', (req, res) => res.type('image/svg+xml').send('<svg xmlns="http://www.w3.org/2000/svg"><rect width="9" height="9"/></svg>'));
+  const fakeServer = await new Promise((r) => { const s = fake.listen(0, '127.0.0.1', () => r(s)); });
+  fakeBase = `http://127.0.0.1:${fakeServer.address().port}`;
+
+  // ----- ร้านที่ใช้ Omise -----
+  const whSecret = Buffer.from('omise-test-webhook-secret').toString('base64');
+  const ocfg = loadConfig({
+    NODE_ENV: 'test', DATABASE_FILE: ':memory:', DOWNLOAD_LINK_SECRET: crypto.randomBytes(32).toString('hex'), PAYMENT_WEBHOOK_SECRET: crypto.randomBytes(32).toString('hex'),
+    PAYMENT_PROVIDER: 'omise', OMISE_PUBLIC_KEY: 'pkey_test_5xyz', OMISE_SECRET_KEY: SKEY, OMISE_WEBHOOK_SECRET: whSecret, OMISE_API_BASE: fakeBase,
+    MAIL_MODE: 'console', BASE_URL: 'http://shop.test', RATE_GLOBAL_PER_MIN: '0', RATE_SIGNUP_PER_HOUR: '1000', LEGAL_NAME: 'ร้านทดสอบ',
+    CUSTOM_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'omise-custom-')), USER_FONT_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'omise-fonts-')),
+  });
+  const octx = createApp(ocfg, { log: () => {}, renderer: fakeRenderer, renderTools });
+  octx.mailer.send = async (m) => { octx.mailer.sent.push(m); };
+  const shop = await new Promise((r) => { const s = octx.app.listen(0, '127.0.0.1', () => r(s)); });
+  const obase = `http://127.0.0.1:${shop.address().port}`;
+  const ord = (id) => octx.db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+
+  // ลูกค้าบนร้าน Omise
+  const mk = () => {
+    const jar = {};
+    const req = async (p, { method = 'GET', form, headers = {} } = {}) => {
+      const h = { ...headers, cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ') };
+      let body;
+      if (form) { h['content-type'] = 'application/x-www-form-urlencoded'; body = new URLSearchParams(form); }
+      const r = await fetch(obase + p, { method, headers: h, body, redirect: 'manual' });
+      for (const sc of r.headers.getSetCookie()) { const [kv] = sc.split(';'); const i = kv.indexOf('='); const v = kv.slice(i + 1); if (v) jar[kv.slice(0, i)] = v; else delete jar[kv.slice(0, i)]; }
+      return r;
+    };
+    const csrf = async () => { if (!jar.csrf) await req('/login'); return decodeURIComponent(jar.csrf); };
+    const post = async (p, f = {}) => req(p, { method: 'POST', form: { csrf: await csrf(), ...f } });
+    return { req, post };
+  };
+  const webhook = (event, secret = whSecret) => {
+    const body = JSON.stringify(event);
+    return fetch(`${obase}/webhooks/payment`, { method: 'POST', headers: { 'content-type': 'application/json', ...omiseMod.signPayload(secret, body) }, body });
+  };
+  const newOrder = async (c) => {
+    const r = await c.post('/checkout', { product: 'order-now' });
+    assert.equal(r.status, 303);
+    assert.match(r.headers.get('location'), /^\/pay\/omise\/[0-9a-f]+$/);
+    return r.headers.get('location').split('/').pop();
+  };
+
+  try {
+    const c = mk();
+    assert.equal((await c.post('/signup', { email: 'omise@example.com', password: 'correct-horse-9', next: '/library' })).status, 303);
+
+    // หน้าจ่ายเงิน: โหลด Omise.js ได้ ช่องบัตรไม่มี name (ไม่ถูกส่งมาที่ร้าน)
+    const id1 = await newOrder(c);
+    const pay = await c.req(`/pay/omise/${id1}`);
+    assert.equal(pay.status, 200);
+    assert.match(pay.headers.get('content-security-policy'), /script-src 'self' https:\/\/cdn\.omise\.co/);
+    const html = await pay.text();
+    assert.match(html, /<script src="https:\/\/cdn\.omise\.co\/omise\.js">/);
+    assert.match(html, /data-pkey="pkey_test_5xyz"/);
+    assert.doesNotMatch(html, /skey_/);
+    assert.doesNotMatch(html, /<input[^>]*data-card="number"[^>]*name=/);
+    assert.match(html, /name="omiseToken"/);
+    assert.equal((await mk().req(`/pay/omise/${id1}`)).status, 303, 'ต้องล็อกอิน');
+
+    // ----- PromptPay -----
+    const pp = await c.post(`/pay/omise/${id1}/promptpay`);
+    assert.equal(pp.status, 303);
+    const chId = ord(id1).payment_ref;
+    assert.match(chId, /^chrg_test_/);
+    assert.equal(charges.get(chId).amount, ord(id1).amount);
+    assert.equal(charges.get(chId).metadata.order_id, id1);
+    assert.match(await (await c.req(`/pay/omise/${id1}?method=promptpay`)).text(), /src="\/pay\/omise\/[0-9a-f]+\/qr"/);
+    const qr = await c.req(`/pay/omise/${id1}/qr`);
+    assert.equal(qr.status, 200);
+    assert.match(qr.headers.get('content-type'), /svg/);
+    // ยังไม่จ่าย: ถามสถานะยังรอจ่าย
+    assert.equal((await (await c.req(`/order/${id1}/status`)).json()).status, 'pending');
+    // webhook ปลอม (ลายเซ็นผิด) → ปฏิเสธ
+    assert.equal((await webhook({ object: 'event', id: 'evnt_test_bad', key: 'charge.complete', data: { id: chId } }, Buffer.from('wrong').toString('base64'))).status, 400);
+    // webhook ลายเซ็นถูก แต่ข้อมูลใน event อ้างว่าจ่ายแล้วทั้งที่ charge จริงยังรอจ่าย → ไม่เชื่อ (ดึง charge จริง)
+    const lie = await webhook({ object: 'event', id: 'evnt_test_lie', key: 'charge.complete', data: { id: chId, status: 'successful', paid: true } });
+    assert.equal(lie.status, 200);
+    assert.equal(ord(id1).status, 'pending');
+    // ลูกค้าจ่ายจริง (Omise เปลี่ยนสถานะ) → webhook → จ่ายแล้ว + อีเมล + เข้าคลัง
+    Object.assign(charges.get(chId), { status: 'successful', paid: true });
+    const ok = await webhook({ object: 'event', id: 'evnt_test_ok1', key: 'charge.complete', data: { id: chId } });
+    assert.equal((await ok.json()).result, 'paid');
+    assert.equal(ord(id1).status, 'paid');
+    // ส่งซ้ำ → ไม่ทำซ้ำ
+    assert.equal((await (await webhook({ object: 'event', id: 'evnt_test_ok1', key: 'charge.complete', data: { id: chId } })).json()).result, 'duplicate');
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(octx.mailer.sent.filter((m) => /ยืนยันการสั่งซื้อ/.test(m.subject)).length, 1);
+    assert.match(await (await c.req('/library')).text(), new RegExp(`/library/${id1}`));
+
+    // ----- บัตร: ไม่สำเร็จ แล้วลองใหม่สำเร็จ -----
+    const c2 = mk();
+    await c2.post('/signup', { email: 'card@example.com', password: 'correct-horse-9', next: '/library' });
+    const id2 = await newOrder(c2);
+    const fail = await c2.post(`/pay/omise/${id2}/card`, { omiseToken: 'tokn_test_fail' });
+    assert.equal(fail.status, 303);
+    assert.match(decodeURIComponent(fail.headers.get('location')), /จ่ายด้วยบัตรไม่สำเร็จ/);
+    assert.equal(ord(id2).status, 'failed');
+    assert.equal((await c2.post(`/pay/omise/${id2}/card`, { omiseToken: '4242424242424242' })).status, 303); // ไม่ใช่โทเคน → ไม่ส่งไป Omise
+    assert.equal(ord(id2).status, 'pending', 'ลองใหม่ได้');
+    const good = await c2.post(`/pay/omise/${id2}/card`, { omiseToken: 'tokn_test_ok' });
+    assert.equal(good.headers.get('location'), `/order/${id2}`);
+    assert.equal(ord(id2).status, 'paid');
+
+    // ----- บัตร 3DS: ไปหน้าธนาคาร แล้วกลับมา ร้านดึงสถานะจริงเอง -----
+    const c3 = mk();
+    await c3.post('/signup', { email: '3ds@example.com', password: 'correct-horse-9', next: '/library' });
+    const id3 = await newOrder(c3);
+    const tds = await c3.post(`/pay/omise/${id3}/card`, { omiseToken: 'tokn_test_3ds' });
+    assert.match(tds.headers.get('location'), /^https:\/\/api\.omise\.co\/payments\//);
+    assert.equal((await c3.req(`/pay/omise/${id3}/return`)).headers.get('location'), `/order/${id3}`);
+    assert.equal(ord(id3).status, 'pending', 'กลับมาเฉยๆ ยังไม่ถือว่าจ่าย');
+    Object.assign(charges.get(ord(id3).payment_ref), { status: 'successful', paid: true });
+    await c3.req(`/pay/omise/${id3}/return`);
+    assert.equal(ord(id3).status, 'paid');
+
+    // ----- PromptPay หมดอายุ (ไม่มี webhook ก็รู้จากการถามสถานะ) -----
+    const c4 = mk();
+    await c4.post('/signup', { email: 'expire@example.com', password: 'correct-horse-9', next: '/library' });
+    const id4 = await newOrder(c4);
+    await c4.post(`/pay/omise/${id4}/promptpay`);
+    Object.assign(charges.get(ord(id4).payment_ref), { status: 'expired' });
+    assert.equal((await (await c4.req(`/order/${id4}/status`)).json()).status, 'expired');
+    assert.match(await (await c4.req(`/order/${id4}`)).text(), /QR หมดอายุ/);
+    assert.equal((await c4.req(`/library/${id4}`)).status, 404);
+
+    // ----- คืนเงิน: refund.create → เอาออกจากคลัง -----
+    const ch2 = charges.get(ord(id2).payment_ref);
+    ch2.refunded_amount = ch2.amount;
+    const rf = await webhook({ object: 'event', id: 'evnt_test_rf1', key: 'refund.create', data: { object: 'refund', id: 'rfnd_test_1', charge: ch2.id, amount: ch2.amount } });
+    assert.equal((await rf.json()).result, 'refunded');
+    assert.equal(ord(id2).status, 'refunded');
+    assert.equal((await c2.req(`/library/${id2}`)).status, 404);
+
+    // คนอื่นดูหน้า/QR ของคำสั่งซื้อเราไม่ได้ และปุ่มจำลองจ่ายไม่มีในโหมด Omise
+    assert.equal((await c2.req(`/pay/omise/${id1}`)).status, 404);
+    assert.equal((await c2.req(`/pay/omise/${id1}/qr`)).status, 404);
+    assert.equal((await c.post(`/pay/mock/${id1}/simulate`)).status, 404);
+  } finally {
+    shop.close();
+    fakeServer.close();
+  }
+});
+
+// เรนเดอร์จริง 1 ไฟล์: ต้องเป็น 1080p 60fps ตรงตามแนวที่เลือก ความยาวตรง และ pix_fmt ที่เล่นได้ทั่วไป
+test('ไฟล์ที่ปรับแต่งออกมาเป็น 1080p 60fps (เรนเดอร์จริง)', async (t) => {
+  const tools = require('../render/tools');
+  const chk = tools.checkRenderTools ? await tools.checkRenderTools() : null;
+  if (chk && !chk.ok) return t.skip('ไม่มีเครื่องมือเรนเดอร์ในเครื่องนี้');
+  const { spawnSync } = require('child_process');
+  const { renderSingle, SINGLE_FPS } = require('../render/render');
+  assert.equal(SINGLE_FPS, 60);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fps-'));
+  try {
+    for (const [size, w, h] of [['horizontal', 1920, 1080], ['vertical', 1080, 1920]]) {
+      const out = path.join(dir, `${size}.mp4`);
+      await renderSingle({ text: 'ผู้ใหญ่ก็ซื้อ', fill: '#ffffff', stroke: '#e11d48', format: 'mp4_green', size, seconds: 3, outFile: out });
+      const p = spawnSync(tools.ffprobePath(), ['-v', 'error', '-count_frames', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,r_frame_rate,pix_fmt,nb_read_frames,duration', '-of', 'json', out], { encoding: 'utf8' });
+      const s = JSON.parse(p.stdout).streams[0];
+      assert.equal(s.width, w); assert.equal(s.height, h);
+      assert.equal(s.r_frame_rate, '60/1');
+      assert.equal(s.pix_fmt, 'yuv420p');
+      assert.equal(Number(s.nb_read_frames), 180);
+      assert.ok(Math.abs(Number(s.duration) - 3) < 0.02);
+    }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---------- โอนเงินแล้วกดยืนยัน (manual) ----------
+const promptpay = require('../src/promptpay');
+
+test('PromptPay QR: โครงสร้าง EMVCo และ CRC ถูกต้อง · ตรวจรูปแบบเบอร์/เลข 13 หลัก', () => {
+  const x = promptpay.payload('081-234-5678', 4937);
+  assert.match(x, /^000201010212/);
+  assert.ok(x.includes('0016A000000677010111') && x.includes('01130066812345678') && x.includes('5802TH') && x.includes('5303764') && x.includes('540549.37'));
+  assert.equal(promptpay.crc16(x.slice(0, -4)), x.slice(-4));
+  assert.ok(promptpay.payload('1234567890123', 100).includes('02131234567890123'));
+  assert.throws(() => promptpay.payload('12345', 100));
+  assert.equal(promptpay.normalizeId('0812345'), null);
+});
+
+test('manual: ตั้งค่า .env ผิด/ไม่ครบ ไม่ยอมเปิดร้าน', () => {
+  const base = { NODE_ENV: 'test', DATABASE_FILE: ':memory:', DOWNLOAD_LINK_SECRET: 'x'.repeat(40), PAYMENT_WEBHOOK_SECRET: 'y'.repeat(40), OMISE_PUBLIC_KEY: '', OMISE_SECRET_KEY: '', OMISE_WEBHOOK_SECRET: '',
+    ADMIN_EMAIL: 'a@x.test', ADMIN_PASSWORD: 'long-enough-admin-pass', PAYMENT_PROVIDER: 'manual', PROMPTPAY_ID: '', BANK_NAME: '', BANK_ACCOUNT_NO: '', BANK_ACCOUNT_NAME: '' };
+  assert.throws(() => loadConfig(base), /PROMPTPAY_ID/);
+  assert.throws(() => loadConfig({ ...base, PROMPTPAY_ID: '12345' }), /PROMPTPAY_ID/);
+  assert.throws(() => loadConfig({ ...base, PROMPTPAY_ID: '0812345678', ADMIN_PASSWORD: '' }), /แอดมิน/);
+  assert.doesNotThrow(() => loadConfig({ ...base, PROMPTPAY_ID: '0812345678' }));
+  assert.doesNotThrow(() => loadConfig({ ...base, BANK_NAME: 'กสิกรไทย', BANK_ACCOUNT_NO: '123-4-56789-0', BANK_ACCOUNT_NAME: 'ร้านทดสอบ' }));
+});
+
+test('manual: ลูกค้ากดยืนยันโอน → รอตรวจสอบ (ไม่ได้สินค้า) · แอดมินอนุมัติครั้งเดียวจึงเข้าคลัง · อนุมัติซ้ำไม่ได้ · คนนอก/ลูกค้าเข้าคิวไม่ได้', async () => {
+  let t = Date.now();
+  const mcfg = loadConfig({
+    NODE_ENV: 'test', DATABASE_FILE: ':memory:', DOWNLOAD_LINK_SECRET: crypto.randomBytes(32).toString('hex'), PAYMENT_WEBHOOK_SECRET: crypto.randomBytes(32).toString('hex'),
+    PAYMENT_PROVIDER: 'manual', PROMPTPAY_ID: '0812345678', PROMPTPAY_NAME: 'ร้านทดสอบ', BANK_NAME: 'ธนาคารทดสอบ', BANK_ACCOUNT_NO: '123-4-56789-0', BANK_ACCOUNT_NAME: 'ร้านทดสอบ', MANUAL_EXPIRE_HOURS: '24',
+    MANUAL_UNIQUE_SATANG: '1',
+    ADMIN_EMAIL: 'boss@shop.test', ADMIN_PASSWORD: 'boss-password-12345', MAIL_MODE: 'console', BASE_URL: 'http://shop.test', RATE_GLOBAL_PER_MIN: '0', RATE_SIGNUP_PER_HOUR: '1000', LEGAL_NAME: 'ร้านทดสอบ',
+    OMISE_PUBLIC_KEY: '', OMISE_SECRET_KEY: '', OMISE_WEBHOOK_SECRET: '',
+    CUSTOM_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'man-custom-')), USER_FONT_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'man-fonts-')),
+  });
+  const mctx = createApp(mcfg, { now: () => t, log: () => {}, renderer: fakeRenderer, renderTools });
+  mctx.mailer.send = async (m) => { mctx.mailer.sent.push(m); };
+  const srv = await new Promise((r) => { const s = mctx.app.listen(0, '127.0.0.1', () => r(s)); });
+  const mbase = `http://127.0.0.1:${srv.address().port}`;
+  const ord = (id) => mctx.db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+  const mk = () => {
+    const jar = {};
+    const req = async (p, { method = 'GET', form, headers = {} } = {}) => {
+      const h = { ...headers, cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ') };
+      let body;
+      if (form) { h['content-type'] = 'application/x-www-form-urlencoded'; body = new URLSearchParams(form); }
+      const r = await fetch(mbase + p, { method, headers: h, body, redirect: 'manual' });
+      for (const sc of r.headers.getSetCookie()) { const [kv] = sc.split(';'); const i = kv.indexOf('='); const v = kv.slice(i + 1); if (v) jar[kv.slice(0, i)] = v; else delete jar[kv.slice(0, i)]; }
+      return r;
+    };
+    const csrf = async () => { if (!jar.csrf) await req('/login'); return decodeURIComponent(jar.csrf); };
+    const post = async (p, f = {}) => req(p, { method: 'POST', form: { csrf: await csrf(), ...f } });
+    return { req, post };
+  };
+  try {
+    const alice = mk(); const bob = mk(); const boss = mk();
+    await alice.post('/signup', { email: 'alice@example.com', password: 'correct-horse-9', next: '/library' });
+    await bob.post('/signup', { email: 'bob@example.com', password: 'correct-horse-9', next: '/library' });
+    assert.equal((await boss.post('/login', { email: 'boss@shop.test', password: 'boss-password-12345', next: '/admin' })).status, 303);
+
+    // สั่งซื้อ → หน้าโอนเงิน มียอดไม่ซ้ำ รหัสอ้างอิง QR และเลขบัญชี (ข้อมูลรับเงินมาจาก config)
+    const co = await alice.post('/checkout', { product: 'order-now' });
+    assert.match(co.headers.get('location'), /^\/pay\/transfer\/[0-9a-f]{32}$/);
+    const id = co.headers.get('location').split('/').pop();
+    const o1 = ord(id);
+    assert.equal(o1.status, 'pending');
+    assert.ok(o1.transfer_amount > o1.amount && o1.transfer_amount < o1.amount + 100, 'ยอดโอน = ราคา + 1–99 สตางค์');
+    assert.match(o1.pay_ref, /^AW-[A-Z2-9]{6}$/);
+    const page = await (await alice.req(co.headers.get('location'))).text();
+    assert.match(page, new RegExp(`฿${(o1.transfer_amount / 100).toFixed(2).replace('.', '\\.')}`));
+    assert.ok(page.includes(o1.pay_ref) && page.includes('123-4-56789-0') && page.includes('ยืนยันการโอนเงิน') && page.includes(`/pay/transfer/${id}/qr`));
+    assert.ok(!/type="file"/.test(page), 'ไม่มีการแนบสลิป');
+    const qr = await alice.req(`/pay/transfer/${id}/qr`);
+    assert.equal(qr.status, 200); assert.match(qr.headers.get('content-type'), /svg/); assert.match(await qr.text(), /<svg/);
+    // คนอื่นดูหน้า/QR/สถานะของเราไม่ได้
+    assert.equal((await bob.req(`/pay/transfer/${id}`)).status, 404);
+    assert.equal((await bob.req(`/pay/transfer/${id}/qr`)).status, 404);
+    assert.equal((await bob.post(`/pay/transfer/${id}/confirm`, { sure: '1' })).status, 404);
+    // สั่งซ้ำสินค้าเดิม = ใช้ออเดอร์เดิม (ค้างได้ 1 ออเดอร์ต่อสินค้าต่อบัญชี)
+    assert.equal((await alice.post('/checkout', { product: 'order-now' })).headers.get('location'), `/pay/transfer/${id}`);
+    assert.equal(mctx.db.prepare("SELECT COUNT(*) n FROM orders WHERE user_id = ?").get(o1.user_id).n, 1);
+    // ยังไม่โอน/ไม่ติ๊ก → กดยืนยันไม่ได้
+    assert.match((await alice.post(`/pay/transfer/${id}/confirm`, {})).headers.get('location'), /error=/);
+    assert.equal(ord(id).status, 'pending');
+
+    // ยอดโอนของสองบัญชีไม่ซ้ำกัน
+    const co2 = await bob.post('/checkout', { product: 'order-now' });
+    const o2 = ord(co2.headers.get('location').split('/').pop());
+    assert.notEqual(o2.transfer_amount, o1.transfer_amount);
+
+    // ลูกค้ากดยืนยันโอน → รอตรวจสอบ แต่ "ไม่ได้สินค้า"
+    t += 60000;
+    const cf = await alice.post(`/pay/transfer/${id}/confirm`, { sure: '1', transfer_time: '14:35' });
+    assert.equal(cf.headers.get('location'), `/order/${id}`);
+    const o1r = ord(id);
+    assert.equal(o1r.status, 'review'); assert.equal(o1r.transfer_time, '14:35'); assert.equal(o1r.paid_at, null);
+    assert.equal((await alice.req(`/library/${id}`)).status, 404, 'ยังไม่อนุมัติ = ยังไม่มีในคลัง');
+    assert.match(await (await alice.req(`/order/${id}`)).text(), /รอร้านตรวจสอบ/);
+    assert.equal((await (await alice.req(`/order/${id}/status`)).json()).status, 'review');
+    assert.ok(mctx.mailer.sent.some((m) => m.to === 'alice@example.com' && /รอตรวจสอบ/.test(m.subject)), 'แจ้งลูกค้าว่ารับแจ้งแล้ว');
+    assert.ok(mctx.mailer.sent.some((m) => m.to === 'boss@shop.test' && m.text.includes(o1r.pay_ref)), 'แจ้งแอดมิน');
+    // ลูกค้าอนุมัติเอง/ปลอม webhook/ใช้ปุ่ม mock ไม่ได้
+    assert.equal((await alice.post(`/admin/transfers/${id}/approve`)).status, 404);
+    assert.equal((await alice.req('/admin/transfers')).status, 404);
+    assert.equal((await alice.post(`/pay/mock/${id}/simulate`)).status, 404);
+    assert.equal((await fetch(`${mbase}/webhooks/payment`, { method: 'POST', body: JSON.stringify({ type: 'payment.succeeded', orderId: id }) })).status, 400);
+    assert.equal((await alice.post(`/pay/transfer/${id}/confirm`, { sure: '1' })).headers.get('location'), `/order/${id}`); // กดซ้ำไม่เปลี่ยนอะไร
+    assert.equal(ord(id).confirm_count, 1);
+    assert.equal(ord(id).status, 'review');
+    // คนไม่ได้ล็อกอินเข้าคิวไม่ได้ (พาไปล็อกอิน) · อนุมัติโดยไม่มี CSRF ไม่ได้
+    assert.equal((await mk().req('/admin/transfers')).status, 303);
+    assert.equal((await boss.req(`/admin/transfers/${id}/approve`, { method: 'POST', form: {} })).status, 403);
+    assert.equal(ord(id).status, 'review');
+
+    // แอดมินเห็นคิว: ยอด รหัส เวลา ลูกค้า
+    const q1 = await (await boss.req('/admin/transfers')).text();
+    assert.ok(q1.includes(o1r.pay_ref) && q1.includes(`฿${(o1r.transfer_amount / 100).toFixed(2)}`) && q1.includes('alice@example.com') && q1.includes('14:35'));
+    assert.ok(!q1.includes(o2.pay_ref), 'ออเดอร์ที่ยังไม่แจ้งโอนไม่อยู่ในคิว');
+
+    // ปฏิเสธ (ต้องมีเหตุผล) → ลูกค้าเห็นเหตุผลและแจ้งใหม่ได้
+    assert.match((await boss.post(`/admin/transfers/${id}/reject`, { reason: 'x' })).headers.get('location'), /problem=reason/);
+    assert.match((await boss.post(`/admin/transfers/${id}/reject`, { reason: 'ไม่พบรายการโอนยอดนี้' })).headers.get('location'), /done=rejected/);
+    assert.equal(ord(id).status, 'rejected');
+    assert.match(await (await alice.req(`/order/${id}`)).text(), /ไม่พบรายการโอนยอดนี้/);
+    assert.match(await (await alice.req(`/pay/transfer/${id}`)).text(), /ไม่พบรายการโอนยอดนี้/);
+    assert.ok(mctx.mailer.sent.some((m) => m.to === 'alice@example.com' && /ยังไม่พบรายการโอน/.test(m.subject)));
+    assert.equal((await alice.req(`/library/${id}`)).status, 404);
+    // ปฏิเสธไปแล้ว อนุมัติ/ปฏิเสธซ้ำไม่ได้จนกว่าลูกค้าจะแจ้งใหม่
+    assert.match((await boss.post(`/admin/transfers/${id}/approve`)).headers.get('location'), /problem=handled/);
+
+    // แจ้งใหม่ → อนุมัติ → เข้าคลังครั้งเดียว
+    t += 60000;
+    await alice.post(`/pay/transfer/${id}/confirm`, { sure: '1' });
+    assert.equal(ord(id).status, 'review'); assert.equal(ord(id).confirm_count, 2);
+    const sentBefore = mctx.mailer.sent.length;
+    assert.match((await boss.post(`/admin/transfers/${id}/approve`)).headers.get('location'), /done=approved/);
+    const done = ord(id);
+    assert.equal(done.status, 'paid'); assert.ok(done.paid_at); assert.ok(done.reviewed_by);
+    assert.equal((await alice.req(`/library/${id}`)).status, 200, 'อนุมัติแล้วเข้าคลัง');
+    assert.match(await (await alice.req(`/order/${id}`)).text(), /ชำระเงินสำเร็จ/);
+    assert.ok(mctx.mailer.sent.slice(sentBefore).some((m) => m.to === 'alice@example.com' && /ยืนยันการสั่งซื้อ/.test(m.subject)), 'ส่งใบยืนยันตอนอนุมัติ');
+    // อนุมัติซ้ำ (กดสองครั้ง/สองแท็บ) ไม่ทำอะไรเพิ่ม ไม่ส่งอีเมลซ้ำ
+    const sentAfter = mctx.mailer.sent.length;
+    assert.match((await boss.post(`/admin/transfers/${id}/approve`)).headers.get('location'), /problem=handled/);
+    assert.equal(mctx.mailer.sent.length, sentAfter);
+    assert.equal(ord(id).paid_at, done.paid_at);
+    // ซื้อสินค้าที่มีแล้ว → ไปที่คลังเลย
+    assert.equal((await alice.post('/checkout', { product: 'order-now' })).headers.get('location'), `/library/${id}`);
+    // ลูกค้าอื่นเข้าคลังของเราไม่ได้
+    assert.equal((await bob.req(`/library/${id}`)).status, 404);
+
+    // audit log: ใครทำอะไรเมื่อไหร่
+    const log = mctx.db.prepare('SELECT action, actor_email FROM payment_audit WHERE order_id = ? ORDER BY id').all(id).map((r) => `${r.action}:${r.actor_email}`);
+    assert.deepEqual(log, ['customer_confirm:alice@example.com', 'reject:boss@shop.test', 'customer_confirm:alice@example.com', 'approve:boss@shop.test']);
+    assert.match(await (await boss.req('/admin/transfers')).text(), /audit log/);
+
+    // กดยืนยันถี่เกิน/ครบจำนวนครั้ง → ถูกจำกัด (ออเดอร์ของ bob)
+    const o2id = o2.id;
+    for (let i = 0; i < 5; i++) {
+      assert.equal((await bob.post(`/pay/transfer/${o2id}/confirm`, { sure: '1' })).status, 303);
+      if (i < 4) { await boss.post(`/admin/transfers/${o2id}/reject`, { reason: 'ไม่พบรายการ' }); t += 1000; }
+    }
+    await boss.post(`/admin/transfers/${o2id}/reject`, { reason: 'ไม่พบรายการ' });
+    const over = await bob.post(`/pay/transfer/${o2id}/confirm`, { sure: '1' });
+    assert.ok([400, 429].includes(over.status), 'แจ้งเกินจำนวนครั้งต่อออเดอร์/ต่อชั่วโมงไม่ได้');
+    assert.equal(ord(o2id).status, 'rejected');
+
+    // หมดอายุ: ไม่โอน/ถูกปฏิเสธแล้วเงียบ เกิน 24 ชม. → expired และยอดโอนว่างให้ออเดอร์ใหม่
+    t += 25 * 60 * 60 * 1000;
+    assert.match(await (await bob.req(`/order/${o2id}`)).text(), /ออเดอร์หมดอายุ/);
+    assert.equal(ord(o2id).status, 'expired');
+    assert.equal((await bob.post(`/pay/transfer/${o2id}/confirm`, { sure: '1' })).status, 400);
+    const co3 = await bob.post('/checkout', { product: 'order-now' });
+    assert.notEqual(co3.headers.get('location').split('/').pop(), o2id, 'หมดอายุแล้วสั่งใหม่ได้ ได้ออเดอร์ใหม่');
+    assert.ok(mctx.db.prepare("SELECT 1 FROM payment_audit WHERE order_id = ? AND action = 'expire'").get(o2id));
+  } finally { srv.close(); }
+});
+
+test('manual: ร้านโหมดอื่นไม่มีหน้าโอนเงิน/คิวอนุมัติ', async () => {
+  const c = await newUser('notmanual@example.com');
+  assert.equal((await c.req('/pay/transfer/abc')).status, 404);
+  assert.equal((await c.req('/admin/transfers')).status, 404);
+});
+
+// ถอดรหัส QR จากรูป SVG จริง (ไม่ใช่แค่ดูข้อความ) แล้วตรวจฟิลด์ยอดเงินและ CRC
+function decodeQrSvg(svg) {
+  const jsQR = require('jsqr');
+  const vb = svg.match(/viewBox="0 0 (\d+) (\d+)"/); const n = Number(vb[1]);
+  const dark = new Set();
+  const d = svg.match(/<path stroke="#000000" d="([^"]+)"/)[1];
+  let x = 0, y = 0;
+  for (const m of d.matchAll(/([Mmh])\s*([-\d.]+)(?:[\s,]+([-\d.]+))?/g)) {
+    if (m[1] === 'M') { x = Number(m[2]); y = Number(m[3]); } else if (m[1] === 'm') { x += Number(m[2]); y += Number(m[3] || 0); } else { for (let i = 0; i < Number(m[2]); i++) dark.add(`${Math.floor(x + i)},${Math.floor(y)}`); x += Number(m[2]); }
+  }
+  const S = 6, W = n * S, px = new Uint8ClampedArray(W * W * 4).fill(255);
+  for (const k of dark) { const [cx, cy] = k.split(',').map(Number); for (let a = 0; a < S; a++) for (let b = 0; b < S; b++) { const o = ((cy * S + b) * W + cx * S + a) * 4; px[o] = px[o + 1] = px[o + 2] = 0; } }
+  const r = jsQR(px, W, W);
+  return r && r.data;
+}
+function tlvParse(str) { const o = {}; for (let i = 0; i < str.length;) { const id = str.slice(i, i + 2); const len = Number(str.slice(i + 2, i + 4)); o[id] = str.slice(i + 4, i + 4 + len); i += 4 + len; } return o; }
+
+test('QR PromptPay: ถอดรหัสจากรูปจริงแล้วยอดตรงราคา (50.00) มี CRC ถูก และเบอร์ผู้รับตรงกับที่ตั้ง', async () => {
+  for (const [amountSatang, expect] of [[5000, '50.00'], [4900, '49.00'], [12345, '123.45']]) {
+    const decoded = decodeQrSvg(await promptpay.svg('081-234-5678', amountSatang));
+    assert.equal(decoded, promptpay.payload('0812345678', amountSatang));
+    const f = tlvParse(decoded);
+    assert.equal(f['54'], expect, 'ฟิลด์ยอดเงิน');
+    assert.equal(f['53'], '764'); assert.equal(f['58'], 'TH'); assert.equal(f['01'], '12', 'QR แบบกำหนดยอด (dynamic)');
+    assert.equal(promptpay.crc16(decoded.slice(0, -4)), f['63'], 'CRC');
+    assert.equal(tlvParse(f['29'])['01'], '0066812345678');
+  }
+});
+
+test('manual (ค่าเริ่มต้น ไม่บวกสตางค์): ยอดโอน = ราคาเป๊ะ · ต้องกรอกเวลาโอน · แอดมินเห็นเตือนออเดอร์ยอดเท่ากัน · QR ที่ลูกค้าสแกนยอดตรงราคา', async () => {
+  let t = Date.now();
+  const mcfg = loadConfig({
+    NODE_ENV: 'test', DATABASE_FILE: ':memory:', DOWNLOAD_LINK_SECRET: crypto.randomBytes(32).toString('hex'), PAYMENT_WEBHOOK_SECRET: crypto.randomBytes(32).toString('hex'),
+    PAYMENT_PROVIDER: 'manual', PROMPTPAY_ID: '0812345678', MANUAL_UNIQUE_SATANG: '',
+    ADMIN_EMAIL: 'boss@shop.test', ADMIN_PASSWORD: 'boss-password-12345', MAIL_MODE: 'console', BASE_URL: 'http://shop.test', RATE_GLOBAL_PER_MIN: '0', RATE_SIGNUP_PER_HOUR: '1000', LEGAL_NAME: 'ร้านทดสอบ',
+    OMISE_PUBLIC_KEY: '', OMISE_SECRET_KEY: '', OMISE_WEBHOOK_SECRET: '',
+    CUSTOM_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'man2-custom-')), USER_FONT_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'man2-fonts-')),
+  });
+  assert.equal(mcfg.transfer.uniqueSatang, false);
+  const mctx = createApp(mcfg, { now: () => t, log: () => {}, renderer: fakeRenderer, renderTools });
+  mctx.mailer.send = async (m) => { mctx.mailer.sent.push(m); };
+  const srv = await new Promise((r) => { const s = mctx.app.listen(0, '127.0.0.1', () => r(s)); });
+  const mbase = `http://127.0.0.1:${srv.address().port}`;
+  const ord = (id) => mctx.db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+  const mk = () => {
+    const jar = {};
+    const req = async (p, { method = 'GET', form } = {}) => {
+      const h = { cookie: Object.entries(jar).map(([k, v]) => `${k}=${v}`).join('; ') };
+      let body; if (form) { h['content-type'] = 'application/x-www-form-urlencoded'; body = new URLSearchParams(form); }
+      const r = await fetch(mbase + p, { method, headers: h, body, redirect: 'manual' });
+      for (const sc of r.headers.getSetCookie()) { const [kv] = sc.split(';'); const i = kv.indexOf('='); const v = kv.slice(i + 1); if (v) jar[kv.slice(0, i)] = v; else delete jar[kv.slice(0, i)]; }
+      return r;
+    };
+    const post = async (p, f = {}) => { if (!jar.csrf) await req('/login'); return req(p, { method: 'POST', form: { csrf: decodeURIComponent(jar.csrf), ...f } }); };
+    return { req, post };
+  };
+  try {
+    const a = mk(); const b = mk(); const boss = mk();
+    await a.post('/signup', { email: 'a@example.com', password: 'correct-horse-9', next: '/library' });
+    await b.post('/signup', { email: 'b@example.com', password: 'correct-horse-9', next: '/library' });
+    await boss.post('/login', { email: 'boss@shop.test', password: 'boss-password-12345', next: '/admin' });
+    const ida = (await a.post('/checkout', { product: 'order-now' })).headers.get('location').split('/').pop();
+    const idb = (await b.post('/checkout', { product: 'order-now' })).headers.get('location').split('/').pop();
+    assert.equal(ord(ida).transfer_amount, 4900); assert.equal(ord(idb).transfer_amount, 4900);
+    assert.notEqual(ord(ida).pay_ref, ord(idb).pay_ref);
+    const page = await (await a.req(`/pay/transfer/${ida}`)).text();
+    assert.match(page, /฿49\.00/); assert.match(page, /เวลาที่โอน/); assert.match(page, /name="transfer_time" required/);
+    // QR ที่ลูกค้าสแกน: ถอดรหัสจากรูปแล้วยอดต้องเป็น 49.00
+    const qr = await (await a.req(`/pay/transfer/${ida}/qr`)).text();
+    assert.equal(tlvParse(decodeQrSvg(qr))['54'], '49.00');
+    // ไม่กรอกเวลา → แจ้งโอนไม่ได้
+    assert.match((await a.post(`/pay/transfer/${ida}/confirm`, { sure: '1' })).headers.get('location'), /error=/);
+    assert.equal(ord(ida).status, 'pending');
+    t += 60000; await a.post(`/pay/transfer/${ida}/confirm`, { sure: '1', transfer_time: '10:05' });
+    // ระหว่างที่ b ยังไม่แจ้ง แอดมินเห็นเตือนว่ามีออเดอร์ยอดเท่ากันรออยู่
+    let qpage = await (await boss.req('/admin/transfers')).text();
+    assert.match(qpage, /มีออเดอร์ยอดเท่ากันอีก 1 รายการ/); assert.ok(qpage.includes('b@example.com') && qpage.includes('ยังไม่แจ้งโอน'));
+    t += 60000; await b.post(`/pay/transfer/${idb}/confirm`, { sure: '1', transfer_time: '10:07' });
+    qpage = await (await boss.req('/admin/transfers')).text();
+    assert.equal((qpage.match(/<b>ระวัง: มีออเดอร์ยอดเท่ากันอีก 1 รายการ<\/b>/g) || []).length, 2, 'ทั้งสองใบเห็นเตือนซึ่งกันและกัน');
+    assert.ok(qpage.includes('10:05') && qpage.includes('10:07'));
+    // อนุมัติทีละใบ ไม่ปนกัน
+    await boss.post(`/admin/transfers/${ida}/approve`);
+    assert.equal(ord(ida).status, 'paid'); assert.equal(ord(idb).status, 'review');
+  } finally { srv.close(); }
 });

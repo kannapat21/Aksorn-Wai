@@ -69,11 +69,11 @@
   // ---------- เล่นวน / หยุด / ดูท่าค้าง / เลื่อนดูทีละเฟรม ----------
   // ความยาวคลิปที่เลือก: เด้งเข้า 0.5 วิ → ค้าง → จางออก 0.5 วิสุดท้าย (เหมือนไฟล์จริง)
   var seconds = Number(val('seconds')) || 5;
-  function timing() { return { popUp: 0.3, settle: 0.5, fadeStart: seconds - 0.5, fadeEnd: seconds - 1 / 30 }; }
+  function timing() { return { popUp: 0.3, settle: 0.5, fadeStart: seconds - 0.5, fadeEnd: seconds - 1 / 60 }; }
   var playing = true, current = 0, t0 = performance.now(), LOOP = seconds + 0.4;
   function draw(t) {
     current = t;
-    M.setTime(el, Math.min(t, seconds), timing());
+    M.setTime(el, Math.min(t, seconds), timing(), stage.getAttribute('data-motion') || 'pop');
     scrub.value = Math.round(Math.min(t, seconds) * 100);
     timeLabel.textContent = Math.min(t, seconds).toFixed(1) + 's';
   }
@@ -226,8 +226,10 @@
       nameIn.focus();
     });
     bar.querySelector('[data-style-cancel]').addEventListener('click', function () { nameForm.hidden = true; saveBtn.hidden = false; });
-    nameForm.addEventListener('submit', function (e) {
-      e.preventDefault();
+    // ช่องตั้งชื่ออยู่ในฟอร์มหลัก: กด Enter = บันทึกสไตล์ (ไม่ใช่สั่งสร้างไฟล์)
+    nameIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); saveStyle(); } });
+    bar.querySelector('[data-style-submit]').addEventListener('click', saveStyle);
+    function saveStyle() {
       var st = currentLook();
       var body = JSON.stringify({ name: nameIn.value, font: st.font, fill: st.fill, stroke: st.stroke, outline: st.outline, shadow: st.shadow });
       fetch('/library/styles', { method: 'POST', credentials: 'same-origin', body: body, headers: { 'content-type': 'application/json', 'x-csrf-token': csrf } })
@@ -240,7 +242,7 @@
           nameForm.hidden = true; saveBtn.hidden = false;
           note('บันทึกสไตล์ "' + res.j.name + '" แล้ว · ครั้งหน้ากดชื่อนี้ทีเดียวก็ได้หน้าตาเดิม', 'ok');
         }).catch(function () { note('บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง', 'error'); });
-    });
+    }
   }
 
   // ---------- ใช้ฟอนต์ของฉันเอง: อัปโหลดแล้วเลือกให้ และเห็นในตัวอย่างทันที ----------

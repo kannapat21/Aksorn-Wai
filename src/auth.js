@@ -7,17 +7,35 @@
 const crypto = require('crypto');
 
 const SCRYPT = { N: 16384, r: 8, p: 1, keylen: 32 };
+const MAXMEM = 64 * 1024 * 1024;
 
 function scrypt(password, salt, { N, r, p, keylen }) {
   return new Promise((resolve, reject) => {
-    crypto.scrypt(password, salt, keylen, { N, r, p, maxmem: 64 * 1024 * 1024 }, (err, key) => (err ? reject(err) : resolve(key)));
+    crypto.scrypt(password, salt, keylen, { N, r, p, maxmem: MAXMEM }, (err, key) => (err ? reject(err) : resolve(key)));
   });
 }
+
+const encode = (salt, key) => ['scrypt', SCRYPT.N, SCRYPT.r, SCRYPT.p, salt.toString('base64url'), key.toString('base64url')].join('$');
 
 async function hashPassword(password) {
   const salt = crypto.randomBytes(16);
   const key = await scrypt(String(password).normalize('NFKC'), salt, SCRYPT);
-  return ['scrypt', SCRYPT.N, SCRYPT.r, SCRYPT.p, salt.toString('base64url'), key.toString('base64url')].join('$');
+  return encode(salt, key);
+}
+
+// ใช้ตอนเปิดร้าน (สร้าง/ซิงก์บัญชีแอดมินจาก .env) ก่อนเริ่มรับคำขอ
+function hashPasswordSync(password) {
+  const salt = crypto.randomBytes(16);
+  const key = crypto.scryptSync(String(password).normalize('NFKC'), salt, SCRYPT.keylen, { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, maxmem: MAXMEM });
+  return encode(salt, key);
+}
+
+function verifyPasswordSync(password, stored) {
+  const [alg, N, r, p, salt, hash] = String(stored).split('$');
+  if (alg !== 'scrypt' || !salt || !hash) return false;
+  const expected = Buffer.from(hash, 'base64url');
+  const key = crypto.scryptSync(String(password).normalize('NFKC'), Buffer.from(salt, 'base64url'), expected.length, { N: Number(N), r: Number(r), p: Number(p), maxmem: MAXMEM });
+  return crypto.timingSafeEqual(key, expected);
 }
 
 // hash หลอกไว้ใช้ตอนไม่พบอีเมล เพื่อให้เวลาตอบเท่ากัน (เดาไม่ได้ว่าอีเมลไหนมีบัญชี)
@@ -70,4 +88,4 @@ function safeNext(v, fallback = '/library') {
   return /^\/(?![\/\\])[^\s]*$/.test(s) ? s : fallback;
 }
 
-module.exports = { hashPassword, verifyPassword, newToken, tokenId, parseCookies, cookie, safeEqual, safeNext };
+module.exports = { hashPasswordSync, verifyPasswordSync, hashPassword, verifyPassword, newToken, tokenId, parseCookies, cookie, safeEqual, safeNext };

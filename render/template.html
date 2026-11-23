@@ -36,7 +36,7 @@
   window.setup = function (opts) {
     return TTMotion.setup(el, Object.assign({ fontFamily: 'RenderFont', width: window.innerWidth, height: window.innerHeight, filterId: 'outline' }, opts));
   };
-  window.setTime = function (t, timing) { TTMotion.setTime(el, t, timing); };
+  window.setTime = function (t, timing, motion) { TTMotion.setTime(el, t, timing, motion); };
 </script>
 </body>
 </html>

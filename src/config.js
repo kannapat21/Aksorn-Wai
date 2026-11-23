@@ -13,14 +13,15 @@ function ensureEnvFile() {
   const envPath = path.join(ROOT, '.env');
   if (fs.existsSync(envPath) || process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'test') return;
   const rnd = (n) => crypto.randomBytes(n).toString('hex');
-  const adminPw = crypto.randomBytes(9).toString('base64url');
+  const adminPw = crypto.randomBytes(18).toString('base64url'); // 24 ตัวอักษร สุ่ม
   const text = fs.readFileSync(path.join(ROOT, '.env.example'), 'utf8')
+    .replace(/^ADMIN_EMAIL=.*$/m, 'ADMIN_EMAIL=admin@aksornwai.local')
     .replace(/^ADMIN_PASSWORD=.*$/m, `ADMIN_PASSWORD=${adminPw}`)
     .replace(/^DOWNLOAD_LINK_SECRET=.*$/m, `DOWNLOAD_LINK_SECRET=${rnd(32)}`)
     .replace(/^PAYMENT_WEBHOOK_SECRET=.*$/m, `PAYMENT_WEBHOOK_SECRET=${rnd(32)}`);
   fs.writeFileSync(envPath, text, { mode: 0o600 });
   console.log('สร้างไฟล์ .env ให้แล้ว (สุ่ม secret ใหม่)');
-  console.log(`  รหัสผ่านหลังบ้าน /admin  ผู้ใช้: admin  รหัส: ${adminPw}`);
+  console.log(`  เข้าหลังบ้านที่หน้าเข้าสู่ระบบปกติ  อีเมล: admin@aksornwai.local  รหัส: ${adminPw}`);
 }
 
 function loadJson(rel) {
@@ -49,6 +50,8 @@ function loadConfig(overrides = {}) {
     baseUrl: (env.BASE_URL || `http://localhost:${env.PORT || 3000}`).replace(/\/+$/, ''),
     shopName: env.SHOP_NAME || 'อักษรไหว',
     databaseFile: env.DATABASE_FILE || './data/shop.db',
+    // บัญชีแอดมินสร้าง/ซิงก์จาก .env ทุกครั้งที่เปิดร้าน (ล็อกอินที่หน้าเข้าสู่ระบบปกติ)
+    adminEmail: String(env.ADMIN_EMAIL || '').trim().toLowerCase(),
     adminPassword: env.ADMIN_PASSWORD || '',
     downloadSecret: env.DOWNLOAD_LINK_SECRET || '',
     // ลิงก์ดาวน์โหลดที่เซ็นแล้ว สร้างใหม่ทุกครั้งที่กดในคลัง ใช้ได้กี่นาที
@@ -56,11 +59,37 @@ function loadConfig(overrides = {}) {
     // กันการโหลดผิดปกติ: บัญชีหนึ่งกดดาวน์โหลดได้กี่ไฟล์ต่อ 24 ชั่วโมง
     dailyDownloadLimit: Number(env.DOWNLOAD_DAILY_LIMIT || 60),
     sessionDays: Number(env.SESSION_DAYS || 30),
+    // จำกัดคำขอทั้งเว็บต่อ IP ต่อนาที (กันสแปม/บอท) · 0 = ปิด
+    rateGlobalPerMin: Number(env.RATE_GLOBAL_PER_MIN || 600),
+    rateSignupPerHour: Number(env.RATE_SIGNUP_PER_HOUR || 10), // สมัครสมาชิกได้กี่ครั้งต่อ IP ต่อชั่วโมง
+    // ข้อมูลร้านที่แสดงในหน้านโยบาย (เว้นว่าง = แสดงช่องให้กรอก)
+    legal: {
+      name: env.LEGAL_NAME || '', contactEmail: env.CONTACT_EMAIL || '', phone: env.CONTACT_PHONE || '',
+      address: env.CONTACT_ADDRESS || '', taxId: env.TAX_ID || '', refundDays: Number(env.REFUND_DAYS || 7),
+    },
     paymentProvider: env.PAYMENT_PROVIDER || 'mock',
     webhookSecret: env.PAYMENT_WEBHOOK_SECRET || '',
     paymentApiKey: env.PAYMENT_API_KEY || '',
+    omise: {
+      publicKey: env.OMISE_PUBLIC_KEY || '', secretKey: env.OMISE_SECRET_KEY || '', webhookSecret: env.OMISE_WEBHOOK_SECRET || '',
+      apiBase: env.OMISE_API_BASE || 'https://api.omise.co', // เปลี่ยนได้เฉพาะตอนเทสต์ (เซิร์ฟเวอร์จำลอง)
+      qrMinutes: Number(env.OMISE_QR_MINUTES || 15), // QR PromptPay หมดอายุกี่นาที (ไม่เกิน 24 ชม.)
+    },
+    // โอนเงินแล้วกดยืนยัน (PAYMENT_PROVIDER=manual): ข้อมูลรับเงินอยู่ใน .env เท่านั้น ห้ามใส่ในโค้ด/ห้าม commit
+    transfer: {
+      promptpayId: String(env.PROMPTPAY_ID || '').replace(/[\s-]/g, ''),
+      promptpayName: env.PROMPTPAY_NAME || '',
+      bankName: env.BANK_NAME || '', bankAccountNo: String(env.BANK_ACCOUNT_NO || '').trim(), bankAccountName: env.BANK_ACCOUNT_NAME || '',
+      expireHours: Number(env.MANUAL_EXPIRE_HOURS || 24), // ออเดอร์ที่ยังไม่โอน/ถูกปฏิเสธ เก็บไว้กี่ชั่วโมงก่อนหมดอายุ
+      maxConfirms: Number(env.MANUAL_MAX_CONFIRMS || 5), // กดยืนยันได้กี่ครั้งต่อออเดอร์ (กันกดรัว)
+      // 1 = บวกเศษสตางค์ไม่ซ้ำต่อออเดอร์ (จับคู่ง่ายแต่ลูกค้าเห็นยอดไม่ตรงราคา) · ค่าเริ่มต้น 0 = ยอดตรงราคาเป๊ะ จับคู่ด้วยยอด+เวลาโอน+รหัสอ้างอิง
+      uniqueSatang: env.MANUAL_UNIQUE_SATANG === '1',
+    },
+    // ปุ่ม "จำลองจ่ายสำเร็จ" ของโหมด mock: กดได้เฉพาะแอดมิน หรือคนที่เปิดจากเครื่องร้านเอง (localhost) คนภายนอกกดไม่ได้
+    mockAllowPublic: env.MOCK_ALLOW_PUBLIC === '1',
     mail: {
-      mode: env.MAIL_MODE || 'console',
+      // ตั้ง SMTP_HOST แล้วไม่ได้ระบุ MAIL_MODE = ส่งจริงผ่าน SMTP · ไม่ได้ตั้ง = พิมพ์ลงหน้าจอ (โหมดทดสอบ)
+      mode: env.MAIL_MODE || (env.SMTP_HOST ? 'smtp' : 'console'),
       from: env.MAIL_FROM || 'no-reply@example.com',
       host: env.SMTP_HOST, port: Number(env.SMTP_PORT || 587), user: env.SMTP_USER, pass: env.SMTP_PASS,
     },
@@ -83,11 +112,34 @@ function loadConfig(overrides = {}) {
 
   const problems = [];
   if (cfg.downloadSecret.length < 32) problems.push('DOWNLOAD_LINK_SECRET ต้องยาวอย่างน้อย 32 ตัวอักษร');
+  // Omise: ต้องมีคีย์ครบ · คีย์จริง (ไม่มี _test_) ใช้ได้เฉพาะตอน NODE_ENV=production · มีคีย์จริงอยู่ห้ามใช้ mock
+  const O = cfg.omise;
+  const liveKey = [O.publicKey, O.secretKey].some((k) => k && !/_test_/.test(k));
+  if (cfg.paymentProvider === 'omise') {
+    if (!/^pkey_/.test(O.publicKey) || !/^skey_/.test(O.secretKey)) problems.push('ตั้ง OMISE_PUBLIC_KEY (pkey_...) และ OMISE_SECRET_KEY (skey_...) ใน .env');
+    // ขายจริงต้องมี webhook secret · ช่วงทดสอบยังไม่ตั้งก็ได้ (ระบบถามสถานะจาก Omise เองระหว่างลูกค้ารอ แต่ webhook จะถูกปฏิเสธ)
+    if (!O.webhookSecret && cfg.env === 'production') problems.push('ตั้ง OMISE_WEBHOOK_SECRET (จากหน้า Webhooks ใน dashboard ของ Omise)');
+    if (liveKey && cfg.env !== 'production') problems.push('คีย์ Omise เป็นคีย์จริง (ไม่มี _test_) ใช้ได้เฉพาะตอน NODE_ENV=production');
+    if (cfg.env === 'production' && !liveKey && O.secretKey) problems.push('ขายจริงต้องใช้คีย์จริงของ Omise (ตอนนี้เป็นคีย์ทดสอบ)');
+  }
+  if (cfg.paymentProvider === 'manual') {
+    const T = cfg.transfer;
+    const bank = T.bankName && T.bankAccountNo && T.bankAccountName;
+    if (!T.promptpayId && !bank) problems.push('ตั้ง PROMPTPAY_ID (เบอร์มือถือ 10 หลัก หรือเลข 13 หลัก) และ/หรือ BANK_NAME + BANK_ACCOUNT_NO + BANK_ACCOUNT_NAME ใน .env');
+    if (T.promptpayId && !require('./promptpay').normalizeId(T.promptpayId)) problems.push('PROMPTPAY_ID ต้องเป็นเบอร์มือถือ 10 หลัก (0xxxxxxxxx) หรือเลข 13 หลัก');
+    if (!(T.expireHours >= 1 && T.expireHours <= 720)) problems.push('MANUAL_EXPIRE_HOURS ต้องอยู่ระหว่าง 1–720');
+    if (!(T.maxConfirms >= 1 && T.maxConfirms <= 20)) problems.push('MANUAL_MAX_CONFIRMS ต้องอยู่ระหว่าง 1–20');
+    if (!cfg.adminEmail || cfg.adminPassword.length < 12) problems.push('โหมดโอนเงินต้องมีแอดมินไว้อนุมัติ: ตั้ง ADMIN_EMAIL และ ADMIN_PASSWORD (อย่างน้อย 12 ตัวอักษร)');
+  }
+  if (cfg.paymentProvider === 'mock' && liveKey) problems.push('มีคีย์ Omise จริงอยู่ใน .env ห้ามใช้ PAYMENT_PROVIDER=mock');
+  if (!(O.qrMinutes > 0 && O.qrMinutes <= 24 * 60)) problems.push('OMISE_QR_MINUTES ต้องอยู่ระหว่าง 1–1440');
   if (cfg.webhookSecret.length < 32) problems.push('PAYMENT_WEBHOOK_SECRET ต้องยาวอย่างน้อย 32 ตัวอักษร');
   if (cfg.env === 'production') {
     if (cfg.paymentProvider === 'mock') problems.push('ห้ามใช้ PAYMENT_PROVIDER=mock ตอน NODE_ENV=production');
     if (!cfg.baseUrl.startsWith('https://')) problems.push('BASE_URL ต้องเป็น https ตอนขายจริง');
     if (cfg.mail.mode === 'console') problems.push('MAIL_MODE=console ใช้ได้เฉพาะตอนทดสอบ');
+    if (cfg.mail.mode === 'smtp' && (!cfg.mail.host || !cfg.mail.user || !cfg.mail.pass)) problems.push('ตั้ง SMTP_HOST / SMTP_USER / SMTP_PASS ให้ครบ');
+    if (!cfg.legal.name || !cfg.legal.contactEmail) problems.push('ตั้ง LEGAL_NAME และ CONTACT_EMAIL สำหรับหน้านโยบาย');
   }
   if (problems.length) {
     const e = new Error('ตั้งค่าไม่ครบ:\n - ' + problems.join('\n - '));
@@ -100,6 +152,8 @@ function loadConfig(overrides = {}) {
     const mf = path.join(cfg.storageDir, p.slug, 'manifest.json');
     if (!fs.existsSync(mf)) throw new Error(`สินค้า ${p.slug} ยังไม่มีไฟล์ (รัน npm run render -- --text "..." --slug ${p.slug})`);
     p.manifest = JSON.parse(fs.readFileSync(mf, 'utf8'));
+    p.motion = p.motion || p.manifest.motion || 'pop'; // ท่าเคลื่อนไหว (pop | drop) ใช้ทั้งพรีวิวสดและไฟล์จริง
+    if (!['pop', 'drop'].includes(p.motion)) throw new Error(`สินค้า ${p.slug}: motion ต้องเป็น pop หรือ drop`);
   }
   for (const [id, ed] of Object.entries(cfg.editorsConfig.editors)) {
     for (const f of ed.formats) {

@@ -6,9 +6,16 @@
  */
 (function (g) {
   'use strict';
-  var TIMING = { popUp: 0.30, settle: 0.50, fadeStart: 2.50, fadeEnd: 3 - 1 / 30, duration: 3 };
+  var TIMING = { popUp: 0.30, settle: 0.50, fadeStart: 2.50, fadeEnd: 3 - 1 / 60, duration: 3 };
   var easeOutCubic = function (t) { return 1 - Math.pow(1 - t, 3); };
   var easeInOutSine = function (t) { return -(Math.cos(Math.PI * t) - 1) / 2; };
+  var easeOutBounce = function (t) {
+    var n = 7.5625, d = 2.75;
+    if (t < 1 / d) return n * t * t;
+    if (t < 2 / d) { t -= 1.5 / d; return n * t * t + 0.75; }
+    if (t < 2.5 / d) { t -= 2.25 / d; return n * t * t + 0.9375; }
+    t -= 2.625 / d; return n * t * t + 0.984375;
+  };
   var lerp = function (a, b, t) { return a + (b - a) * t; };
 
   // ฟิลเตอร์ SVG: ขอบ (ขยายรูปทรงทั้งคำ เติมสีทึบ) + เงา (เบลอจากรูปทรงที่มีขอบแล้ว)
@@ -37,6 +44,7 @@
     el.style.fontWeight = String(opts.weight || 700);
     el.style.setProperty('--fill', opts.fill);
     var W = opts.width, H = opts.height;
+    el.__H = H; // ท่า drop ใช้ความสูงของเวที
     var vertical = H > W;
     var maxW = vertical ? 0.86 : 0.70, maxH = vertical ? 0.22 : 0.40;
     el.style.transform = 'none';
@@ -61,16 +69,39 @@
     return { fontSize: size };
   }
 
-  // ท่า "เด้งเข้า": 0→1.1 (0–0.30s), 1.1→1 (0.30–0.50s), ค้าง, จางออก (2.5–3.0s)
-  function setTime(el, t, timing) {
+  /*
+   * ท่าเคลื่อนไหว (เลือกด้วยชื่อ ค่าเริ่มต้น pop) ทุกท่าใช้โครงเดียวกัน:
+   *   เข้า 0 → settle (0.5 วิ) · ค้างนิ่ง · ออก fadeStart → fadeEnd (0.5 วิสุดท้าย, เฟรมสุดท้ายโปร่งใสสนิท)
+   *   ค้างต้องนิ่งสนิท เพราะตัวเรนเดอร์ใช้เฟรมค้างเฟรมเดียวต่อซ้ำ
+   *   pop  : เด้งขยายเข้า (สั่งซื้อเลย)
+   *   drop : ร่วงจากด้านบนแล้วเด้งกระดอนลงพื้น แล้วลอยขึ้นจางออก (กดติดตามเลย)
+   */
+  var MOTIONS = {
+    pop: function (el, t, timing) {
+      var s = 1;
+      if (t < timing.popUp) s = lerp(0, 1.1, easeOutCubic(t / timing.popUp));
+      else if (t < timing.settle) s = lerp(1.1, 1, easeInOutSine((t - timing.popUp) / (timing.settle - timing.popUp)));
+      return { transform: 'scale(' + s.toFixed(5) + ')', fadeIn: 1 };
+    },
+    drop: function (el, t, timing) {
+      var H = el.__H || 1080, y = 0;
+      if (t < timing.settle) y = -(1 - easeOutBounce(t / timing.settle)) * H * 0.5;
+      else if (t >= timing.fadeStart) {
+        var q = Math.min(1, (t - timing.fadeStart) / (timing.fadeEnd - timing.fadeStart));
+        y = -q * q * H * 0.06;
+      }
+      return { transform: 'translateY(' + y.toFixed(2) + 'px)', fadeIn: Math.min(1, t / 0.08) };
+    },
+  };
+
+  function setTime(el, t, timing, motion) {
     timing = timing || TIMING;
-    var s = 1, o = 1;
-    if (t < timing.popUp) s = lerp(0, 1.1, easeOutCubic(t / timing.popUp));
-    else if (t < timing.settle) s = lerp(1.1, 1, easeInOutSine((t - timing.popUp) / (timing.settle - timing.popUp)));
-    if (t >= timing.fadeStart) o = 1 - Math.min(1, (t - timing.fadeStart) / (timing.fadeEnd - timing.fadeStart));
-    el.style.transform = 'scale(' + s.toFixed(5) + ')';
+    var m = (MOTIONS[motion] || MOTIONS.pop)(el, t, timing);
+    var o = m.fadeIn;
+    if (t >= timing.fadeStart) o = Math.min(o, 1 - Math.min(1, (t - timing.fadeStart) / (timing.fadeEnd - timing.fadeStart)));
+    el.style.transform = m.transform;
     el.style.opacity = o.toFixed(5);
   }
 
-  g.TTMotion = { TIMING: TIMING, filterMarkup: filterMarkup, setup: setup, setTime: setTime };
+  g.TTMotion = { MOTIONS: Object.keys(MOTIONS), TIMING: TIMING, filterMarkup: filterMarkup, setup: setup, setTime: setTime };
 })(typeof window !== 'undefined' ? window : globalThis);

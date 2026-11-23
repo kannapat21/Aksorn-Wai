@@ -128,6 +128,28 @@
     tilt.addEventListener('mouseleave', function () { win.style.removeProperty('--ry'); win.style.removeProperty('--rx'); });
   }
 
+  // ---------- แอป (PWA): ลงทะเบียน service worker (ต้องเป็น https หรือ localhost) ----------
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+    addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
+  }
+  if (window.matchMedia && matchMedia('(display-mode: standalone)').matches) root.classList.add('standalone');
+
+  // ---------- แถบเมนูล่าง: ไฮไลต์แท็บของหน้าปัจจุบัน ----------
+  var tabbar = document.querySelector('[data-tabbar]');
+  if (tabbar) {
+    var p = location.pathname;
+    var tab = p === '/' ? (location.hash === '#catalog' ? 'shop' : 'home') : /^\/p\//.test(p) ? 'shop' : /^\/library/.test(p) ? 'library' : /^\/(account|login|signup|forgot|reset|admin)/.test(p) ? 'account' : '';
+    var setTab = function (t) { tabbar.querySelectorAll('[data-tab]').forEach(function (a) { var on = a.getAttribute('data-tab') === t; a.classList.toggle('active', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }); };
+    setTab(tab);
+    addEventListener('hashchange', function () { if (location.pathname === '/') setTab(location.hash === '#catalog' ? 'shop' : 'home'); });
+  }
+
+  // ---------- รูปค่อยๆ ขึ้นแทนโครงร่าง (skeleton) ----------
+  document.querySelectorAll('img[loading="lazy"], .lib-thumb img, .lib-item-head img').forEach(function (img) {
+    var done = function () { img.classList.add('loaded'); };
+    if (img.complete && img.naturalWidth) done(); else img.addEventListener('load', done);
+  });
+
   // ---------- แสดง/ซ่อนรหัสผ่าน ----------
   document.querySelectorAll('[data-pw-toggle]').forEach(function (b) {
     b.addEventListener('click', function () {
@@ -380,12 +402,17 @@
     var url = poll.getAttribute('data-poll');
     var tick = function () {
       fetch(url, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
-        if (j.status === 'paid') location.reload();
+        if (j.status && j.status !== (poll.getAttribute('data-poll-status') || 'pending')) { try { sessionStorage.setItem('noIntroOnce', '1'); } catch (e) { /* ข้าม */ } location.reload(); } // จ่ายแล้ว / ไม่สำเร็จ / หมดอายุ / ร้านตัดสินแล้ว
         else setTimeout(tick, 2000);
       }).catch(function () { setTimeout(tick, 4000); });
     };
     setTimeout(tick, 1500);
   }
+
+  // ---------- ฟอร์มที่ต้องถามก่อนส่ง (เช่น อนุมัติการโอน) ----------
+  document.querySelectorAll('form[data-confirm]').forEach(function (f) {
+    f.addEventListener('submit', function (e) { if (!window.confirm(f.getAttribute('data-confirm'))) e.preventDefault(); });
+  });
 
   // ---------- หน้าดาวน์โหลด: เปลี่ยนโปรแกรมแล้วโหลดหน้าใหม่ ----------
   document.querySelectorAll('[data-autosubmit]').forEach(function (el) {

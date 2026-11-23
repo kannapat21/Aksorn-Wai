@@ -355,6 +355,7 @@ function createRenderer(cfg) {
   return async (job, { outDir, onProgress, font }) => {
     const { renderSingle } = require('../render/render');
     const ed = cfg.editorsConfig.editors[job.editor];
+    const prod = cfg.products.find((x) => x.slug === job.product_slug);
     const format = job.filetype === 'alt' && ed.alt ? ed.alt : ed.single;
     fs.mkdirSync(outDir, { recursive: true });
     const ext = { mp4_green: 'mp4', mp4_black: 'mp4', prores4444: 'mov', webm_alpha: 'webm' }[format];
@@ -362,7 +363,7 @@ function createRenderer(cfg) {
     try {
       const r = await renderSingle({
         browser, text: job.text, fill: job.fill, stroke: job.stroke, strokeRatio: OUTLINES[job.outline] || 0, shadow: Boolean(job.shadow),
-        font: { file: font.file, weight: font.weight, mime: font.mime }, size: job.size || 'vertical', seconds: job.seconds || 5,
+        font: { file: font.file, weight: font.weight, mime: font.mime }, size: job.size || 'vertical', seconds: job.seconds || 5, motion: (prod && prod.motion) || 'pop',
         format, outFile: path.join(outDir, `${job.id}.${ext}`), onProgress,
       });
       return [{ format: 'single', codec: format, size: job.size, seconds: job.seconds, file: r.file, bytes: r.bytes, mime: r.mime, ms: r.ms }];

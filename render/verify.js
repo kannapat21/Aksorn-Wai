@@ -153,7 +153,7 @@ function main() {
     if (exp.profile && !String(s.profile).includes(exp.profile)) problems.push(`profile=${s.profile}`);
     if (s.width !== f.width || s.height !== f.height) problems.push(`size=${s.width}x${s.height}`);
     if (!exp.still) {
-      if (s.r_frame_rate !== '30/1') problems.push(`fps=${s.r_frame_rate}`);
+      if (s.r_frame_rate !== `${manifest.fps}/1`) problems.push(`fps=${s.r_frame_rate}`);
       if (Number(s.nb_read_frames) !== expectFrames) problems.push(`frames=${s.nb_read_frames}`);
       if (Math.abs(dur - expectDur) > 0.05) problems.push(`duration=${dur}`);
     }

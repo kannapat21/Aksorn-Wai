@@ -28,7 +28,7 @@ const { spawnSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..');
 
 // ----- ค่าตั้งต้น -----
-const FPS = 30;
+const FPS = 60; // ทุกชุดเรนเดอร์ 60 fps (ท่าเคลื่อนไหวคำนวณจากเวลา)
 const DURATION = 3; // วินาที
 const TIMING = {
   popUp: 0.30, // 0 → 1.1
@@ -91,7 +91,7 @@ function run(cmd, args) {
 
 const BT709 = ['-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709'];
 
-async function renderFrames(browser, { text, fill, stroke, strokeRatio = 0.05, shadow = false, font = DEFAULT_FONT, w, h, dir, onFrame }) {
+async function renderFrames(browser, { text, fill, stroke, strokeRatio = 0.05, shadow = false, font = DEFAULT_FONT, motion = 'pop', w, h, dir, onFrame }) {
   const template = fs.readFileSync(path.join(__dirname, 'template.html'), 'utf8');
   const fontB64 = fs.readFileSync(font.file).toString('base64');
   // ใช้ฟังก์ชันแทนที่ กันอักขระ $ ในโค้ดถูกตีความเป็นรูปแบบพิเศษ
@@ -112,7 +112,7 @@ async function renderFrames(browser, { text, fill, stroke, strokeRatio = 0.05, s
   const total = Math.round(FPS * DURATION);
   for (let i = 0; i < total; i++) {
     const t = i / FPS;
-    await page.evaluate(([tt, timing]) => window.setTime(tt, timing), [t, TIMING]);
+    await page.evaluate(([tt, timing, mo]) => window.setTime(tt, timing, mo), [t, TIMING, motion]);
     await page.screenshot({
       path: path.join(dir, `f${String(i).padStart(4, '0')}.png`),
       omitBackground: true, // PNG พื้นโปร่งใส
@@ -269,7 +269,7 @@ function makePreview({ framesDir, watermark, out, poster, w, h }) {
  * คืนค่า: รายการไฟล์แบบเดียวกับ manifest.files
  */
 async function renderCustom(opts) {
-  const { text, fill, stroke, strokeRatio = 0.05, shadow = false, font = DEFAULT_FONT, outDir, base, formats = null } = opts;
+  const { text, fill, stroke, strokeRatio = 0.05, shadow = false, font = DEFAULT_FONT, outDir, base, formats = null, motion = 'pop' } = opts;
   const onProgress = opts.onProgress || (() => {});
   fs.mkdirSync(outDir, { recursive: true });
   const browser = await tools.launchBrowser();
@@ -283,7 +283,7 @@ async function renderCustom(opts) {
       const span = 100 / SIZES.length;
       const start = si * span;
       await renderFrames(browser, {
-        text, fill, stroke, strokeRatio, shadow, font, w: s.w, h: s.h, dir: framesDir,
+        text, fill, stroke, strokeRatio, shadow, font, motion, w: s.w, h: s.h, dir: framesDir,
         onFrame: (i, n) => { if (i % 6 === 0) onProgress(Math.round(start + span * 0.6 * (i / n)), `กำลังวาดเฟรม ${s.label}`); },
       });
       onProgress(Math.round(start + span * 0.65), `กำลังเข้ารหัสไฟล์ ${s.label}`);
@@ -307,6 +307,8 @@ async function main() {
   }
   const fill = args.fill || '#FFD400';
   const stroke = args.stroke || '#111111';
+  const motion = args.motion || 'pop';
+  if (!['pop', 'drop'].includes(motion)) { console.error('--motion ต้องเป็น pop หรือ drop'); process.exit(1); }
   const outDir = path.resolve(args['out-dir'] || path.join(ROOT, 'storage', 'products', slug));
   const previewDir = path.resolve(args['preview-dir'] || path.join(ROOT, 'public', 'previews'));
   fs.mkdirSync(outDir, { recursive: true });
@@ -320,7 +322,7 @@ async function main() {
       const framesDir = path.join(work, s.id);
       fs.mkdirSync(framesDir);
       const t0 = Date.now();
-      const r = await renderFrames(browser, { text, fill, stroke, w: s.w, h: s.h, dir: framesDir });
+      const r = await renderFrames(browser, { text, fill, stroke, motion, w: s.w, h: s.h, dir: framesDir });
       console.log(`[${s.id}] เรนเดอร์ ${r.frames} เฟรม (ฟอนต์ ${r.fontSize}px) ใน ${((Date.now() - t0) / 1000).toFixed(1)}s`);
       allFiles.push(...encodeAll({ framesDir, w: s.w, h: s.h, outDir, base: slug, sizeId: s.id }));
       console.log(`[${s.id}] เข้ารหัสครบ 4 ฟอร์แมต + ชุด 3 ส่วน`);
@@ -345,7 +347,7 @@ async function main() {
   fs.copyFileSync(path.join(ROOT, 'fonts', 'OFL.txt'), path.join(outDir, 'Kanit-OFL.txt'));
 
   const manifest = {
-    slug, text, fill, stroke, fps: FPS, duration: DURATION, timing: TIMING,
+    slug, text, fill, stroke, motion, fps: FPS, duration: DURATION, timing: TIMING,
     parts: { introSeconds: PARTS.introFrames / FPS, outroSeconds: (FPS * DURATION - PARTS.outroStart) / FPS, holdFrame: PARTS.holdFrame },
     renderedAt: new Date().toISOString(),
     formats: FORMATS,
@@ -370,6 +372,7 @@ if (require.main === module) {
  *   แล้วต่อเป็นลำดับเฟรมด้วย hard link (ไม่คัดลอกไฟล์) ก่อนเข้ารหัสครั้งเดียว
  * format: mp4_green | mp4_black | prores4444 | webm_alpha
  */
+const SINGLE_FPS = FPS;
 const SINGLE = {
   mp4_green: { ext: 'mp4', mime: 'video/mp4' },
   mp4_black: { ext: 'mp4', mime: 'video/mp4' },
@@ -379,10 +382,12 @@ const SINGLE = {
 
 async function renderSingle(opts) {
   const { text, fill, stroke, strokeRatio = 0.05, shadow = false, font = DEFAULT_FONT, format, outFile } = opts;
+  const motion = opts.motion || 'pop';
   const size = SIZES.find((x) => x.id === opts.size) || SIZES[0];
   const seconds = Math.max(1.5, Math.min(60, Number(opts.seconds) || 3));
   const onProgress = opts.onProgress || (() => {});
   if (!SINGLE[format]) throw new Error(`ไม่รู้จักฟอร์แมต ${format}`);
+  const FPS = Number(opts.fps) || SINGLE_FPS; // 60 fps (ท่าเคลื่อนไหวคำนวณจากเวลา จึงลื่นขึ้นโดยไม่เปลี่ยนความยาว)
   const total = Math.round(seconds * FPS);
   const edge = Math.round(0.5 * FPS); // เฟรมช่วงเข้า และช่วงออก
   const timing = { popUp: TIMING.popUp, settle: TIMING.settle, fadeStart: seconds - 0.5, fadeEnd: seconds - 1 / FPS };
@@ -410,7 +415,7 @@ async function renderSingle(opts) {
       unique.push({ name: 'hold', t: timing.settle });
       for (let k = 0; k < edge; k++) unique.push({ name: `out${k}`, t: timing.fadeStart + k / FPS });
       for (let i = 0; i < unique.length; i++) {
-        await page.evaluate(([tt, tm]) => window.setTime(tt, tm), [unique[i].t, timing]);
+        await page.evaluate(([tt, tm, mo]) => window.setTime(tt, tm, mo), [unique[i].t, timing, motion]);
         await page.screenshot({ path: path.join(work, `${unique[i].name}.png`), omitBackground: true, type: 'png' });
         onProgress(Math.round(5 + 55 * ((i + 1) / unique.length)), 'กำลังวาดตัวอักษร');
       }
@@ -432,21 +437,21 @@ async function renderSingle(opts) {
       const color = format === 'mp4_green' ? '0x00FF00' : '0x000000';
       run('ffmpeg', [
         ...input, '-f', 'lavfi', '-i', `color=c=${color}:s=${w}x${h}:r=${FPS}`,
-        '-filter_complex', '[1:v][0:v]overlay=shortest=1:format=auto,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[v]',
+        '-filter_complex', `[1:v][0:v]overlay=shortest=1:format=auto,scale=out_color_matrix=bt709:out_range=tv:flags=accurate_rnd+full_chroma_int,format=yuv420p[v]`,
         '-map', '[v]', '-frames:v', String(total),
-        '-c:v', 'libx264', '-preset', 'medium', '-crf', '16', '-profile:v', 'high', '-tune', 'animation',
+        '-c:v', 'libx264', '-preset', 'medium', '-crf', '14', '-profile:v', 'high', '-tune', 'animation',
         ...BT709, '-movflags', '+faststart', outFile,
       ]);
     } else if (format === 'prores4444') {
       // qscale 6: ขอบตัวอักษรยังคม แต่ไฟล์เล็กกว่าค่าอัตโนมัติมาก (ProRes ไม่มีการบีบข้ามเฟรม ไฟล์จึงโตตามความยาว)
       run('ffmpeg', [
-        ...input, '-vf', 'scale=out_color_matrix=bt709:out_range=tv,format=yuva444p10le',
+        ...input, '-vf', `scale=out_color_matrix=bt709:out_range=tv,format=yuva444p10le`,
         '-c:v', 'prores_ks', '-profile:v', '4444', '-pix_fmt', 'yuva444p10le', '-alpha_bits', '16', '-qscale:v', '6',
         '-vendor', 'apl0', ...BT709, outFile,
       ]);
     } else {
       run('ffmpeg', [
-        ...input, '-vf', 'scale=out_color_matrix=bt709:out_range=tv,format=yuva420p',
+        ...input, '-vf', `scale=out_color_matrix=bt709:out_range=tv,format=yuva420p`,
         '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', '28',
         '-row-mt', '1', '-deadline', 'good', '-cpu-used', '4', '-auto-alt-ref', '0', ...BT709, outFile,
       ]);
@@ -459,4 +464,4 @@ async function renderSingle(opts) {
   }
 }
 
-module.exports = { FORMATS, SIZES, FPS, DURATION, PARTS, SINGLE, renderCustom, renderSingle };
+module.exports = { FORMATS, SIZES, FPS, DURATION, PARTS, SINGLE, SINGLE_FPS, renderCustom, renderSingle };

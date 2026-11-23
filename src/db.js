@@ -86,11 +86,52 @@ function openDb(file) {
     );
     CREATE INDEX IF NOT EXISTS download_log_user ON download_log(user_id, at);
   `);
+  // ยืนยันอีเมล / ลืมรหัสผ่าน: เก็บแค่ SHA-256 ของโทเคน ใช้ได้ครั้งเดียว มีวันหมดอายุ
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_tokens (
+      id         TEXT PRIMARY KEY,
+      user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind       TEXT NOT NULL,   -- verify | reset
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at    INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS email_tokens_user ON email_tokens(user_id, kind, created_at);
+  `);
+  if (!db.prepare('PRAGMA table_info(users)').all().some((x) => x.name === 'role')) {
+    db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'customer'"); // customer | admin
+  }
+  if (!db.prepare('PRAGMA table_info(users)').all().some((x) => x.name === 'email_verified_at')) {
+    db.exec('ALTER TABLE users ADD COLUMN email_verified_at INTEGER');
+  }
   // คำสั่งซื้อผูกกับบัญชี (ฐานข้อมูลรุ่นก่อนไม่มีคอลัมน์นี้)
   if (!db.prepare('PRAGMA table_info(orders)').all().some((c) => c.name === 'user_id')) {
     db.exec('ALTER TABLE orders ADD COLUMN user_id TEXT REFERENCES users(id)');
   }
   db.exec('CREATE INDEX IF NOT EXISTS orders_user ON orders(user_id, status)');
+  // โอนเงินแล้วกดยืนยัน (PAYMENT_PROVIDER=manual): ยอดโอนไม่ซ้ำต่อออเดอร์ที่ยังเปิดอยู่ + รหัสอ้างอิง + ผลการตรวจของแอดมิน
+  const orderCols = new Set(db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name));
+  for (const [name, type] of [['transfer_amount', 'INTEGER'], ['pay_ref', 'TEXT'], ['confirmed_at', 'INTEGER'], ['transfer_time', 'TEXT'],
+    ['reviewed_by', 'TEXT'], ['reviewed_at', 'INTEGER'], ['review_note', 'TEXT'], ['confirm_count', 'INTEGER NOT NULL DEFAULT 0']]) {
+    if (!orderCols.has(name)) db.exec(`ALTER TABLE orders ADD COLUMN ${name} ${type}`);
+  }
+  db.exec(`
+    DROP INDEX IF EXISTS orders_open_transfer; -- รุ่นก่อนบังคับยอดไม่ซ้ำที่ฐานข้อมูล ตอนนี้เป็นตัวเลือก (MANUAL_UNIQUE_SATANG) เช็คในโค้ด
+    CREATE INDEX IF NOT EXISTS orders_open_transfer_amt ON orders(transfer_amount)
+      WHERE transfer_amount IS NOT NULL AND status IN ('pending','review','rejected');
+    CREATE UNIQUE INDEX IF NOT EXISTS orders_pay_ref ON orders(pay_ref) WHERE pay_ref IS NOT NULL;
+    -- บันทึกการตรวจสอบ: ใครทำอะไรกับออเดอร์ไหน เมื่อไหร่ (แก้/ลบผ่านเว็บไม่ได้)
+    CREATE TABLE IF NOT EXISTS payment_audit (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id    TEXT NOT NULL,
+      actor_id    TEXT,
+      actor_email TEXT,
+      action      TEXT NOT NULL,   -- customer_confirm | approve | reject | expire
+      detail      TEXT,
+      at          INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS payment_audit_at ON payment_audit(at);
+  `);
   return db;
 }
 
