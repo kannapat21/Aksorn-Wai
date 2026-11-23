@@ -1595,3 +1595,29 @@ test('manual (ค่าเริ่มต้น ไม่บวกสตาง�
     assert.equal(ord(ida).status, 'paid'); assert.equal(ord(idb).status, 'review');
   } finally { srv.close(); }
 });
+
+test('BASE_URL เป็น https แต่เปิดผ่าน http://localhost: คุกกี้ไม่ติด Secure (เข้าสู่ระบบได้) · ผ่านอุโมงค์ https ติด Secure', async () => {
+  const hcfg = loadConfig({
+    NODE_ENV: 'test', DATABASE_FILE: ':memory:', DOWNLOAD_LINK_SECRET: 'x'.repeat(40), PAYMENT_WEBHOOK_SECRET: 'y'.repeat(40),
+    OMISE_PUBLIC_KEY: '', OMISE_SECRET_KEY: '', OMISE_WEBHOOK_SECRET: '', MAIL_MODE: 'console', BASE_URL: 'https://shop.example', RATE_GLOBAL_PER_MIN: '0',
+    CUSTOM_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'sec-custom-')), USER_FONT_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'sec-fonts-')),
+  });
+  const hctx = createApp(hcfg, { log: () => {}, renderer: fakeRenderer, renderTools });
+  const srv = await new Promise((r) => { const s = hctx.app.listen(0, '127.0.0.1', () => r(s)); });
+  const hb = `http://127.0.0.1:${srv.address().port}`;
+  try {
+    const plain = await fetch(`${hb}/login`);
+    const pc = plain.headers.getSetCookie().find((c) => c.startsWith('csrf='));
+    assert.ok(pc && !/;\s*Secure/i.test(pc), 'http ตรงๆ ไม่ติด Secure');
+    assert.equal(plain.headers.get('strict-transport-security'), null);
+    const viaTunnel = await fetch(`${hb}/login`, { headers: { 'x-forwarded-proto': 'https' } });
+    assert.match(viaTunnel.headers.getSetCookie().find((c) => c.startsWith('csrf=')), /;\s*Secure/i);
+    assert.ok(viaTunnel.headers.get('strict-transport-security'));
+    // สมัครแล้วใช้คุกกี้ต่อผ่าน http ได้จริง
+    const csrf = decodeURIComponent(pc.split(';')[0].split('=')[1]);
+    const su = await fetch(`${hb}/signup`, { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: `csrf=${csrf}` }, body: new URLSearchParams({ csrf, email: 'sec@example.com', password: 'correct-horse-9', next: '/library' }) });
+    const sid = su.headers.getSetCookie().find((c) => c.startsWith('sid='));
+    assert.ok(sid && !/;\s*Secure/i.test(sid));
+    assert.equal((await fetch(`${hb}/library`, { redirect: 'manual', headers: { cookie: sid.split(';')[0] } })).status, 200);
+  } finally { srv.close(); }
+});

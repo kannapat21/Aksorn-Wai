@@ -24,6 +24,9 @@ function createApp(cfg, opts = {}) {
   const log = opts.log || console.log;
   const now = opts.now || (() => Date.now());
   const secureCookies = cfg.baseUrl.startsWith('https://');
+  // คุกกี้ Secure เฉพาะคำขอที่มาทาง https จริง (เปิดผ่าน http://localhost ตอนทดสอบในเครื่อง ต้องเข้าสู่ระบบได้ด้วย
+  // ถึงจะตั้ง BASE_URL เป็นลิงก์ https ไว้ · ผ่านอุโมงค์ cloudflared จะได้ X-Forwarded-Proto: https จาก loopback)
+  const secureFor = (res) => secureCookies && Boolean(res.req && res.req.secure);
 
   const app = express();
   app.disable('x-powered-by');
@@ -58,7 +61,7 @@ function createApp(cfg, opts = {}) {
       'X-DNS-Prefetch-Control': 'off',
     });
     // ขายจริงบน https: บังคับให้เบราว์เซอร์ใช้ https เสมอ
-    if (secureCookies) res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    if (secureCookies && req.secure) res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     next();
   });
 
@@ -196,7 +199,7 @@ function createApp(cfg, opts = {}) {
     let csrf = req.cookies.csrf;
     if (!/^[A-Za-z0-9_-]{40,64}$/.test(csrf || '')) {
       csrf = crypto.randomBytes(32).toString('base64url');
-      res.append('Set-Cookie', auth.cookie('csrf', csrf, { secure: secureCookies, sameSite: 'Strict' }));
+      res.append('Set-Cookie', auth.cookie('csrf', csrf, { secure: secureFor(res), sameSite: 'Strict' }));
     }
     req.csrf = csrf;
     const sid = req.cookies.sid;
@@ -230,7 +233,7 @@ function createApp(cfg, opts = {}) {
     const t = now();
     q.deleteExpiredSessions.run(t);
     q.insertSession.run(auth.tokenId(token), userId, t, t + cfg.sessionDays * DAY_MS);
-    res.append('Set-Cookie', auth.cookie('sid', token, { secure: secureCookies, maxAgeSec: cfg.sessionDays * 86400 }));
+    res.append('Set-Cookie', auth.cookie('sid', token, { secure: secureFor(res), maxAgeSec: cfg.sessionDays * 86400 }));
   }
 
   // ---------- จำกัดการลองรหัสผ่าน ----------
@@ -374,7 +377,7 @@ function createApp(cfg, opts = {}) {
         return true;
       })();
       if (!ok) return send(req, res, 'message', { title: 'ลิงก์ตั้งรหัสผ่านใช้ไม่ได้', text: 'ลิงก์ถูกใช้ไปแล้ว', action: { href: '/forgot', label: 'ขอลิงก์ใหม่' } }, 400);
-      res.append('Set-Cookie', auth.cookie('sid', '', { secure: secureCookies, maxAgeSec: 0 }));
+      res.append('Set-Cookie', auth.cookie('sid', '', { secure: secureFor(res), maxAgeSec: 0 }));
       res.redirect(303, '/login?reset=1');
     } catch (e) { next(e); }
   });
@@ -533,7 +536,7 @@ function createApp(cfg, opts = {}) {
 
   app.post('/logout', requireCsrf, (req, res) => {
     if (req.sessionRowId) q.deleteSession.run(req.sessionRowId);
-    res.append('Set-Cookie', auth.cookie('sid', '', { secure: secureCookies, maxAgeSec: 0 }));
+    res.append('Set-Cookie', auth.cookie('sid', '', { secure: secureFor(res), maxAgeSec: 0 }));
     res.redirect(303, '/');
   });
 
