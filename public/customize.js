@@ -214,9 +214,12 @@
       if (!chip) return;
       if (e.target.closest('[data-style-del]')) {
         var name = chip.querySelector('.style-name').textContent;
-        if (!confirm('ลบสไตล์ "' + name + '"?')) return;
+        var ask = window.AW && window.AW.confirm ? window.AW.confirm({ title: 'ลบสไตล์ "' + name + '"?', text: 'ลบแล้วกู้คืนไม่ได้ ไฟล์ที่สร้างไว้แล้วยังอยู่ครบ', ok: 'ลบสไตล์', danger: true }) : Promise.resolve(true);
+        ask.then(function (yes) {
+        if (!yes) return;
         fetch('/library/styles/' + chip.getAttribute('data-style-id') + '/delete', { method: 'POST', credentials: 'same-origin', headers: { 'x-csrf-token': csrf, accept: 'application/json' } })
           .then(function (r) { if (r.ok) { chip.remove(); note('ลบสไตล์ "' + name + '" แล้ว'); } else note('ลบไม่สำเร็จ', 'error'); });
+        });
         return;
       }
       try { applyStyle(JSON.parse(chip.getAttribute('data-style')), chip); } catch (err) { /* ข้าม */ }

@@ -560,7 +560,7 @@ function transferPay({ cfg, user, csrf, order, p, expiresAt, error }) {
     <p class="muted small">ถ้าแอปธนาคารมีช่อง "บันทึกช่วยจำ" ใส่รหัสนี้ลงไปด้วย ช่วยให้ร้านจับคู่ได้ง่ายขึ้น (ไม่บังคับ) · ออเดอร์นี้เก็บไว้ให้ถึง ${esc(thDate(expiresAt))}</p>
   </section>
 
-  <form class="box xfer-confirm" method="post" action="/pay/transfer/${esc(order.id)}/confirm" data-confirm="โอนเงินยอด ${esc(amt)} เรียบร้อยแล้วใช่ไหม?">
+  <form class="box xfer-confirm" method="post" action="/pay/transfer/${esc(order.id)}/confirm" data-confirm-title="โอนเงินแล้วใช่ไหม?" data-confirm="ยอด ${esc(amt)} · กดยืนยันแล้วร้านจะตรวจรายการ และส่งสินค้าเข้าคลังให้" data-confirm-ok="โอนแล้ว ยืนยันเลย" data-confirm-cancel="ยังไม่ได้โอน">
     <input type="hidden" name="csrf" value="${esc(csrf)}">
     <h2>โอนแล้วใช่ไหม</h2>
     <button class="btn primary block lg" type="submit">ยืนยันการโอนเงิน</button>
@@ -594,7 +594,7 @@ function adminTransfers({ cfg, user, csrf, waiting, recent, audit, done, problem
     ${o.same && o.same.length ? `<div class="note warn same-amount"><span><b>ระวัง: มีออเดอร์ยอดเท่ากันอีก ${o.same.length} รายการ</b> ดูเวลาที่เงินเข้าในแอปธนาคาร เทียบกับเวลาที่ลูกค้ากดยืนยัน (${esc(o.transfer_time ? o.transfer_time + ' น.' : thTime(o.confirmed_at))}) ของรายการนี้ เงินที่เข้าก่อนให้อนุมัติออเดอร์ที่กดยืนยันก่อน
       <ul>${o.same.map((x) => `<li>${esc(x.user_email || '-')} · <code>${esc(x.pay_ref)}</code> · ${x.status === 'review' ? `รอตรวจ กดยืนยัน ${esc(thDate(x.confirmed_at))}` : 'ยังไม่แจ้งโอน'}</li>`).join('')}</ul></span></div>` : ''}
     <div class="review-actions">
-      <form method="post" action="/admin/transfers/${esc(o.id)}/approve" data-confirm="เห็นยอด ${esc(bahtExact(o.transfer_amount))} เข้าบัญชีแล้วใช่ไหม?${o.same && o.same.length ? ` (มีออเดอร์ยอดเท่ากันอีก ${o.same.length} รายการ เทียบเวลาให้ตรงกับรายการนี้)` : ''} อนุมัติแล้วสินค้าเข้าคลังลูกค้าทันที">
+      <form method="post" action="/admin/transfers/${esc(o.id)}/approve" data-confirm-title="เห็นยอด ${esc(bahtExact(o.transfer_amount))} เข้าบัญชีแล้วใช่ไหม?" data-confirm="${o.same && o.same.length ? `มีออเดอร์ยอดเท่ากันอีก ${o.same.length} รายการ เทียบเวลาให้ตรงกับรายการนี้ · ` : ''}อนุมัติแล้วสินค้าเข้าคลังลูกค้าทันที และยกเลิกไม่ได้" data-confirm-ok="อนุมัติ" data-confirm-cancel="ยังก่อน">
         <input type="hidden" name="csrf" value="${esc(csrf)}">
         <button class="btn primary lg" type="submit">อนุมัติ</button>
       </form>
@@ -1084,7 +1084,7 @@ ${body}
   <a class="btn" href="/library/${esc(job.order_id)}/customize?from=${esc(job.id)}">${ICON.edit} ทำอีกแบบจากเวอร์ชันนี้</a>
   <a class="btn ghost" href="/library">กลับไปที่คลัง</a>
 </div>
-${job.status === 'done' || job.status === 'failed' ? `<form method="post" action="/library/custom/${esc(job.id)}/delete" class="danger-zone" data-confirm="ลบเวอร์ชันนี้ออกจากคลัง? ไฟล์จะถูกลบถาวร">
+${job.status === 'done' || job.status === 'failed' ? `<form method="post" action="/library/custom/${esc(job.id)}/delete" class="danger-zone" data-confirm-title="ลบเวอร์ชันนี้ออกจากคลัง?" data-confirm="ไฟล์จะถูกลบถาวร กู้คืนไม่ได้" data-confirm-ok="ลบเลย" data-confirm-danger>
   <input type="hidden" name="csrf" value="${esc(csrf)}">
   <button type="submit" class="linklike danger">ลบเวอร์ชันนี้</button>
 </form>` : ''}`,
@@ -1108,7 +1108,7 @@ function presetsPage({ cfg, user, csrf, presets, fonts, items }) {
       </div>
       <div class="preset-row-actions">
         ${items.length ? `<details class="menu use-menu"><summary class="btn small primary">ใช้กับ…</summary><div class="menu-pop">${items.map((o) => `<a href="/library/${esc(o.id)}/customize?style=${esc(x.id)}">${esc((cfg.products.find((pp) => pp.slug === o.product_slug) || {}).title || o.product_slug)}</a>`).join('')}</div></details>` : ''}
-        <form method="post" action="/library/styles/${esc(x.id)}/delete" data-confirm="ลบสไตล์ &quot;${esc(x.name)}&quot;?">
+        <form method="post" action="/library/styles/${esc(x.id)}/delete" data-confirm-title="ลบสไตล์ &quot;${esc(x.name)}&quot;?" data-confirm="ไฟล์ที่สร้างไว้แล้วยังอยู่ครบ" data-confirm-ok="ลบสไตล์" data-confirm-danger>
           <input type="hidden" name="csrf" value="${esc(csrf)}">
           <button class="linklike danger" type="submit">ลบ</button>
         </form>
@@ -1130,7 +1130,7 @@ function fontsPage({ cfg, user, csrf, fonts, max }) {
     return `<li class="font-row">
       <span class="font-row-sample" style="font-family:'tt-u-${esc(f.id)}'">${f.thai === 'none' ? 'Hello Aa' : 'สวัสดี Aa'}</span>
       <div><b>${esc(f.name)}</b><small class="muted">${esc(f.format.toUpperCase())} · ${fmtBytes(f.bytes)} · <span class="badge ${cls}">${label}</span></small></div>
-      <form method="post" action="/library/fonts/${esc(f.id)}/delete" data-confirm="ลบฟอนต์ &quot;${esc(f.name)}&quot;? (เวอร์ชันที่สร้างไว้แล้วไม่หาย)">
+      <form method="post" action="/library/fonts/${esc(f.id)}/delete" data-confirm-title="ลบฟอนต์ &quot;${esc(f.name)}&quot;?" data-confirm="เวอร์ชันที่สร้างไว้แล้วไม่หาย" data-confirm-ok="ลบฟอนต์" data-confirm-danger>
         <input type="hidden" name="csrf" value="${esc(csrf)}">
         <button class="linklike danger" type="submit">ลบ</button>
       </form>
