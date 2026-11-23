@@ -45,6 +45,16 @@ async function fakeRenderer(job, { outDir, onProgress, font }) {
 }
 function openGate() { const g = {}; g.promise = new Promise((r) => { g.open = r; }); gate = g; return g; }
 
+// สินค้าในเทสต์: ใช้ config จริง แต่ให้ "สั่งซื้อเลย" มีราคา ฿49 และอยู่อันดับแรก ไว้ทดสอบขั้นตอนจ่ายเงิน
+// (ร้านจริงตั้ง "สั่งซื้อเลย" กับ "กดติดตามเลย" เป็นของฟรี ดูเทสต์ของฟรีด้านล่าง ใช้ "กดติดตามเลย")
+const REAL_PRODUCTS = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config', 'products.json'), 'utf8'));
+function testProducts() {
+  const list = JSON.parse(JSON.stringify(REAL_PRODUCTS));
+  const on = list.find((p) => p.slug === 'order-now');
+  on.price = 4900;
+  return [on, ...list.filter((p) => p !== on)];
+}
+
 before(async () => {
   cfg = loadConfig({
     NODE_ENV: 'test',
@@ -64,6 +74,7 @@ before(async () => {
     RATE_SIGNUP_PER_HOUR: '1000',
     LEGAL_NAME: 'ร้านทดสอบ จำกัด',
     USER_FONT_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'shop-fonts-')),
+    products: testProducts(),
   });
   ctx = createApp(cfg, { now: () => clock, log: () => {}, renderer: fakeRenderer, renderTools });
   ctx.mailer.send = async (m) => { ctx.mailer.sent.push(m); }; // เก็บอีเมลไว้ตรวจ ไม่พิมพ์ลงจอ
@@ -1159,6 +1170,7 @@ test('Omise: PromptPay QR → webhook ที่เซ็นแล้ว + ดึ
     PAYMENT_PROVIDER: 'omise', OMISE_PUBLIC_KEY: 'pkey_test_5xyz', OMISE_SECRET_KEY: SKEY, OMISE_WEBHOOK_SECRET: whSecret, OMISE_API_BASE: fakeBase,
     MAIL_MODE: 'console', BASE_URL: 'http://shop.test', RATE_GLOBAL_PER_MIN: '0', RATE_SIGNUP_PER_HOUR: '1000', LEGAL_NAME: 'ร้านทดสอบ',
     CUSTOM_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'omise-custom-')), USER_FONT_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'omise-fonts-')),
+    products: testProducts(),
   });
   const octx = createApp(ocfg, { log: () => {}, renderer: fakeRenderer, renderTools });
   octx.mailer.send = async (m) => { octx.mailer.sent.push(m); };
@@ -1349,6 +1361,7 @@ test('manual: ลูกค้ากดยืนยันโอน → รอต�
     ADMIN_EMAIL: 'boss@shop.test', ADMIN_PASSWORD: 'boss-password-12345', MAIL_MODE: 'console', BASE_URL: 'http://shop.test', RATE_GLOBAL_PER_MIN: '0', RATE_SIGNUP_PER_HOUR: '1000', LEGAL_NAME: 'ร้านทดสอบ',
     OMISE_PUBLIC_KEY: '', OMISE_SECRET_KEY: '', OMISE_WEBHOOK_SECRET: '',
     CUSTOM_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'man-custom-')), USER_FONT_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'man-fonts-')),
+    products: testProducts(),
   });
   const mctx = createApp(mcfg, { now: () => t, log: () => {}, renderer: fakeRenderer, renderTools });
   mctx.mailer.send = async (m) => { mctx.mailer.sent.push(m); };
@@ -1546,6 +1559,7 @@ test('manual (ค่าเริ่มต้น ไม่บวกสตาง�
     ADMIN_EMAIL: 'boss@shop.test', ADMIN_PASSWORD: 'boss-password-12345', MAIL_MODE: 'console', BASE_URL: 'http://shop.test', RATE_GLOBAL_PER_MIN: '0', RATE_SIGNUP_PER_HOUR: '1000', LEGAL_NAME: 'ร้านทดสอบ',
     OMISE_PUBLIC_KEY: '', OMISE_SECRET_KEY: '', OMISE_WEBHOOK_SECRET: '',
     CUSTOM_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'man2-custom-')), USER_FONT_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'man2-fonts-')),
+    products: testProducts(),
   });
   assert.equal(mcfg.transfer.uniqueSatang, false);
   const mctx = createApp(mcfg, { now: () => t, log: () => {}, renderer: fakeRenderer, renderTools });
@@ -1620,6 +1634,97 @@ test('BASE_URL เป็น https แต่เปิดผ่าน http://local
     assert.ok(sid && !/;\s*Secure/i.test(sid));
     assert.equal((await fetch(`${hb}/library`, { redirect: 'manual', headers: { cookie: sid.split(';')[0] } })).status, 200);
   } finally { srv.close(); }
+});
+
+
+// ---------------- ของฟรี และ แอนิเมชันพรีเมียม ----------------
+test('ร้านจริง: "สั่งซื้อเลย" กับ "กดติดตามเลย" ฟรี ส่วนแบบพรีเมียมมีราคาและใช้ท่าพรีเมียม', () => {
+  const by = Object.fromEntries(REAL_PRODUCTS.map((p) => [p.slug, p]));
+  assert.equal(by['order-now'].price, 0);
+  assert.equal(by['follow-now'].price, 0);
+  require('../public/motion.js');
+  const premium = REAL_PRODUCTS.filter((p) => p.price > 0);
+  assert.ok(premium.length >= 2);
+  for (const p of premium) {
+    assert.ok(globalThis.TTMotion.meta(p.motion).premium, `${p.slug} ต้องใช้ท่าพรีเมียม`);
+    assert.ok(p.price >= 4900 && p.price <= 9900, `${p.slug} ราคา ${p.price}`);
+    // ไฟล์ครบทุกฟอร์แมต ทั้งสองขนาด
+    const mf = JSON.parse(fs.readFileSync(path.join(cfg.storageDir, p.slug, 'manifest.json'), 'utf8'));
+    assert.equal(mf.motion, p.motion);
+    assert.equal(mf.fps, 60);
+    for (const size of ['vertical', 'horizontal']) {
+      for (const fmt of ['mp4_green', 'mp4_black', 'prores4444', 'webm_alpha', 'still_png']) {
+        const f = mf.files.find((x) => x.format === fmt && x.size === size);
+        assert.ok(f && fs.statSync(path.join(cfg.storageDir, p.slug, f.file)).size === f.bytes, `${p.slug} ${fmt} ${size}`);
+      }
+    }
+    for (const v of ['vertical', 'horizontal']) for (const ext of ['jpg', 'mp4']) assert.ok(fs.existsSync(path.join(__dirname, '..', 'public', 'previews', `${p.slug}_${v}.${ext}`)));
+  }
+});
+
+test('ของฟรี: กดรับ → เข้าคลังทันที ไม่มีหน้าจ่ายเงิน ไม่มีอีเมลใบเสร็จ กดซ้ำได้รายการเดิม', async () => {
+  const anon = client();
+  const pd = await (await anon.req('/p/follow-now')).text();
+  assert.match(pd, /ฟรี/);
+  assert.match(pd, /เข้าสู่ระบบเพื่อรับฟรี/);
+  const home = await (await anon.req('/')).text();
+  assert.match(home, /class="badge-free">ฟรี</);
+  assert.match(home, /class="badge-premium">/);
+
+  const c = await newUser('free@example.com');
+  const page = await (await c.req('/p/follow-now')).text();
+  assert.match(page, /รับฟรีเข้าคลัง/);
+  assert.doesNotMatch(page, /นโยบายคืนเงิน<\/a><\/p>/);
+  const sent = ctx.mailer.sent.length;
+  const r = await c.post('/checkout', { product: 'follow-now' });
+  assert.equal(r.status, 303);
+  const loc = r.headers.get('location');
+  assert.match(loc, /^\/library\/[0-9a-f]{32}\?claimed=1$/);
+  const id = loc.split('/').pop().split('?')[0];
+  const o = order(id);
+  assert.equal(o.status, 'paid');
+  assert.equal(o.amount, 0);
+  assert.equal(o.provider, 'free');
+  assert.equal(ctx.mailer.sent.length, sent, 'ของฟรีไม่ส่งอีเมลใบเสร็จ');
+  const lib = await (await c.req(loc)).text();
+  assert.match(lib, /ได้รับแล้ว ฟรี!/);
+  assert.match(lib, /รับฟรีเมื่อ/);
+  // กดซ้ำ: ไม่สร้างรายการใหม่
+  const again = await c.post('/checkout', { product: 'follow-now' });
+  assert.equal(again.headers.get('location'), `/library/${id}`);
+  assert.equal(ctx.db.prepare("SELECT COUNT(*) AS n FROM orders WHERE product_slug = 'follow-now' AND email = 'free@example.com'").get().n, 1);
+  // ยังต้องมี CSRF
+  const noCsrf = await c.req('/checkout', { method: 'POST', form: { product: 'follow-now' } });
+  assert.equal(noCsrf.status, 403);
+  // ไม่ต้องล็อกอิน = ไม่ได้รับ
+  assert.match((await anon.post('/checkout', { product: 'follow-now' })).headers.get('location'), /^\/login\?next=/);
+});
+
+test('ราคาใน config: ติดลบหรือไม่ใช่จำนวนเต็มไม่ได้ · 0 = ฟรี', () => {
+  const env = { NODE_ENV: 'test', DATABASE_FILE: ':memory:', PAYMENT_PROVIDER: 'mock', MAIL_MODE: 'console', BASE_URL: 'http://x.test',
+    DOWNLOAD_LINK_SECRET: 'a'.repeat(64), PAYMENT_WEBHOOK_SECRET: 'b'.repeat(64) };
+  const one = (price) => [{ ...REAL_PRODUCTS.find((p) => p.slug === 'order-now'), price }];
+  assert.throws(() => loadConfig({ ...env, products: one(-100) }), /price/);
+  assert.throws(() => loadConfig({ ...env, products: one(49.5) }), /price/);
+  assert.throws(() => loadConfig({ ...env, products: one(500) }), /ราคาต่ำสุด/);
+  assert.equal(loadConfig({ ...env, products: one(0) }).products[0].free, true);
+});
+
+test('ท่าพรีเมียม: เวลาเข้า/ค้าง/ออก และช่วงท้ายของรอบค้างนิ่ง (ต่อเข้าท่าออกได้เนียนทุกความยาว)', () => {
+  require('../public/motion.js');
+  const M = globalThis.TTMotion;
+  for (const name of ['cinema', 'neon', 'kinetic']) {
+    const m = M.meta(name);
+    assert.ok(m.premium && m.loop > 0);
+    for (const sec of [3, 5, 10, 15, 30]) {
+      const t = M.timingFor(name, sec, 60);
+      assert.equal(t.settle, m.intro);
+      assert.ok(t.fadeStart - t.settle >= 0.9, `${name} ${sec}s ต้องมีช่วงค้าง`);
+      assert.ok(Number.isInteger(Math.round(m.intro * 60)) && Math.abs(m.intro * 60 - Math.round(m.intro * 60)) < 1e-9);
+    }
+  }
+  // ท่าฟรีใช้เวลาเดิม
+  assert.deepEqual(M.timingFor('pop', 3, 60), { popUp: 0.3, settle: 0.5, fadeStart: 2.5, fadeEnd: 3 - 1 / 60, loop: 0 });
 });
 
 test('ไม่มีป๊อปอัปของเบราว์เซอร์ (confirm/alert/prompt) ในสคริปต์หน้าเว็บ ใช้กล่องของร้านแทน', () => {

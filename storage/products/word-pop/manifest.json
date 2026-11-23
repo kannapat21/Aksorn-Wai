@@ -1,0 +1,216 @@
+{
+  "slug": "word-pop",
+  "text": "ห้ามพลาด ดูให้จบ",
+  "fill": "#FFFFFF",
+  "stroke": "#111111",
+  "motion": "kinetic",
+  "fps": 60,
+  "duration": 3,
+  "timing": {
+    "popUp": 0.3,
+    "settle": 1,
+    "fadeStart": 2.5,
+    "fadeEnd": 2.9833333333333334,
+    "loop": 2
+  },
+  "parts": {
+    "introSeconds": 1,
+    "outroSeconds": 0.5,
+    "holdFrame": 60
+  },
+  "renderedAt": "2026-11-23T14:31:08.080Z",
+  "formats": {
+    "mp4_green": {
+      "ext": "mp4",
+      "label": "MP4 พื้นเขียว (Chroma Key)"
+    },
+    "mp4_black": {
+      "ext": "mp4",
+      "label": "MP4 พื้นดำ (Screen/Add)"
+    },
+    "prores4444": {
+      "ext": "mov",
+      "label": "MOV ProRes 4444 โปร่งใส"
+    },
+    "webm_alpha": {
+      "ext": "webm",
+      "label": "WebM VP9 โปร่งใส"
+    },
+    "parts_green": {
+      "ext": "mp4",
+      "label": "ส่วนเข้า/ออก MP4 พื้นเขียว"
+    },
+    "parts_prores": {
+      "ext": "mov",
+      "label": "ส่วนเข้า/ออก MOV ProRes 4444 โปร่งใส"
+    },
+    "still_png": {
+      "ext": "png",
+      "label": "ภาพนิ่ง PNG โปร่งใส (ยืดได้)"
+    }
+  },
+  "files": [
+    {
+      "format": "mp4_green",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "word-pop_mp4_green_1080x1920.mp4",
+      "bytes": 376641
+    },
+    {
+      "format": "mp4_black",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "word-pop_mp4_black_1080x1920.mp4",
+      "bytes": 246054
+    },
+    {
+      "format": "prores4444",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "word-pop_prores4444_1080x1920.mov",
+      "bytes": 13156010
+    },
+    {
+      "format": "webm_alpha",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "word-pop_webm_alpha_1080x1920.webm",
+      "bytes": 494775
+    },
+    {
+      "format": "parts_green",
+      "part": "intro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "word-pop_parts_green_intro_1080x1920.mp4",
+      "bytes": 178860
+    },
+    {
+      "format": "parts_prores",
+      "part": "intro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "word-pop_parts_prores_intro_1080x1920.mov",
+      "bytes": 4553113
+    },
+    {
+      "format": "parts_green",
+      "part": "outro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "word-pop_parts_green_outro_1080x1920.mp4",
+      "bytes": 100037
+    },
+    {
+      "format": "parts_prores",
+      "part": "outro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "word-pop_parts_prores_outro_1080x1920.mov",
+      "bytes": 1734658
+    },
+    {
+      "format": "still_png",
+      "part": "hold",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "word-pop_still_1080x1920.png",
+      "bytes": 29711
+    },
+    {
+      "format": "mp4_green",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "word-pop_mp4_green_1920x1080.mp4",
+      "bytes": 500527
+    },
+    {
+      "format": "mp4_black",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "word-pop_mp4_black_1920x1080.mp4",
+      "bytes": 336992
+    },
+    {
+      "format": "prores4444",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "word-pop_prores4444_1920x1080.mov",
+      "bytes": 16222513
+    },
+    {
+      "format": "webm_alpha",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "word-pop_webm_alpha_1920x1080.webm",
+      "bytes": 618412
+    },
+    {
+      "format": "parts_green",
+      "part": "intro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "word-pop_parts_green_intro_1920x1080.mp4",
+      "bytes": 238940
+    },
+    {
+      "format": "parts_prores",
+      "part": "intro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "word-pop_parts_prores_intro_1920x1080.mov",
+      "bytes": 5678040
+    },
+    {
+      "format": "parts_green",
+      "part": "outro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "word-pop_parts_green_outro_1920x1080.mp4",
+      "bytes": 129273
+    },
+    {
+      "format": "parts_prores",
+      "part": "outro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "word-pop_parts_prores_outro_1920x1080.mov",
+      "bytes": 2085772
+    },
+    {
+      "format": "still_png",
+      "part": "hold",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "word-pop_still_1920x1080.png",
+      "bytes": 37103
+    }
+  ]
+}
