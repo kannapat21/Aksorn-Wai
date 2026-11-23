@@ -1,0 +1,216 @@
+{
+  "slug": "neon-sign",
+  "text": "เปิดแล้ววันนี้",
+  "fill": "#FF2BD6",
+  "stroke": "#7C3AED",
+  "motion": "neon",
+  "fps": 60,
+  "duration": 3,
+  "timing": {
+    "popUp": 0.3,
+    "settle": 1,
+    "fadeStart": 2.4,
+    "fadeEnd": 2.9833333333333334,
+    "loop": 2
+  },
+  "parts": {
+    "introSeconds": 1,
+    "outroSeconds": 0.6,
+    "holdFrame": 60
+  },
+  "renderedAt": "2026-11-23T14:29:11.878Z",
+  "formats": {
+    "mp4_green": {
+      "ext": "mp4",
+      "label": "MP4 พื้นเขียว (Chroma Key)"
+    },
+    "mp4_black": {
+      "ext": "mp4",
+      "label": "MP4 พื้นดำ (Screen/Add)"
+    },
+    "prores4444": {
+      "ext": "mov",
+      "label": "MOV ProRes 4444 โปร่งใส"
+    },
+    "webm_alpha": {
+      "ext": "webm",
+      "label": "WebM VP9 โปร่งใส"
+    },
+    "parts_green": {
+      "ext": "mp4",
+      "label": "ส่วนเข้า/ออก MP4 พื้นเขียว"
+    },
+    "parts_prores": {
+      "ext": "mov",
+      "label": "ส่วนเข้า/ออก MOV ProRes 4444 โปร่งใส"
+    },
+    "still_png": {
+      "ext": "png",
+      "label": "ภาพนิ่ง PNG โปร่งใส (ยืดได้)"
+    }
+  },
+  "files": [
+    {
+      "format": "mp4_green",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "neon-sign_mp4_green_1080x1920.mp4",
+      "bytes": 124268
+    },
+    {
+      "format": "mp4_black",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "neon-sign_mp4_black_1080x1920.mp4",
+      "bytes": 111518
+    },
+    {
+      "format": "prores4444",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "neon-sign_prores4444_1080x1920.mov",
+      "bytes": 47220211
+    },
+    {
+      "format": "webm_alpha",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "neon-sign_webm_alpha_1080x1920.webm",
+      "bytes": 526214
+    },
+    {
+      "format": "parts_green",
+      "part": "intro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "neon-sign_parts_green_intro_1080x1920.mp4",
+      "bytes": 65148
+    },
+    {
+      "format": "parts_prores",
+      "part": "intro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "neon-sign_parts_prores_intro_1080x1920.mov",
+      "bytes": 16856788
+    },
+    {
+      "format": "parts_green",
+      "part": "outro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "neon-sign_parts_green_outro_1080x1920.mp4",
+      "bytes": 43306
+    },
+    {
+      "format": "parts_prores",
+      "part": "outro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "neon-sign_parts_prores_outro_1080x1920.mov",
+      "bytes": 8230918
+    },
+    {
+      "format": "still_png",
+      "part": "hold",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "neon-sign_still_1080x1920.png",
+      "bytes": 135148
+    },
+    {
+      "format": "mp4_green",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "neon-sign_mp4_green_1920x1080.mp4",
+      "bytes": 165422
+    },
+    {
+      "format": "mp4_black",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "neon-sign_mp4_black_1920x1080.mp4",
+      "bytes": 144174
+    },
+    {
+      "format": "prores4444",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "neon-sign_prores4444_1920x1080.mov",
+      "bytes": 64145609
+    },
+    {
+      "format": "webm_alpha",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "neon-sign_webm_alpha_1920x1080.webm",
+      "bytes": 705041
+    },
+    {
+      "format": "parts_green",
+      "part": "intro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "neon-sign_parts_green_intro_1920x1080.mp4",
+      "bytes": 85459
+    },
+    {
+      "format": "parts_prores",
+      "part": "intro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "neon-sign_parts_prores_intro_1920x1080.mov",
+      "bytes": 23111882
+    },
+    {
+      "format": "parts_green",
+      "part": "outro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "neon-sign_parts_green_outro_1920x1080.mp4",
+      "bytes": 57989
+    },
+    {
+      "format": "parts_prores",
+      "part": "outro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "neon-sign_parts_prores_outro_1920x1080.mov",
+      "bytes": 11161882
+    },
+    {
+      "format": "still_png",
+      "part": "hold",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "neon-sign_still_1920x1080.png",
+      "bytes": 189690
+    }
+  ]
+}

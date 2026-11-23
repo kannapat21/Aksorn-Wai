@@ -553,6 +553,11 @@ function createApp(cfg, opts = {}) {
       if (!p) return send(req, res, 'message', { title: 'ไม่พบสินค้า', text: 'กรุณาเลือกสินค้าใหม่' }, 404);
       const owned = q.ownedPaid.get(req.user.id, p.slug);
       if (owned) return res.redirect(303, `/library/${owned.id}`); // มีในคลังแล้ว ไม่ต้องซื้อซ้ำ
+      if (p.free) {
+        // ของฟรี: ไม่ผ่านหน้าจ่ายเงิน สร้างรายการที่ "ได้แล้ว" แล้วพาเข้าคลังทันที
+        const id = claimFree(req.user, p);
+        return res.redirect(303, `/library/${id}?claimed=1`);
+      }
       if (provider.name === 'manual') {
         // โอนเงินเอง: หนึ่งบัญชีมีออเดอร์ค้างได้ 1 รายการต่อสินค้า (กลับไปใช้อันเดิม ไม่สร้างซ้ำ)
         expireStale();
@@ -579,6 +584,19 @@ function createApp(cfg, opts = {}) {
       if (paymentRef) q.setPaymentRef.run(paymentRef, order.id);
       res.redirect(303, redirectUrl);
     } catch (e) { next(e); }
+  });
+
+  // รับของฟรี (ทำในทรานแซกชันเดียว กดซ้ำเร็วๆ ก็ได้รายการเดียว)
+  const claimFree = db.transaction((user, p) => {
+    const owned = q.ownedPaid.get(user.id, p.slug);
+    if (owned) return owned.id;
+    const id = crypto.randomBytes(16).toString('hex');
+    q.insertOrder.run({
+      id, product_slug: p.slug, editor: user.editor || '', email: user.email, amount: 0, provider: 'free',
+      created_at: now(), user_id: user.id, transfer_amount: null, pay_ref: null,
+    });
+    q.markPaid.run(now(), null, id);
+    return id;
   });
 
   // คำสั่งซื้อของบัญชีที่ล็อกอินอยู่เท่านั้น (ของคนอื่นตอบเหมือนไม่มี)
@@ -1091,7 +1109,7 @@ function createApp(cfg, opts = {}) {
       req.user.editor = editorId;
     }
     res.set('Cache-Control', 'no-store');
-    send(req, res, 'libraryItem', { ...it, editorId, size: req.query.size === 'horizontal' ? 'horizontal' : 'vertical', left: downloadsLeft(req.user.id) });
+    send(req, res, 'libraryItem', { ...it, editorId, size: req.query.size === 'horizontal' ? 'horizontal' : 'vertical', left: downloadsLeft(req.user.id), claimed: req.query.claimed === '1' });
   });
 
   function grantFor(order) {

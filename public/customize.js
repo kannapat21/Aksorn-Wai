@@ -60,20 +60,21 @@
     var load = document.fonts ? document.fonts.load(s.weight + ' 100px "' + s.fontFamily + '"', s.text) : Promise.resolve();
     load.catch(function () {}).then(function () {
       if (token !== ready) return; // มีการเปลี่ยนค่าใหม่กว่าแล้ว
-      s.width = stage.clientWidth; s.height = stage.clientHeight; s.filterId = 'czf';
+      s.width = stage.clientWidth; s.height = stage.clientHeight; s.filterId = 'czf'; s.motion = motion;
       M.setup(el, s);
       draw(current);
     });
   }
 
   // ---------- เล่นวน / หยุด / ดูท่าค้าง / เลื่อนดูทีละเฟรม ----------
-  // ความยาวคลิปที่เลือก: เด้งเข้า 0.5 วิ → ค้าง → จางออก 0.5 วิสุดท้าย (เหมือนไฟล์จริง)
+  // ความยาวคลิปที่เลือก: ท่าเข้า → ค้าง → ท่าออก (เวลาของแต่ละท่าเหมือนไฟล์จริงทุกอย่าง)
   var seconds = Number(val('seconds')) || 5;
-  function timing() { return { popUp: 0.3, settle: 0.5, fadeStart: seconds - 0.5, fadeEnd: seconds - 1 / 60 }; }
+  var motion = stage.getAttribute('data-motion') || 'pop';
+  function timing() { return M.timingFor ? M.timingFor(motion, seconds, 60) : { popUp: 0.3, settle: 0.5, fadeStart: seconds - 0.5, fadeEnd: seconds - 1 / 60 }; }
   var playing = true, current = 0, t0 = performance.now(), LOOP = seconds + 0.4;
   function draw(t) {
     current = t;
-    M.setTime(el, Math.min(t, seconds), timing(), stage.getAttribute('data-motion') || 'pop');
+    M.setTime(el, Math.min(t, seconds), timing(), motion);
     scrub.value = Math.round(Math.min(t, seconds) * 100);
     timeLabel.textContent = Math.min(t, seconds).toFixed(1) + 's';
   }
@@ -105,9 +106,11 @@
     if (p) t0 = performance.now() - current * 1000;
   }
   playBtn.addEventListener('click', function () { setPlaying(!playing); });
-  document.querySelector('[data-hold]').addEventListener('click', function () { setPlaying(false); draw(1.5); });
+  // ท่าค้าง: ท่าพรีเมียมเลือกจังหวะที่นิ่ง (ไม่มีแสงวิ่ง/คำเด้ง)
+  function holdTime() { var m = M.meta ? M.meta(motion) : { loop: 0 }; return m.loop ? timing().settle + 0.95 : 1.5; }
+  document.querySelector('[data-hold]').addEventListener('click', function () { setPlaying(false); draw(holdTime()); });
   scrub.addEventListener('input', function () { setPlaying(false); draw(scrub.value / 100); });
-  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) { setPlaying(false); draw(1.5); }
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) { setPlaying(false); draw(holdTime()); }
 
   // ---------- ขนาด / พื้นหลัง ----------
   document.querySelectorAll('[data-ratio-btn]').forEach(function (b) {

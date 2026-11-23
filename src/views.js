@@ -4,6 +4,8 @@
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const baht = (satang) => `฿${(satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 // ยอดโอนต้องมีทศนิยม 2 ตำแหน่งเสมอ (49.50 ไม่ใช่ 49.5) ให้ตรงกับที่แอปธนาคารแสดง
+// ราคาที่แสดงบนหน้าร้าน: 0 = "ฟรี"
+const priceLabel = (p) => (p.price === 0 ? 'ฟรี' : baht(p.price));
 const bahtExact = (satang) => `฿${(satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const thDate = (ms) => new Date(ms).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' });
 const thTime = (ms) => new Date(ms).toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' }) + ' น.';
@@ -181,17 +183,18 @@ function card(p, i, owned) {
   const search = [p.title, p.subtitle, p.description, ...tags].join(' ').toLowerCase();
   return `
     <article class="card reveal" data-card data-cat="${esc(p.category || '')}" data-price="${esc(p.price)}" data-order="${i}" data-search="${esc(search)}">
-      <a class="card-link" href="/p/${esc(p.slug)}" aria-label="${esc(p.title)} ${baht(p.price)}">
+      <a class="card-link" href="/p/${esc(p.slug)}" aria-label="${esc(p.title)} ${priceLabel(p)}">
         <div class="thumb" data-hover-play>
           <img src="/previews/${esc(p.slug)}_horizontal.jpg" alt="" loading="lazy" width="960" height="540">
           <video data-src="/previews/${esc(p.slug)}_horizontal.mp4" muted loop playsinline preload="none"></video>
           <span class="play-hint">${ICON.play} ชี้เพื่อดูตัวอย่าง</span>
+          ${p.free ? '<span class="badge-free">ฟรี</span>' : p.premium ? '<span class="badge-premium">✦ พรีเมียม</span>' : ''}
           ${owned && owned.has(p.slug) ? '<span class="dur owned">อยู่ในคลังแล้ว</span>' : `<span class="dur">${ICON.stretch} ยืดได้</span>`}
         </div>
         <div class="card-body">
           <div class="card-top">
             <h3>${esc(p.title)}</h3>
-            <span class="price">${baht(p.price)}</span>
+            <span class="price${p.free ? ' free' : ''}">${priceLabel(p)}</span>
           </div>
           <p class="muted small">${esc(p.subtitle || '')}</p>
           <ul class="chips mini">${tags.slice(0, 3).map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
@@ -201,12 +204,15 @@ function card(p, i, owned) {
 }
 
 // ไทม์ไลน์ตัวอย่าง: ส่วนเข้า | ภาพนิ่ง (ยืดได้) | ส่วนออก
-function kitTimeline({ big = false } = {}) {
+function kitTimeline({ big = false, p = null } = {}) {
+  const tm = p && p.manifest && p.manifest.timing;
+  const inSec = tm && tm.settle ? tm.settle : 0.5;
+  const outSec = tm && tm.fadeStart ? Math.round((p.manifest.duration - tm.fadeStart) * 10) / 10 : 0.5;
   return `<div class="timeline${big ? ' big' : ''}" aria-hidden="true">
     <div class="tl-track">
-      <span class="tl-clip in"><b>เด้งเข้า</b><small>0.5 วิ</small></span>
+      <span class="tl-clip in"><b>${p && p.premium ? 'ท่าเข้า' : 'เด้งเข้า'}</b><small>${inSec} วิ</small></span>
       <span class="tl-clip hold"><b>ข้อความค้าง</b><small>นานเท่าที่เลือก 3–30 วิ</small><i class="tl-handle"></i></span>
-      <span class="tl-clip out"><b>จางออก</b><small>0.5 วิ</small></span>
+      <span class="tl-clip out"><b>${p && p.premium ? 'ท่าออก' : 'จางออก'}</b><small>${outSec} วิ</small></span>
     </div>
     <div class="tl-track ghost"><span class="tl-clip base">คลิปของคุณ</span></div>
   </div>`;
@@ -242,7 +248,7 @@ function home({ cfg, user, csrf, products, owned = new Set() }) {
       <li><b>${products.length}</b><span>แอนิเมชัน</span></li>
       <li><b>2</b><span>ขนาด แนวตั้ง/แนวนอน</span></li>
       <li><b>${editorNames.length}+</b><span>โปรแกรมตัดต่อ</span></li>
-      <li><b>${baht(minPrice)}</b><span>ราคาเริ่มต้น</span></li>
+      ${minPrice === 0 ? '<li><b>ฟรี</b><span>มีแบบให้ลองใช้</span></li>' : `<li><b>${baht(minPrice)}</b><span>ราคาเริ่มต้น</span></li>`}
     </ul>
   </div>
   ${lead ? `<a class="hero-visual" href="/p/${esc(lead.slug)}" aria-label="ดูตัวอย่าง ${esc(lead.title)}" data-tilt>
@@ -382,8 +388,8 @@ function product({ cfg, user, csrf, p, owned }) {
 
     <section class="panel kit-panel">
       <h2>${ICON.stretch} ปรับแต่งเองได้หลังซื้อ</h2>
-      <p class="muted">นอกจากคลิปเต็ม ${esc(p.manifest.duration)} วินาที ยังเปลี่ยนข้อความ ฟอนต์ สี แนว และความยาว (สูงสุด 30 วินาที) ได้เอง ได้เป็นไฟล์เดียวที่ตรงกับโปรแกรมที่ใช้</p>
-      ${kitTimeline()}
+      <p class="muted">นอกจากคลิปเต็ม ${esc(p.manifest.duration)} วินาที ยังเปลี่ยนข้อความ ฟอนต์ สี แนว และความยาว (สูงสุด 30 วินาที) ได้เอง ได้เป็นไฟล์เดียวที่ตรงกับโปรแกรมที่ใช้${p.premium ? ' ช่วงค้างมีลูกเล่นวนต่อเนื่องเนียนตลอดความยาวที่เลือก' : ''}</p>
+      ${kitTimeline({ p })}
     </section>
 
     <section class="panel license-panel">
@@ -408,31 +414,31 @@ function product({ cfg, user, csrf, p, owned }) {
       <p class="eyebrow">${esc(p.category || 'แอนิเมชันข้อความ')}</p>
       <h1>${esc(p.title)}</h1>
       <p class="muted">${esc(p.subtitle || '')}</p>
-      <p class="price big">${baht(p.price)} <span class="price-note">จ่ายครั้งเดียว ใช้ได้ตลอด</span></p>
+      <p class="price big${p.free ? ' free' : ''}">${priceLabel(p)} <span class="price-note">${p.free ? 'ไม่ต้องจ่าย ใช้ได้ตลอด' : 'จ่ายครั้งเดียว ใช้ได้ตลอด'}</span></p>
       ${owned ? `
       <div class="owned-box">${ICON.check}<span>คุณมีแอนิเมชันนี้ในคลังแล้ว</span></div>
       <a class="btn primary block" href="/library/${esc(owned.id)}">เปิดใช้จากคลัง</a>` : user ? `
       <form method="post" action="/checkout" data-checkout>
         <input type="hidden" name="product" value="${esc(p.slug)}">
         <input type="hidden" name="csrf" value="${esc(csrf)}">
-        <button class="btn primary block" type="submit"><span>ซื้อเลย ${baht(p.price)}</span></button>
+        <button class="btn primary block" type="submit"><span>${p.free ? 'รับฟรีเข้าคลัง' : `ซื้อเลย ${baht(p.price)}`}</span></button>
       </form>
-      <p class="muted small center">ไฟล์จะเข้าไปอยู่ในคลังของ ${esc(user.email)}<br>การกดซื้อถือว่ายอมรับ <a href="/terms">เงื่อนไขการใช้งาน</a> และ <a href="/refund">นโยบายคืนเงิน</a></p>` : `
-      <a class="btn primary block" href="/login?next=${encodeURIComponent('/p/' + p.slug)}">เข้าสู่ระบบเพื่อซื้อ</a>
+      <p class="muted small center">ไฟล์จะเข้าไปอยู่ในคลังของ ${esc(user.email)}<br>${p.free ? 'การกดรับ' : 'การกดซื้อ'}ถือว่ายอมรับ <a href="/terms">เงื่อนไขการใช้งาน</a>${p.free ? '' : ` และ <a href="/refund">นโยบายคืนเงิน</a>`}</p>` : `
+      <a class="btn primary block" href="/login?next=${encodeURIComponent('/p/' + p.slug)}">${p.free ? 'เข้าสู่ระบบเพื่อรับฟรี' : 'เข้าสู่ระบบเพื่อซื้อ'}</a>
       <p class="muted small center">ยังไม่มีบัญชี? <a href="/signup?next=${encodeURIComponent('/p/' + p.slug)}">สมัครสมาชิกฟรี</a> ใช้เวลาไม่ถึงนาที</p>`}
       <ul class="assure">
-        <li>${ICON.bolt} ${manualPay ? 'สแกนจ่ายด้วย PromptPay ได้ไฟล์เมื่อร้านยืนยันยอด' : 'ได้ไฟล์ทันทีหลังชำระเงิน'}</li>
-        <li>${ICON.infinity} ซื้อครั้งเดียว อยู่ในคลังตลอดไป</li>
+        <li>${ICON.bolt} ${p.free ? 'กดรับแล้วเข้าคลังทันที ไม่ต้องจ่ายเงิน' : manualPay ? 'สแกนจ่ายด้วย PromptPay ได้ไฟล์เมื่อร้านยืนยันยอด' : 'ได้ไฟล์ทันทีหลังชำระเงิน'}</li>
+        <li>${ICON.infinity} ${p.free ? 'รับครั้งเดียว' : 'ซื้อครั้งเดียว'} อยู่ในคลังตลอดไป</li>
         <li>${ICON.film} เลือกโปรแกรมตัดต่อตอนใช้งาน เปลี่ยนได้ตลอด</li>
-        <li>${ICON.edit} ปรับแต่งข้อความ ฟอนต์ และสีเองได้หลังซื้อ</li>
+        <li>${ICON.edit} ปรับแต่งข้อความ ฟอนต์ และสีเองได้${p.free ? 'หลังรับ' : 'หลังซื้อ'}</li>
         <li>${ICON.check} ใช้ในงานลูกค้าและโฆษณาได้</li>
       </ul>
     </section>
   </aside>
 </div>
 <div class="buy-bar" data-buy-bar>
-  <div><b>${esc(p.title)}</b><span class="price">${baht(p.price)}</span></div>
-  <a class="btn primary" href="#buy">${owned ? 'เปิดในคลัง' : 'ซื้อเลย'}</a>
+  <div><b>${esc(p.title)}</b><span class="price${p.free ? ' free' : ''}">${priceLabel(p)}</span></div>
+  <a class="btn primary" href="#buy">${owned ? 'เปิดในคลัง' : p.free ? 'รับฟรี' : 'ซื้อเลย'}</a>
 </div>`,
   });
 }
@@ -763,7 +769,7 @@ function library({ cfg, user, csrf, items, open = [], customs = [], fonts, limit
       <a href="/library/${esc(order.id)}" class="lib-thumb"><img src="/previews/${esc(p.slug)}_horizontal.jpg" alt="" loading="lazy" width="960" height="540"></a>
       <div class="lib-body">
         <h3>${esc(p.title)}</h3>
-        <p class="muted small">ซื้อเมื่อ ${esc(thDate(order.paid_at || order.created_at))} · รหัส ${esc(order.id.slice(0, 8))}</p>
+        <p class="muted small">${order.provider === 'free' ? 'รับฟรีเมื่อ' : 'ซื้อเมื่อ'} ${esc(thDate(order.paid_at || order.created_at))} · รหัส ${esc(order.id.slice(0, 8))}</p>
         <div class="lib-actions">
           <a class="btn primary" href="/library/${esc(order.id)}/customize">${ICON.edit} ปรับแต่งแล้วโหลด</a>
           <a class="btn" href="/library/${esc(order.id)}">${ICON.download} แบบต้นฉบับ</a>
@@ -792,7 +798,7 @@ ${customs.length ? `<section class="lib-versions"><div class="section-head"><div
   });
 }
 
-function libraryItem({ cfg, user, csrf, order, p, editorId, left, size = 'vertical' }) {
+function libraryItem({ cfg, user, csrf, order, p, editorId, left, size = 'vertical', claimed = false }) {
   const { editors } = cfg.editorsConfig;
   const ed = editors[editorId];
   const q = (patch) => {
@@ -811,12 +817,13 @@ function libraryItem({ cfg, user, csrf, order, p, editorId, left, size = 'vertic
     title: `${p.title} · คลังของฉัน`, shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-library',
     body: `
 <nav class="crumb" aria-label="ตำแหน่งหน้า"><a href="/library">คลังของฉัน</a><span>/</span><span aria-current="page">${esc(p.title)}</span></nav>
+${claimed && order.provider === 'free' ? `<p class="claimed-bar" role="status">${ICON.check}<span><b>ได้รับแล้ว ฟรี!</b> "${esc(p.title)}" อยู่ในคลังของคุณ โหลดหรือปรับแต่งได้เลย</span></p>` : ''}
 <div class="lib-item-head">
   <img src="/previews/${esc(p.slug)}_horizontal.jpg" alt="" width="960" height="540">
   <div>
     <p class="eyebrow">อยู่ในคลังของคุณ · ใช้ได้ตลอด</p>
     <h1>${esc(p.title)}</h1>
-    <p class="muted small">ซื้อเมื่อ ${esc(thDate(order.paid_at || order.created_at))} · รหัส ${esc(order.id.slice(0, 8))}</p>
+    <p class="muted small">${order.provider === 'free' ? 'รับฟรีเมื่อ' : 'ซื้อเมื่อ'} ${esc(thDate(order.paid_at || order.created_at))} · รหัส ${esc(order.id.slice(0, 8))}</p>
   </div>
 </div>
 <a class="cz-cta" href="/library/${esc(order.id)}/customize">
@@ -907,7 +914,7 @@ function customize({ cfg, user, csrf, order, p, editorId, versions, limits, tool
 <nav class="crumb" aria-label="ตำแหน่งหน้า"><a href="/library">คลังของฉัน</a><span>/</span><a href="/library/${esc(order.id)}">${esc(p.title)}</a><span>/</span><span aria-current="page">ปรับแต่ง</span></nav>
 <div class="cz-head">
   <div><p class="eyebrow">ปรับแต่งเป็นของคุณเอง</p><h1>${esc(p.title)}</h1></div>
-  <p class="muted small">ท่าเคลื่อนไหวเดิม · เปลี่ยนข้อความ ฟอนต์ สี ได้ตามใจ</p>
+  <p class="muted small">ท่าเคลื่อนไหวเดิม · เปลี่ยนข้อความ ฟอนต์ สี ได้ตามใจ${p.motion === 'neon' ? ' · สีตัวอักษร = สีไฟ, สีขอบ = แสงฟุ้งรอบนอก, ความหนาขอบ = ความแรงของแสง' : ''}</p>
 </div>
 ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ''}
 <div class="cz">

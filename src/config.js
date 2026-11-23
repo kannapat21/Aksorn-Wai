@@ -8,6 +8,9 @@ const path = require('path');
 const crypto = require('crypto');
 
 const ROOT = path.resolve(__dirname, '..');
+// ท่าเคลื่อนไหวชุดเดียวกับที่เบราว์เซอร์ใช้ (public/motion.js ลงทะเบียนเป็น globalThis.TTMotion)
+require('../public/motion.js');
+const MOTIONS = globalThis.TTMotion.MOTIONS;
 
 function ensureEnvFile() {
   const envPath = path.join(ROOT, '.env');
@@ -152,8 +155,13 @@ function loadConfig(overrides = {}) {
     const mf = path.join(cfg.storageDir, p.slug, 'manifest.json');
     if (!fs.existsSync(mf)) throw new Error(`สินค้า ${p.slug} ยังไม่มีไฟล์ (รัน npm run render -- --text "..." --slug ${p.slug})`);
     p.manifest = JSON.parse(fs.readFileSync(mf, 'utf8'));
-    p.motion = p.motion || p.manifest.motion || 'pop'; // ท่าเคลื่อนไหว (pop | drop) ใช้ทั้งพรีวิวสดและไฟล์จริง
-    if (!['pop', 'drop'].includes(p.motion)) throw new Error(`สินค้า ${p.slug}: motion ต้องเป็น pop หรือ drop`);
+    p.motion = p.motion || p.manifest.motion || 'pop'; // ท่าเคลื่อนไหว ใช้ทั้งพรีวิวสดและไฟล์จริง (ดู public/motion.js)
+    if (!MOTIONS.includes(p.motion)) throw new Error(`สินค้า ${p.slug}: motion ต้องเป็น ${MOTIONS.join(' / ')}`);
+    // ราคาเป็นสตางค์ · 0 = ของฟรี (กดรับแล้วเข้าคลังทันที ไม่ผ่านหน้าจ่ายเงิน)
+    if (!Number.isInteger(p.price) || p.price < 0) throw new Error(`สินค้า ${p.slug}: price ต้องเป็นจำนวนเต็ม (สตางค์) ตั้งแต่ 0 ขึ้นไป`);
+    if (p.price > 0 && p.price < 2000) throw new Error(`สินค้า ${p.slug}: ราคาต่ำสุด ฿20 (หรือ 0 = ฟรี)`);
+    p.free = p.price === 0;
+    p.premium = globalThis.TTMotion.meta(p.motion).premium;
   }
   for (const [id, ed] of Object.entries(cfg.editorsConfig.editors)) {
     for (const f of ed.formats) {
