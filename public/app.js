@@ -407,9 +407,74 @@
     setTimeout(tick, 1500);
   }
 
-  // ---------- ฟอร์มที่ต้องถามก่อนส่ง (เช่น อนุมัติการโอน) ----------
+  // ---------- กล่องถามยืนยันของร้านเอง (แทนป๊อปอัปยืนยันของเบราว์เซอร์) ----------
+  // AW.confirm({ title, text, ok, cancel, danger }) → Promise<boolean>
+  var AW = window.AW = window.AW || {};
+  AW.confirm = function (o) {
+    o = o || {};
+    return new Promise(function (resolve) {
+      var prevFocus = document.activeElement;
+      var wrap = document.createElement('div');
+      wrap.className = 'aw-modal';
+      wrap.innerHTML = '<div class="aw-modal-bg" data-close></div>' +
+        '<div class="aw-modal-card" role="alertdialog" aria-modal="true" aria-labelledby="aw-m-t" aria-describedby="aw-m-d">' +
+        '<div class="aw-modal-icon' + (o.danger ? ' danger' : '') + '" aria-hidden="true">' + (o.danger
+          ? '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>'
+          : '<svg viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg>') + '</div>' +
+        '<h2 id="aw-m-t"></h2><p id="aw-m-d"></p>' +
+        '<div class="aw-modal-actions"><button type="button" class="btn lg" data-close></button>' +
+        '<button type="button" class="btn lg ' + (o.danger ? 'danger' : 'primary') + '" data-ok></button></div></div>';
+      wrap.querySelector('h2').textContent = o.title || 'ยืนยันใช่ไหม?';
+      var d = wrap.querySelector('#aw-m-d');
+      if (o.text) d.textContent = o.text; else d.remove();
+      var okBtn = wrap.querySelector('[data-ok]');
+      okBtn.textContent = o.ok || 'ยืนยัน';
+      wrap.querySelector('button[data-close]').textContent = o.cancel || 'ยกเลิก';
+      document.body.appendChild(wrap);
+      root.classList.add('aw-modal-open');
+      requestAnimationFrame(function () { wrap.classList.add('show'); });
+      okBtn.focus();
+      var done = function (val) {
+        document.removeEventListener('keydown', onKey, true);
+        wrap.classList.remove('show'); wrap.classList.add('hide');
+        root.classList.remove('aw-modal-open');
+        setTimeout(function () { wrap.remove(); }, reduceMotion ? 0 : 220);
+        if (prevFocus && prevFocus.focus) { try { prevFocus.focus({ preventScroll: true }); } catch (e) { /* ข้าม */ } }
+        resolve(val);
+      };
+      var onKey = function (e) {
+        if (e.key === 'Escape') { e.preventDefault(); done(false); }
+        else if (e.key === 'Tab') { // วนโฟกัสอยู่ในกล่อง
+          var f = wrap.querySelectorAll('button'), first = f[0], last = f[f.length - 1];
+          if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+          else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+      };
+      document.addEventListener('keydown', onKey, true);
+      wrap.addEventListener('click', function (e) {
+        if (e.target.closest('[data-ok]')) done(true);
+        else if (e.target.closest('[data-close]')) done(false);
+      });
+    });
+  };
+
+  // ---------- ฟอร์มที่ต้องถามก่อนส่ง (เช่น แจ้งโอน อนุมัติการโอน ลบ) ----------
   document.querySelectorAll('form[data-confirm]').forEach(function (f) {
-    f.addEventListener('submit', function (e) { if (!window.confirm(f.getAttribute('data-confirm'))) e.preventDefault(); });
+    f.addEventListener('submit', function (e) {
+      if (f.getAttribute('data-confirmed') === '1') { f.removeAttribute('data-confirmed'); return; }
+      e.preventDefault();
+      var btn = e.submitter || f.querySelector('button[type=submit]');
+      AW.confirm({
+        title: f.getAttribute('data-confirm-title') || f.getAttribute('data-confirm'),
+        text: f.getAttribute('data-confirm-title') ? f.getAttribute('data-confirm') : '',
+        ok: f.getAttribute('data-confirm-ok'), cancel: f.getAttribute('data-confirm-cancel'),
+        danger: f.hasAttribute('data-confirm-danger'),
+      }).then(function (yes) {
+        if (!yes) return;
+        f.setAttribute('data-confirmed', '1');
+        if (f.requestSubmit) f.requestSubmit(btn && btn.form === f ? btn : undefined); else f.submit();
+      });
+    });
   });
 
   // ---------- ฉลองสำเร็จ: กระดาษสีเบาๆ (แจ้งโอนเสร็จ / ชำระเงินสำเร็จ) ----------

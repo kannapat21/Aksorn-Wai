@@ -1398,7 +1398,7 @@ test('manual: ลูกค้ากดยืนยันโอน → รอต�
     assert.equal(mctx.db.prepare("SELECT COUNT(*) n FROM orders WHERE user_id = ?").get(o1.user_id).n, 1);
     // หน้าชำระเงินมีแค่ QR + ปุ่มยืนยัน ไม่มีช่องให้กรอก/ติ๊ก (ถามยืนยันด้วยกล่องเด้งก่อนส่ง)
     assert.ok(!/name="transfer_time"/.test(page) && !/name="sure"/.test(page), 'ไม่มีช่องเวลา/ช่องติ๊ก');
-    assert.match(page, /data-confirm="โอนเงินยอด/);
+    assert.match(page, /data-confirm-title="โอนเงินแล้วใช่ไหม\?"/);
 
     // ยอดโอนของสองบัญชีไม่ซ้ำกัน
     const co2 = await bob.post('/checkout', { product: 'order-now' });
@@ -1620,4 +1620,12 @@ test('BASE_URL เป็น https แต่เปิดผ่าน http://local
     assert.ok(sid && !/;\s*Secure/i.test(sid));
     assert.equal((await fetch(`${hb}/library`, { redirect: 'manual', headers: { cookie: sid.split(';')[0] } })).status, 200);
   } finally { srv.close(); }
+});
+
+test('ไม่มีป๊อปอัปของเบราว์เซอร์ (confirm/alert/prompt) ในสคริปต์หน้าเว็บ ใช้กล่องของร้านแทน', () => {
+  for (const f of fs.readdirSync(path.join(__dirname, '..', 'public')).filter((x) => x.endsWith('.js'))) {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    assert.ok(!/(^|[^.\w])(window\.)?(confirm|alert|prompt)\s*\(/m.test(src), `${f} ยังเรียกป๊อปอัปของเบราว์เซอร์`);
+  }
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8'), /AW\.confirm = function/);
 });
