@@ -794,11 +794,9 @@ function createApp(cfg, opts = {}) {
       const order = transferOrder(req, res);
       if (!order) return;
       if (order.status === 'review' || order.status === 'paid') return res.redirect(303, `/order/${order.id}`);
-      if (req.body.sure !== '1') return res.redirect(303, `/pay/transfer/${order.id}?error=${encodeURIComponent('ติ๊กยืนยันว่าโอนเงินแล้วก่อน')}`);
+      // หน้าชำระเงินมีแค่ QR + ปุ่มยืนยัน (ไม่ต้องกรอกอะไร) · ร้านใช้ "เวลาที่กดยืนยัน" จับคู่กับรายการในแอปธนาคาร
       const tt = String(req.body.transfer_time || '');
       const time = /^([01]\d|2[0-3]):[0-5]\d$/.test(tt) ? tt : '';
-      // ยอดตรงราคา (ไม่มีเศษสตางค์) → ต้องบอกเวลาโอน ร้านจะได้แยกออเดอร์ยอดเท่ากันได้
-      if (!cfg.transfer.uniqueSatang && !time) return res.redirect(303, `/pay/transfer/${order.id}?error=${encodeURIComponent('กรอกเวลาที่โอนด้วย ร้านใช้จับคู่กับรายการในบัญชี')}`);
       const ok = db.transaction(() => {
         const r = q.confirmTransfer.run(now(), time, order.id, req.user.id, cfg.transfer.maxConfirms);
         if (r.changes !== 1) return false;

@@ -6,6 +6,7 @@ const baht = (satang) => `฿${(satang / 100).toLocaleString('th-TH', { minimumF
 // ยอดโอนต้องมีทศนิยม 2 ตำแหน่งเสมอ (49.50 ไม่ใช่ 49.5) ให้ตรงกับที่แอปธนาคารแสดง
 const bahtExact = (satang) => `฿${(satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const thDate = (ms) => new Date(ms).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' });
+const thTime = (ms) => new Date(ms).toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' }) + ' น.';
 const fmtBytes = (n) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.ceil(n / 1e3)} KB`);
 
 // เปลี่ยนทุกครั้งที่รีสตาร์ต เพื่อให้เบราว์เซอร์โหลด CSS/JS ใหม่หลังอัปเดต
@@ -514,7 +515,7 @@ function transferPay({ cfg, user, csrf, order, p, expiresAt, error }) {
   return layout({
     title: 'โอนเงิน', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-pay', intro: false,
     body: `
-<div class="narrow pay transfer">
+<div class="narrow pay transfer" data-order="${esc(order.id)}">
   <h1>โอนเงินเพื่อรับสินค้า</h1>
   ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ''}
   ${rejected ? `<div class="note warn"><span><b>ร้านยังไม่พบรายการโอนนี้</b><br>${esc(order.review_note || '')}<br><span class="small">ตรวจยอดและบัญชีผู้รับอีกครั้ง ถ้าโอนแล้วจริงกด "ยืนยันการโอนเงิน" ใหม่ด้านล่างได้</span></span></div>` : ''}
@@ -526,12 +527,12 @@ function transferPay({ cfg, user, csrf, order, p, expiresAt, error }) {
     <button type="button" class="btn small" data-copy="${esc((order.transfer_amount / 100).toFixed(2))}">คัดลอกยอด</button>
     ${T.uniqueSatang
     ? `<p class="muted small">เศษสตางค์ <b>.${esc(satang)}</b> ใช้ให้ร้านจับคู่กับออเดอร์ของคุณ ถ้าโอนไม่ตรงยอด ร้านจะหารายการไม่เจอและอนุมัติไม่ได้</p>`
-    : '<p class="muted small">โอนตามยอดนี้เป๊ะ แล้วกรอก "เวลาที่โอน" ด้านล่าง ร้านจะใช้ยอด เวลา และรหัสอ้างอิงจับคู่กับรายการในบัญชี</p>'}
+    : '<p class="muted small">โอนตามยอดนี้เป๊ะ แล้วกด "ยืนยันการโอนเงิน" ด้านล่างทันทีหลังโอนเสร็จ</p>'}
   </section>
 
   ${T.promptpayId ? `<section class="box xfer-qr">
     <h2>สแกนจ่ายด้วย PromptPay</h2>
-    <img class="qr-img" src="/pay/transfer/${esc(order.id)}/qr" alt="QR PromptPay ยอด ${esc(amt)}" width="280" height="280">
+    <div class="qr-frame"><img class="qr-img" src="/pay/transfer/${esc(order.id)}/qr" alt="QR PromptPay ยอด ${esc(amt)}" width="280" height="280"><i class="qr-scan" aria-hidden="true"></i></div>
     <p class="muted small">เปิดแอปธนาคาร สแกน QR นี้ ยอด ${esc(amt)} จะถูกใส่ให้อัตโนมัติ${T.promptpayName ? `<br>ชื่อผู้รับ: <b>${esc(T.promptpayName)}</b>` : ''}</p>
   </section>` : ''}
 
@@ -550,11 +551,9 @@ function transferPay({ cfg, user, csrf, order, p, expiresAt, error }) {
     <p class="muted small">ถ้าแอปธนาคารมีช่อง "บันทึกช่วยจำ" ใส่รหัสนี้ลงไปด้วย ช่วยให้ร้านจับคู่ได้ง่ายขึ้น (ไม่บังคับ) · ออเดอร์นี้เก็บไว้ให้ถึง ${esc(thDate(expiresAt))}</p>
   </section>
 
-  <form class="box xfer-confirm" method="post" action="/pay/transfer/${esc(order.id)}/confirm">
+  <form class="box xfer-confirm" method="post" action="/pay/transfer/${esc(order.id)}/confirm" data-confirm="โอนเงินยอด ${esc(amt)} เรียบร้อยแล้วใช่ไหม?">
     <input type="hidden" name="csrf" value="${esc(csrf)}">
     <h2>โอนแล้วใช่ไหม</h2>
-    <label class="field">โอนเมื่อเวลา <span class="muted small">${T.uniqueSatang ? '(ไม่บังคับ ช่วยให้ร้านหารายการเจอเร็วขึ้น)' : '(ต้องกรอก ร้านใช้แยกคนที่โอนยอดเท่ากัน)'}</span><input type="time" name="transfer_time"${T.uniqueSatang ? '' : ' required'}></label>
-    <label class="check"><input type="checkbox" name="sure" value="1" required> ฉันโอนเงินยอด <b>${esc(amt)}</b> แล้ว</label>
     <button class="btn primary block lg" type="submit">ยืนยันการโอนเงิน</button>
     <p class="muted small center">กดแล้วระบบจะแจ้งร้านให้ตรวจสอบ สินค้าจะเข้าคลังเมื่อร้านอนุมัติ (ไม่ได้เข้าทันที)</p>
   </form>
@@ -580,13 +579,13 @@ function adminTransfers({ cfg, user, csrf, waiting, recent, audit, done, problem
       <div><dt>สินค้า</dt><dd>${esc(productTitle(o.product_slug))} (ราคา ${esc(baht(o.amount))})</dd></div>
       <div><dt>ลูกค้า</dt><dd>${esc(o.user_email || o.email)}</dd></div>
       <div><dt>กดยืนยันโอนเมื่อ</dt><dd>${esc(thDate(o.confirmed_at))}${o.confirm_count > 1 ? ` · ครั้งที่ ${esc(o.confirm_count)}` : ''}</dd></div>
-      <div><dt>ลูกค้าบอกว่าโอนเวลา</dt><dd>${o.transfer_time ? esc(o.transfer_time) + ' น.' : '<span class="muted">ไม่ได้ระบุ</span>'}</dd></div>
+      ${o.transfer_time ? `<div><dt>ลูกค้าบอกว่าโอนเวลา</dt><dd>${esc(o.transfer_time)} น.</dd></div>` : ''}
       <div><dt>สร้างออเดอร์</dt><dd>${esc(thDate(o.created_at))}</dd></div>
     </dl>
-    ${o.same && o.same.length ? `<div class="note warn same-amount"><span><b>ระวัง: มีออเดอร์ยอดเท่ากันอีก ${o.same.length} รายการ</b> ตรวจเวลาที่เงินเข้าให้ตรงกับ "${esc(o.transfer_time ? o.transfer_time + ' น.' : 'เวลาที่กดยืนยัน')}" ของรายการนี้
-      <ul>${o.same.map((x) => `<li>${esc(x.user_email || '-')} · <code>${esc(x.pay_ref)}</code> · ${x.status === 'review' ? `รอตรวจ แจ้งโอน ${x.transfer_time ? esc(x.transfer_time) + ' น.' : 'ไม่ระบุเวลา'} (กดยืนยัน ${esc(thDate(x.confirmed_at))})` : 'ยังไม่แจ้งโอน'}</li>`).join('')}</ul></span></div>` : ''}
+    ${o.same && o.same.length ? `<div class="note warn same-amount"><span><b>ระวัง: มีออเดอร์ยอดเท่ากันอีก ${o.same.length} รายการ</b> ดูเวลาที่เงินเข้าในแอปธนาคาร เทียบกับเวลาที่ลูกค้ากดยืนยัน (${esc(o.transfer_time ? o.transfer_time + ' น.' : thTime(o.confirmed_at))}) ของรายการนี้ เงินที่เข้าก่อนให้อนุมัติออเดอร์ที่กดยืนยันก่อน
+      <ul>${o.same.map((x) => `<li>${esc(x.user_email || '-')} · <code>${esc(x.pay_ref)}</code> · ${x.status === 'review' ? `รอตรวจ กดยืนยัน ${esc(thDate(x.confirmed_at))}` : 'ยังไม่แจ้งโอน'}</li>`).join('')}</ul></span></div>` : ''}
     <div class="review-actions">
-      <form method="post" action="/admin/transfers/${esc(o.id)}/approve" data-confirm="เห็นยอด ${esc(bahtExact(o.transfer_amount))} เข้าบัญชีแล้วใช่ไหม?${o.same && o.same.length ? ` (มีออเดอร์ยอดเท่ากันอีก ${o.same.length} รายการ ตรวจเวลาให้ตรงกับของรายการนี้)` : ''} อนุมัติแล้วสินค้าเข้าคลังลูกค้าทันที">
+      <form method="post" action="/admin/transfers/${esc(o.id)}/approve" data-confirm="เห็นยอด ${esc(bahtExact(o.transfer_amount))} เข้าบัญชีแล้วใช่ไหม?${o.same && o.same.length ? ` (มีออเดอร์ยอดเท่ากันอีก ${o.same.length} รายการ เทียบเวลาให้ตรงกับรายการนี้)` : ''} อนุมัติแล้วสินค้าเข้าคลังลูกค้าทันที">
         <input type="hidden" name="csrf" value="${esc(csrf)}">
         <button class="btn primary lg" type="submit">อนุมัติ</button>
       </form>
@@ -651,7 +650,7 @@ function adminTransferEmail({ cfg, order, p }) {
 ยอดที่ต้องเจอในแอปธนาคาร: ${bahtExact(order.transfer_amount)}
 รหัสอ้างอิง: ${order.pay_ref}
 ลูกค้า: ${order.email}
-ลูกค้าบอกว่าโอนเวลา: ${order.transfer_time || 'ไม่ได้ระบุ'}
+ลูกค้ากดยืนยันโอนเมื่อ: ${thDate(order.confirmed_at || Date.now())}
 
 ตรวจและอนุมัติที่: ${cfg.baseUrl}/admin/transfers`;
 }
@@ -668,7 +667,7 @@ ${order.status === 'refunded' ? `<p><a class="btn" href="/p/${esc(p.slug)}">ไ�
 <p class="muted small">รหัสคำสั่งซื้อ ${esc(order.id.slice(0, 8))}</p>
 </div>` : paid ? `
 <div class="success narrow">
-  <div class="success-mark" aria-hidden="true">${ICON.check}</div>
+  <div class="success-mark" data-celebrate="always" aria-hidden="true">${ICON.check}</div>
   <h1>ชำระเงินสำเร็จ</h1>
   <p>ขอบคุณที่สั่งซื้อ <b>${esc(p.title)}</b> แอนิเมชันนี้อยู่ในคลังของคุณแล้ว</p>
   <p><a class="btn primary lg" href="/library/${esc(order.id)}">${ICON.library} เปิดใช้จากคลัง</a></p>
@@ -701,8 +700,9 @@ function manualStatusBody({ order, p }) {
 <p><a class="btn primary lg" href="/pay/transfer/${esc(order.id)}">ไปหน้าโอนเงิน</a></p></div>`;
   return `
 <div class="narrow transfer-wait">
-  <div class="spinner" data-poll="/order/${esc(order.id)}/status" data-poll-status="review" aria-hidden="true"></div>
-  <h1>ได้รับแจ้งโอนแล้ว รอร้านตรวจสอบ</h1>
+  <div class="sent-mark" data-celebrate="once" data-order="${esc(order.id)}" aria-hidden="true"><svg viewBox="0 0 52 52"><circle class="sent-ring" cx="26" cy="26" r="23"/><path class="sent-tick" d="M15 27l7 7 15-16"/></svg></div>
+  <h1>แจ้งโอนสำเร็จ!</h1>
+  <p class="live-wait" data-poll="/order/${esc(order.id)}/status" data-poll-status="review"><i aria-hidden="true"></i> รอร้านตรวจสอบ · หน้านี้อัปเดตเอง</p>
   <p>ร้านจะดูรายการโอนยอด <b>${esc(amt)}</b> ในบัญชี แล้วอนุมัติให้ หน้านี้จะเปลี่ยนเองเมื่ออนุมัติ ปิดหน้านี้ได้ เราจะส่งอีเมลแจ้ง</p>
   <ol class="steps-line">
     <li class="done">แจ้งโอนแล้ว</li><li class="now">ร้านกำลังตรวจสอบ</li><li>สินค้าเข้าคลัง</li>

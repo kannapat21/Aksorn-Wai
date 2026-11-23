@@ -1,6 +1,18 @@
-// หน้าโอนเงิน: ปุ่มคัดลอกยอด/เลขบัญชี
+// หน้าโอนเงิน: ปุ่มคัดลอกยอด/เลขบัญชี · กดยืนยันแล้วจำไว้ให้หน้าถัดไปเล่นแอนิเมชันสำเร็จ
 (function () {
   'use strict';
+  var wrap = document.querySelector('.transfer[data-order]');
+  var form = document.querySelector('.xfer-confirm');
+  if (wrap && form) {
+    form.addEventListener('submit', function (e) {
+      // รอให้กล่องถามยืนยันทำงานก่อน ถ้ากดยกเลิกไม่ต้องทำอะไร
+      setTimeout(function () {
+        if (e.defaultPrevented) return;
+        form.classList.add('sending');
+        try { sessionStorage.setItem('justConfirmed', wrap.getAttribute('data-order')); } catch (err) { /* ข้าม */ }
+      }, 0);
+    });
+  }
   document.querySelectorAll('[data-copy]').forEach(function (b) {
     var label = b.textContent;
     b.addEventListener('click', function () {

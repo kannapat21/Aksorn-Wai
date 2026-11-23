@@ -1396,9 +1396,9 @@ test('manual: ลูกค้ากดยืนยันโอน → รอต�
     // สั่งซ้ำสินค้าเดิม = ใช้ออเดอร์เดิม (ค้างได้ 1 ออเดอร์ต่อสินค้าต่อบัญชี)
     assert.equal((await alice.post('/checkout', { product: 'order-now' })).headers.get('location'), `/pay/transfer/${id}`);
     assert.equal(mctx.db.prepare("SELECT COUNT(*) n FROM orders WHERE user_id = ?").get(o1.user_id).n, 1);
-    // ยังไม่โอน/ไม่ติ๊ก → กดยืนยันไม่ได้
-    assert.match((await alice.post(`/pay/transfer/${id}/confirm`, {})).headers.get('location'), /error=/);
-    assert.equal(ord(id).status, 'pending');
+    // หน้าชำระเงินมีแค่ QR + ปุ่มยืนยัน ไม่มีช่องให้กรอก/ติ๊ก (ถามยืนยันด้วยกล่องเด้งก่อนส่ง)
+    assert.ok(!/name="transfer_time"/.test(page) && !/name="sure"/.test(page), 'ไม่มีช่องเวลา/ช่องติ๊ก');
+    assert.match(page, /data-confirm="โอนเงินยอด/);
 
     // ยอดโอนของสองบัญชีไม่ซ้ำกัน
     const co2 = await bob.post('/checkout', { product: 'order-now' });
@@ -1407,10 +1407,10 @@ test('manual: ลูกค้ากดยืนยันโอน → รอต�
 
     // ลูกค้ากดยืนยันโอน → รอตรวจสอบ แต่ "ไม่ได้สินค้า"
     t += 60000;
-    const cf = await alice.post(`/pay/transfer/${id}/confirm`, { sure: '1', transfer_time: '14:35' });
+    const cf = await alice.post(`/pay/transfer/${id}/confirm`);
     assert.equal(cf.headers.get('location'), `/order/${id}`);
     const o1r = ord(id);
-    assert.equal(o1r.status, 'review'); assert.equal(o1r.transfer_time, '14:35'); assert.equal(o1r.paid_at, null);
+    assert.equal(o1r.status, 'review'); assert.ok(!o1r.transfer_time); assert.equal(o1r.paid_at, null);
     assert.equal((await alice.req(`/library/${id}`)).status, 404, 'ยังไม่อนุมัติ = ยังไม่มีในคลัง');
     assert.match(await (await alice.req(`/order/${id}`)).text(), /รอร้านตรวจสอบ/);
     // คลังแสดงคำสั่งซื้อที่ยังไม่เสร็จ พร้อมลิงก์กลับไปทำต่อ (ของใครของมัน)
@@ -1439,7 +1439,7 @@ test('manual: ลูกค้ากดยืนยันโอน → รอต�
 
     // แอดมินเห็นคิว: ยอด รหัส เวลา ลูกค้า
     const q1 = await (await boss.req('/admin/transfers')).text();
-    assert.ok(q1.includes(o1r.pay_ref) && q1.includes(`฿${(o1r.transfer_amount / 100).toFixed(2)}`) && q1.includes('alice@example.com') && q1.includes('14:35'));
+    assert.ok(q1.includes(o1r.pay_ref) && q1.includes(`฿${(o1r.transfer_amount / 100).toFixed(2)}`) && q1.includes('alice@example.com') && q1.includes('กดยืนยันโอนเมื่อ'));
     assert.ok(!q1.includes(o2.pay_ref), 'ออเดอร์ที่ยังไม่แจ้งโอนไม่อยู่ในคิว');
 
     // ปฏิเสธ (ต้องมีเหตุผล) → ลูกค้าเห็นเหตุผลและแจ้งใหม่ได้
@@ -1573,21 +1573,21 @@ test('manual (ค่าเริ่มต้น ไม่บวกสตาง�
     assert.equal(ord(ida).transfer_amount, 4900); assert.equal(ord(idb).transfer_amount, 4900);
     assert.notEqual(ord(ida).pay_ref, ord(idb).pay_ref);
     const page = await (await a.req(`/pay/transfer/${ida}`)).text();
-    assert.match(page, /฿49\.00/); assert.match(page, /เวลาที่โอน/); assert.match(page, /name="transfer_time" required/);
+    assert.match(page, /฿49\.00/); assert.ok(!/name="transfer_time"/.test(page), 'ไม่ต้องกรอกเวลาโอน');
     // QR ที่ลูกค้าสแกน: ถอดรหัสจากรูปแล้วยอดต้องเป็น 49.00
     const qr = await (await a.req(`/pay/transfer/${ida}/qr`)).text();
     assert.equal(tlvParse(decodeQrSvg(qr))['54'], '49.00');
-    // ไม่กรอกเวลา → แจ้งโอนไม่ได้
-    assert.match((await a.post(`/pay/transfer/${ida}/confirm`, { sure: '1' })).headers.get('location'), /error=/);
-    assert.equal(ord(ida).status, 'pending');
-    t += 60000; await a.post(`/pay/transfer/${ida}/confirm`, { sure: '1', transfer_time: '10:05' });
+    // กดปุ่มยืนยันอย่างเดียว (ไม่กรอกเวลา) → รอตรวจสอบ
+    t += 60000; assert.equal((await a.post(`/pay/transfer/${ida}/confirm`)).headers.get('location'), `/order/${ida}`);
+    assert.equal(ord(ida).status, 'review');
     // ระหว่างที่ b ยังไม่แจ้ง แอดมินเห็นเตือนว่ามีออเดอร์ยอดเท่ากันรออยู่
     let qpage = await (await boss.req('/admin/transfers')).text();
     assert.match(qpage, /มีออเดอร์ยอดเท่ากันอีก 1 รายการ/); assert.ok(qpage.includes('b@example.com') && qpage.includes('ยังไม่แจ้งโอน'));
-    t += 60000; await b.post(`/pay/transfer/${idb}/confirm`, { sure: '1', transfer_time: '10:07' });
+    t += 60000; await b.post(`/pay/transfer/${idb}/confirm`);
     qpage = await (await boss.req('/admin/transfers')).text();
     assert.equal((qpage.match(/<b>ระวัง: มีออเดอร์ยอดเท่ากันอีก 1 รายการ<\/b>/g) || []).length, 2, 'ทั้งสองใบเห็นเตือนซึ่งกันและกัน');
-    assert.ok(qpage.includes('10:05') && qpage.includes('10:07'));
+    assert.match(qpage, /เทียบกับเวลาที่ลูกค้ากดยืนยัน/); // แยกออเดอร์ยอดเท่ากันด้วยเวลาที่กดยืนยัน
+    assert.ok(qpage.indexOf(ord(ida).pay_ref) < qpage.indexOf(`<span class="xfer-code">${ord(idb).pay_ref}`), 'ใบที่กดยืนยันก่อนอยู่บนสุด');
     // อนุมัติทีละใบ ไม่ปนกัน
     await boss.post(`/admin/transfers/${ida}/approve`);
     assert.equal(ord(ida).status, 'paid'); assert.equal(ord(idb).status, 'review');

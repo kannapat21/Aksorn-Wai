@@ -412,6 +412,33 @@
     f.addEventListener('submit', function (e) { if (!window.confirm(f.getAttribute('data-confirm'))) e.preventDefault(); });
   });
 
+  // ---------- ฉลองสำเร็จ: กระดาษสีเบาๆ (แจ้งโอนเสร็จ / ชำระเงินสำเร็จ) ----------
+  var cel = document.querySelector('[data-celebrate]');
+  if (cel) {
+    var go = cel.getAttribute('data-celebrate') === 'always';
+    if (!go) { // "once": เล่นเฉพาะตอนเพิ่งกดยืนยันมา ไม่เล่นซ้ำตอนรีเฟรช
+      try { go = sessionStorage.getItem('justConfirmed') === cel.getAttribute('data-order'); sessionStorage.removeItem('justConfirmed'); } catch (e) { go = false; }
+    }
+    if (go) {
+      cel.classList.add('celebrate');
+      if (!root.classList.contains('calm')) {
+        var box = document.createElement('div');
+        box.className = 'confetti'; box.setAttribute('aria-hidden', 'true');
+        var colors = ['var(--brand)', 'var(--accent)', 'var(--ok)', '#ff8fab', '#7cc4ff'];
+        for (var ci = 0; ci < 26; ci++) {
+          var piece = document.createElement('i');
+          var ang = (Math.PI * 2 * ci) / 26 + Math.random() * 0.4;
+          var dist = 90 + Math.random() * 110;
+          piece.style.cssText = '--x:' + (Math.cos(ang) * dist).toFixed(0) + 'px;--y:' + (Math.sin(ang) * dist * 0.8 - 40).toFixed(0) + 'px;--r:' + (Math.random() * 540 - 270).toFixed(0) + 'deg;--d:' + (Math.random() * 0.15).toFixed(2) + 's;background:' + colors[ci % colors.length];
+          box.appendChild(piece);
+        }
+        cel.appendChild(box);
+        setTimeout(function () { box.remove(); }, 2200);
+        if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) { /* ข้าม */ } }
+      }
+    }
+  }
+
   // ---------- หน้าดาวน์โหลด: เปลี่ยนโปรแกรมแล้วโหลดหน้าใหม่ ----------
   document.querySelectorAll('[data-autosubmit]').forEach(function (el) {
     el.addEventListener('change', function () { el.form.submit(); });
