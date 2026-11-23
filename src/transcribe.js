@@ -44,19 +44,31 @@ function createTranscriber(cfg) {
   } catch { /* ข้าม */ }
 
   // ตรวจว่าติดตั้งตัวถอดเสียงแล้วหรือยัง (จำผล 1 นาทีถ้ายังไม่พร้อม เผื่อเพิ่งติดตั้ง)
+  let inflight = null;
   async function check() {
     if (S.engine === 'off') return { ok: false, reason: 'ปิดระบบซับอัตโนมัติอยู่ (SUBTITLE_ENGINE=off)' };
     if (checked && (checked.ok || Date.now() - checkedAt < 60 * 1000)) return checked;
-    checkedAt = Date.now();
-    try {
-      if (S.python.includes(path.sep) && !fs.existsSync(S.python)) throw new Error(`ไม่พบ ${S.python}`);
-      const r = await run(S.python, [SCRIPT, '--check', '--engine', S.engine], { timeoutMs: 60 * 1000, env });
-      const j = JSON.parse(r.out.trim().split('\n').pop());
-      checked = { ok: true, engine: j.engine };
-    } catch (e) {
-      checked = { ok: false, reason: 'ยังไม่ได้ติดตั้งตัวถอดเสียง (Whisper)', detail: String(e.message).slice(0, 300) };
-    }
-    return checked;
+    if (inflight) return inflight;
+    inflight = (async () => {
+      try {
+        if (S.python.includes(path.sep) && !fs.existsSync(S.python)) throw new Error(`ไม่พบ ${S.python}`);
+        // โหลด mlx/โมเดลครั้งแรกบนเครื่องที่เพิ่งตื่นอาจช้า จึงให้เวลา 3 นาที
+        const r = await run(S.python, [SCRIPT, '--check', '--engine', S.engine], { timeoutMs: 3 * 60 * 1000, env });
+        const j = JSON.parse(r.out.trim().split('\n').pop());
+        checked = { ok: true, engine: j.engine };
+      } catch (e) {
+        const slow = /SIGKILL/.test(String(e.message));
+        checked = {
+          ok: false,
+          reason: slow ? 'ตัวถอดเสียงตอบช้าเกินไป (เครื่องอาจหลับหรือทำงานหนัก)' : 'ยังไม่ได้ติดตั้งตัวถอดเสียง (Whisper)',
+          detail: String(e.message).slice(0, 300),
+        };
+      }
+      checkedAt = Date.now();
+      inflight = null;
+      return checked;
+    })();
+    return inflight;
   }
 
   async function transcribe(audioFile, { onProgress = () => {}, outFile }) {
