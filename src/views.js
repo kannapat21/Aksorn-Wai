@@ -345,7 +345,10 @@ function editorOptions(editors, selected) {
 }
 
 function product({ cfg, user, csrf, p, owned }) {
-  const faq = (p.faq || []).map((f) => `<details><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`).join('');
+  const manualPay = cfg.paymentProvider === 'manual';
+  // โหมดโอนเอง: สินค้าเข้าคลังเมื่อร้านยืนยันยอด (ไม่ใช่ "ทันที")
+  const payWhen = (a) => (manualPay ? a.replace('ทันทีหลังชำระเงินสำเร็จ', 'ทันทีที่ร้านยืนยันยอดโอน (ปกติไม่นาน)') : a);
+  const faq = (p.faq || []).map((f) => `<details><summary>${esc(f.q)}</summary><p>${esc(payWhen(f.a))}</p></details>`).join('');
   const tags = [p.category, ...(p.tags || [])].filter(Boolean);
   return layout({
     title: p.title, shopName: cfg.shopName, user, csrf, page: 'page-product',
@@ -418,7 +421,7 @@ function product({ cfg, user, csrf, p, owned }) {
       <a class="btn primary block" href="/login?next=${encodeURIComponent('/p/' + p.slug)}">เข้าสู่ระบบเพื่อซื้อ</a>
       <p class="muted small center">ยังไม่มีบัญชี? <a href="/signup?next=${encodeURIComponent('/p/' + p.slug)}">สมัครสมาชิกฟรี</a> ใช้เวลาไม่ถึงนาที</p>`}
       <ul class="assure">
-        <li>${ICON.bolt} ได้ไฟล์ทันทีหลังชำระเงิน</li>
+        <li>${ICON.bolt} ${manualPay ? 'สแกนจ่ายด้วย PromptPay ได้ไฟล์เมื่อร้านยืนยันยอด' : 'ได้ไฟล์ทันทีหลังชำระเงิน'}</li>
         <li>${ICON.infinity} ซื้อครั้งเดียว อยู่ในคลังตลอดไป</li>
         <li>${ICON.film} เลือกโปรแกรมตัดต่อตอนใช้งาน เปลี่ยนได้ตลอด</li>
         <li>${ICON.edit} ปรับแต่งข้อความ ฟอนต์ และสีเองได้หลังซื้อ</li>

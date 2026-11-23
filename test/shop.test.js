@@ -1419,6 +1419,8 @@ test('manual: ลูกค้ากดยืนยันโอน → รอต�
     const bobLib = await (await bob.req('/library')).text();
     assert.ok(bobLib.includes(`href="/pay/transfer/${o2.id}"`) && bobLib.includes('รอโอนเงิน') && !bobLib.includes(id));
     // เงื่อนไขการใช้งานบอกขั้นตอนโอน + ร้านอนุมัติ (ไม่ใช่ "เข้าคลังทันที")
+    const pd = await (await alice.req('/p/order-now')).text();
+    assert.ok(!pd.includes('ได้ไฟล์ทันทีหลังชำระเงิน') && pd.includes('ร้านยืนยันยอด'), 'หน้าสินค้าไม่สัญญาว่าได้ทันทีในโหมดโอนเอง');
     const terms = await (await alice.req('/terms')).text();
     assert.match(terms, /PromptPay/); assert.match(terms, /เมื่อร้านอนุมัติ/);
     assert.equal((await (await alice.req(`/order/${id}/status`)).json()).status, 'review');
