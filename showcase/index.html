@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>อักษรไหว</title>
+<meta name="description" content="แอนิเมชันข้อความภาษาไทย พร้อมใช้ใน CapCut, Premiere, DaVinci, Final Cut">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<style>
+@font-face{font-family:Kanit;src:url(fonts/Kanit-Regular.ttf) format("truetype");font-weight:400;font-display:swap}
+@font-face{font-family:Kanit;src:url(fonts/Kanit-Bold.ttf) format("truetype");font-weight:700;font-display:swap}
+:root{--bg:#f6f6f3;--surface:#fff;--ink:#171a20;--muted:#5d636e;--line:#e3e3dd;--accent:#1e3a5f;--accent-ink:#fff;--brand:#ffd400;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--surface:#171a21;--ink:#e8e9ec;--muted:#9aa0ab;--line:#2a2f39;--accent:#9cbcf0;--accent-ink:#0f1115;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Kanit,system-ui,sans-serif;line-height:1.6}
+header{display:flex;align-items:center;gap:12px;padding:16px;max-width:1100px;margin:0 auto}
+header img{width:40px;height:40px}
+header b{font-size:1.25rem}
+.hero{max-width:1100px;margin:0 auto;padding:8px 16px 24px}
+.hero h1{font-size:clamp(1.6rem,4vw,2.4rem);margin:0 0 6px;line-height:1.25}
+.hero p{margin:0;color:var(--muted)}
+main{max-width:1100px;margin:0 auto;padding:0 16px 48px;display:grid;gap:20px;grid-template-columns:repeat(auto-fill,minmax(min(100%,460px),1fr))}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.stage{background:#111;display:flex;justify-content:center;aspect-ratio:16/9}
+.stage video{max-width:100%;max-height:100%;display:block}
+.tabs{display:flex;gap:8px;padding:12px 16px 0}
+.tabs button{font:inherit;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:4px 12px;cursor:pointer}
+.tabs button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.body{padding:12px 16px 16px}
+.cat{margin:0;color:var(--muted);font-size:.9rem}
+h2{margin:2px 0 0;font-size:1.5rem}
+.sub{margin:0 0 8px;color:var(--muted)}
+.desc{margin:0 0 12px}
+.buy{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.price{font-size:1.6rem;font-weight:700}
+.btn{display:inline-block;background:var(--brand);color:#171a20;font-weight:700;text-decoration:none;padding:10px 18px;border-radius:10px}
+.btn.off{background:var(--line);color:var(--muted)}
+.faq{margin-top:12px;border-top:1px solid var(--line)}
+details{border-bottom:1px solid var(--line);padding:8px 0}
+summary{cursor:pointer;font-weight:700}
+details p{margin:6px 0 0;color:var(--muted)}
+footer{text-align:center;color:var(--muted);font-size:.85rem;padding:0 16px 32px}
+</style>
+</head>
+<body>
+<header><img src="logo.svg" alt=""><b>อักษรไหว</b></header>
+<section class="hero"><h1>แอนิเมชันข้อความภาษาไทย พร้อมใช้ใน CapCut, Premiere, DaVinci, Final Cut</h1><p>วิดีโอตัวอย่างมีลายน้ำ ไฟล์จริงคมชัด 1080p 60fps ไม่มีลายน้ำ</p></section>
+<main>
+  <article class="card" id="order-now">
+    <div class="stage"><video src="previews/order-now_horizontal.mp4" poster="previews/order-now_horizontal.jpg" autoplay muted loop playsinline preload="metadata"></video></div>
+    <div class="tabs" role="group" aria-label="สัดส่วนวิดีโอ">
+        <button type="button" aria-pressed="true" data-src="previews/order-now_horizontal">แนวนอน 16:9</button>
+        <button type="button" aria-pressed="false" data-src="previews/order-now_vertical">แนวตั้ง 9:16</button>
+      </div>
+    <div class="body">
+      <p class="cat">ปุ่มเรียกให้ซื้อ (CTA)</p>
+      <h2>สั่งซื้อเลย</h2>
+      <p class="sub">ข้อความเด้งเข้า สีเหลืองขอบดำ</p>
+      <p class="desc">แอนิเมชันข้อความ &quot;สั่งซื้อเลย&quot; เด้งเข้าแล้วค้างไว้ ก่อนจางออก ยาว 3 วินาที 60fps ใช้ปิดท้ายคลิปขายของหรือเรียกให้กดสั่งซื้อ มีทั้งแนวตั้ง (TikTok/Reels) และแนวนอน (YouTube) ฟอนต์ Kanit ใช้เชิงพาณิชย์ได้</p>
+      <div class="buy">
+        <span class="price">฿49</span>
+        <span class="btn off">เปิดขายเร็วๆ นี้</span>
+      </div>
+      <div class="faq"><details><summary>ใช้กับโปรแกรมอะไรได้บ้าง</summary><p>CapCut (มือถือ/คอม), Premiere Pro, DaVinci Resolve, Final Cut Pro และโปรแกรมที่รองรับ Chroma Key หรือวิดีโอโปร่งใส เลือกโปรแกรมตอนเปิดใช้ในคลัง แล้วระบบจะให้ไฟล์ที่เหมาะกับโปรแกรมนั้น</p></details><details><summary>ใช้ในงานลูกค้าหรืองานโฆษณาได้ไหม</summary><p>ได้ ใช้ในคลิปเชิงพาณิชย์ได้ แต่ห้ามนำไฟล์ไปขายต่อหรือแจกต่อ ฟอนต์ Kanit ใช้สัญญา SIL OFL ซึ่งแนบมาในชุดดาวน์โหลด</p></details><details><summary>ได้ไฟล์เมื่อไหร่</summary><p>ทันทีหลังชำระเงินสำเร็จ แอนิเมชันจะเข้าไปอยู่ในคลังของบัญชีคุณ เข้าสู่ระบบแล้วโหลดได้ทุกเมื่อ ทุกเครื่อง</p></details><details><summary>เปลี่ยนโปรแกรมตัดต่อทีหลังได้ไหม</summary><p>ได้ ในคลังกดเลือกโปรแกรมใหม่ได้ตลอด แล้วโหลดไฟล์ฟอร์แมตที่ตรงกับโปรแกรมนั้น</p></details><details><summary>ขอบตัวอักษรมีสีเขียวติด</summary><p>ใน CapCut ให้เพิ่มค่า &quot;เงา&quot; (Shadow) ในเครื่องมือ Chroma key หรือเปลี่ยนไปใช้ไฟล์โปร่งใส (ProRes) ถ้าโปรแกรมรองรับ</p></details></div>
+    </div>
+  </article>
+  <article class="card" id="follow-now">
+    <div class="stage"><video src="previews/follow-now_horizontal.mp4" poster="previews/follow-now_horizontal.jpg" autoplay muted loop playsinline preload="metadata"></video></div>
+    <div class="tabs" role="group" aria-label="สัดส่วนวิดีโอ">
+        <button type="button" aria-pressed="true" data-src="previews/follow-now_horizontal">แนวนอน 16:9</button>
+        <button type="button" aria-pressed="false" data-src="previews/follow-now_vertical">แนวตั้ง 9:16</button>
+      </div>
+    <div class="body">
+      <p class="cat">ปุ่มเรียกให้ติดตาม (CTA)</p>
+      <h2>กดติดตามเลย</h2>
+      <p class="sub">ข้อความร่วงลงมากระดอน สีขาวขอบแดง</p>
+      <p class="desc">แอนิเมชันข้อความ &quot;กดติดตามเลย&quot; ร่วงลงมาจากด้านบนแล้วกระดอนลงพื้น ค้างไว้ ก่อนลอยขึ้นจางออก ท่าเคลื่อนไหวต่างจาก &quot;สั่งซื้อเลย&quot; ชัดเจน เหมาะกับท้ายคลิปหรือกลางคลิปเพื่อชวนกดติดตามช่อง/เพจ ความละเอียด 1080p 60fps มีทั้งแนวตั้ง (TikTok/Reels) และแนวนอน (YouTube) พิมพ์ข้อความเอง เปลี่ยนฟอนต์ สี ขอบ ได้ในคลัง ฟอนต์ Kanit ใช้เชิงพาณิชย์ได้</p>
+      <div class="buy">
+        <span class="price">฿49</span>
+        <span class="btn off">เปิดขายเร็วๆ นี้</span>
+      </div>
+      <div class="faq"><details><summary>เปลี่ยนข้อความเป็นอย่างอื่นได้ไหม</summary><p>ได้ เมื่อซื้อแล้วเข้าคลัง กดปรับแต่ง พิมพ์ข้อความเอง เลือกฟอนต์ สี ขอบ แนวตั้ง/แนวนอน และความยาว แล้วระบบสร้างไฟล์เดียวให้โหลด ท่าร่วงกระดอนยังเหมือนเดิม</p></details><details><summary>ใช้กับโปรแกรมอะไรได้บ้าง</summary><p>CapCut (มือถือ/คอม), Premiere Pro, DaVinci Resolve, Final Cut Pro และโปรแกรมที่รองรับ Chroma Key หรือวิดีโอโปร่งใส เลือกโปรแกรมตอนใช้ในคลัง แล้วระบบให้ไฟล์ที่เหมาะกับโปรแกรมนั้น</p></details><details><summary>ใช้ในงานลูกค้าหรืองานโฆษณาได้ไหม</summary><p>ได้ ใช้ในคลิปเชิงพาณิชย์ได้ แต่ห้ามนำไฟล์ไปขายต่อหรือแจกต่อ ฟอนต์ Kanit ใช้สัญญา SIL OFL ซึ่งแนบมาในชุดดาวน์โหลด</p></details><details><summary>ได้ไฟล์เมื่อไหร่</summary><p>ทันทีหลังชำระเงินสำเร็จ แอนิเมชันจะเข้าไปอยู่ในคลังของบัญชีคุณ เข้าสู่ระบบแล้วโหลดได้ทุกเมื่อ ทุกเครื่อง</p></details><details><summary>ขอบตัวอักษรมีสีเขียวติด</summary><p>ใน CapCut ให้เพิ่มค่า &quot;เงา&quot; (Shadow) ในเครื่องมือ Chroma key หรือเปลี่ยนไปใช้ไฟล์โปร่งใส (ProRes) ถ้าโปรแกรมรองรับ</p></details></div>
+    </div>
+  </article>
+</main>
+<footer>ฟอนต์ Kanit ใช้สัญญา SIL Open Font License</footer>
+<script>
+document.querySelectorAll('.tabs').forEach(function(t){
+  t.addEventListener('click',function(e){
+    var b=e.target.closest('button'); if(!b) return;
+    t.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});
+    var v=t.previousElementSibling.querySelector('video'); v.poster=b.dataset.src+'.jpg'; v.src=b.dataset.src+'.mp4'; v.play().catch(function(){});
+  });
+});
+</script>
+</body>
+</html>
