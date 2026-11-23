@@ -26,7 +26,7 @@ const LICENSE = {
     'ห้ามนำไฟล์ไปรวมในชุดเทมเพลต แพ็กเอฟเฟกต์ หรือคลังสื่อเพื่อขายหรือแจก',
     'สิทธิ์เป็นของผู้ซื้อ (บุคคลหรือบริษัท) ที่สั่งซื้อเท่านั้น',
   ],
-  font: 'ฟอนต์ Kanit ใช้สัญญา SIL Open Font License',
+  font: 'ฟอนต์ไทยทุกตัวที่ร้านให้เลือกใช้สัญญา SIL Open Font License ใช้ในงานเชิงพาณิชย์ได้',
 };
 
 const ICON = {
@@ -154,11 +154,12 @@ ${body}
       <a href="/terms">เงื่อนไขการใช้งาน</a>
       <a href="/refund">นโยบายคืนเงิน</a>
       <a href="/privacy">ความเป็นส่วนตัว (PDPA)</a>
+      <a href="/contact">ติดต่อร้าน</a>
     </nav>
     <div class="foot-meta">
       <span>${ICON.shield} ลิงก์ดาวน์โหลดเข้ารหัสลายเซ็น</span>
       <span>${ICON.infinity} ซื้อครั้งเดียว ใช้ได้ตลอด</span>
-      <span>ฟอนต์ Kanit · SIL Open Font License</span>
+      <a href="/license#fonts">ฟอนต์ไทยของร้าน · SIL Open Font License</a>
     </div>
   </div>
 </footer>
@@ -678,7 +679,7 @@ ${order.status === 'refunded' ? `<p><a class="btn" href="/p/${esc(p.slug)}">ไ�
 <h1>รอยืนยันการชำระเงิน…</h1>
 <p>ระบบกำลังรอการยืนยันจากผู้ให้บริการชำระเงิน หน้านี้จะเปลี่ยนเองเมื่อยืนยันแล้ว</p>
 <div class="spinner" data-poll="/order/${esc(order.id)}/status" aria-hidden="true"></div>
-<p class="muted small">ถ้ารอนานเกิน 5 นาที กรุณาติดต่อร้านพร้อมรหัสคำสั่งซื้อ ${esc(order.id.slice(0, 8))}</p>
+<p class="muted small">ถ้ารอนานเกิน 5 นาที กรุณา<a href="/contact">ติดต่อร้าน</a>พร้อมรหัสคำสั่งซื้อ ${esc(order.id.slice(0, 8))}</p>
 </div>`,
   });
 }
@@ -712,7 +713,7 @@ function manualStatusBody({ order, p }) {
     <div><dt>รหัสอ้างอิง</dt><dd><b>${esc(order.pay_ref)}</b></dd></div>
     <div><dt>แจ้งเมื่อ</dt><dd>${esc(thDate(order.confirmed_at))}</dd></div>
   </dl></div>
-  <p class="muted small">ถ้ารอนานผิดปกติ ติดต่อร้านพร้อมรหัสอ้างอิงด้านบน</p>
+  <p class="muted small">ถ้ารอนานผิดปกติ <a href="/contact">ติดต่อร้าน</a>พร้อมรหัสอ้างอิงด้านบน</p>
 </div>`;
 }
 
@@ -743,7 +744,17 @@ function versionList(cfg, versions, productsBySlug, fonts = cfg.fonts) {
     </li>`).join('')}</ul>`;
 }
 
-function library({ cfg, user, csrf, items, customs = [], fonts, limits }) {
+function library({ cfg, user, csrf, items, open = [], customs = [], fonts, limits }) {
+  const openLabel = { pending: 'รอโอนเงิน', review: 'รอร้านตรวจสอบ', rejected: 'ร้านยังไม่พบยอดโอน' };
+  const openHref = (o) => (o.provider === 'manual' && o.status !== 'review' ? `/pay/transfer/${o.id}` : `/order/${o.id}`);
+  const openList = open.length ? `
+<section class="box lib-open" aria-label="คำสั่งซื้อที่ยังไม่เสร็จ">
+  <h2>คำสั่งซื้อที่ยังไม่เสร็จ</h2>
+  <ul class="lib-open-list">${open.map(({ order: o, p }) => `
+    <li><a href="${openHref(o)}"><b>${esc(p.title)}</b><span class="muted small">${esc(openLabel[o.status] || o.status)}${o.pay_ref ? ` · ${esc(o.pay_ref)}` : ''}</span><i>›</i></a></li>`).join('')}
+  </ul>
+  <p class="muted small">สินค้าจะเข้าคลังเมื่อชำระเงินเสร็จ${cfg.paymentProvider === 'manual' ? 'และร้านอนุมัติแล้ว' : ''}</p>
+</section>` : '';
   const list = items.map(({ order, p }) => `
     <article class="lib-card reveal">
       <a href="/library/${esc(order.id)}" class="lib-thumb"><img src="/previews/${esc(p.slug)}_horizontal.jpg" alt="" loading="lazy" width="960" height="540"></a>
@@ -763,6 +774,7 @@ function library({ cfg, user, csrf, items, customs = [], fonts, limits }) {
   <div><p class="eyebrow">บัญชี ${esc(user.email)}</p><h1>คลังของฉัน</h1></div>
   <p class="muted small">${items.length} รายการ · ใช้ได้ตลอด</p>
 </div>
+${openList}
 ${items.length ? `<div class="lib-grid">${list}</div>` : `
 <div class="empty">
   <p><b>ยังไม่มีแอนิเมชันในคลัง</b></p>
@@ -1157,6 +1169,7 @@ function account({ cfg, user, csrf, items = 0 }) {
     ${row('/terms', ICON.check, 'เงื่อนไขการใช้งาน')}
     ${row('/refund', ICON.check, 'นโยบายคืนเงิน')}
     ${row('/privacy', ICON.shield, 'ความเป็นส่วนตัว (PDPA)')}
+    ${row('/contact', ICON.user, 'ติดต่อร้าน')}
   </div>
   <form method="post" action="/logout" class="acc-logout"><input type="hidden" name="csrf" value="${esc(csrf)}"><button class="btn block" type="submit">ออกจากระบบ</button></form>
   <p class="muted small center" data-install-hint>เพิ่ม ${esc(cfg.shopName)} ลงหน้าจอโฮม: Safari กด แชร์ → "เพิ่มไปยังหน้าจอโฮม" · Chrome กด ⋮ → "ติดตั้งแอป"</p>
@@ -1170,6 +1183,7 @@ function account({ cfg, user, csrf, items = 0 }) {
   <div class="acc-list">
     ${row('/terms', ICON.check, 'เงื่อนไขการใช้งาน')}
     ${row('/privacy', ICON.shield, 'ความเป็นส่วนตัว (PDPA)')}
+    ${row('/contact', ICON.user, 'ติดต่อร้าน')}
   </div>
 </div>`,
   });
@@ -1262,7 +1276,8 @@ function legalPage({ cfg, user, csrf, kind }) {
   const shop = esc(cfg.shopName);
   const who = `${legalFill(L.name, 'ชื่อผู้ประกอบการ / บริษัท')}`;
   const contact = `อีเมล ${legalFill(L.contactEmail, 'อีเมลติดต่อ')}${L.phone ? ` · โทร ${esc(L.phone)}` : ''} · ที่อยู่ ${legalFill(L.address, 'ที่อยู่สำหรับติดต่อ')}${L.taxId ? ` · เลขประจำตัวผู้เสียภาษี ${esc(L.taxId)}` : ''}`;
-  const updated = 'ปรับปรุงล่าสุด: 22 พฤศจิกายน 2569';
+  const updated = 'ปรับปรุงล่าสุด: 23 พฤศจิกายน 2569';
+  const manual = cfg.paymentProvider === 'manual';
   const pages = {
     terms: { title: 'เงื่อนไขการใช้งาน', body: `
 <p>เว็บไซต์ ${shop} ดำเนินการโดย ${who} (เรียกว่า "ร้าน") การสมัครสมาชิก ซื้อ หรือใช้ไฟล์จากร้าน ถือว่าคุณยอมรับเงื่อนไขนี้</p>
@@ -1273,7 +1288,9 @@ function legalPage({ cfg, user, csrf, kind }) {
 <h2>3. เนื้อหาที่คุณปรับแต่งเอง</h2>
 <ul><li>คุณรับผิดชอบข้อความที่พิมพ์ และฟอนต์ที่อัปโหลดเอง ต้องไม่ละเมิดสิทธิ์ผู้อื่น ไม่ผิดกฎหมาย และไม่หมิ่นประมาท</li><li>ร้านให้สิทธิ์เฉพาะฟอนต์ที่ร้านจัดไว้ (SIL OFL) ฟอนต์ที่คุณอัปโหลด คุณต้องมีสิทธิ์ใช้เชิงพาณิชย์เอง</li></ul>
 <h2>4. ราคาและการชำระเงิน</h2>
-<ul><li>ราคาที่แสดงเป็นเงินบาท ชำระผ่านผู้ให้บริการชำระเงินที่ร้านเลือก ร้านไม่เก็บเลขบัตรของคุณ</li><li>เมื่อชำระสำเร็จ สินค้าจะเข้าคลังของบัญชีทันที</li></ul>
+${manual
+  ? `<ul><li>ราคาที่แสดงเป็นเงินบาท ชำระโดยโอนเงินผ่าน PromptPay ตามยอดและ QR ที่แสดงในหน้าชำระเงิน</li><li>หลังโอนแล้วกด "ยืนยันการโอนเงิน" ร้านจะตรวจรายการในบัญชีแล้วอนุมัติ สินค้าเข้าคลังของบัญชีเมื่อร้านอนุมัติ และแจ้งทางอีเมล</li><li>ออเดอร์ที่ยังไม่โอนจะหมดอายุใน ${esc(cfg.transfer.expireHours)} ชั่วโมง</li></ul>`
+  : `<ul><li>ราคาที่แสดงเป็นเงินบาท ชำระผ่านผู้ให้บริการชำระเงินที่ร้านเลือก ร้านไม่เก็บเลขบัตรของคุณ</li><li>เมื่อชำระสำเร็จ สินค้าจะเข้าคลังของบัญชีทันที</li></ul>`}
 <h2>5. การรับประกันและความรับผิด</h2>
 <ul><li>ร้านพยายามให้ไฟล์ใช้งานได้กับโปรแกรมที่ระบุ ถ้าใช้ไม่ได้ ดู <a href="/refund">นโยบายคืนเงิน</a></li><li>ความรับผิดของร้านไม่เกินราคาที่คุณจ่ายสำหรับสินค้านั้น</li></ul>
 <h2>6. การเปลี่ยนแปลงเงื่อนไข</h2>
@@ -1285,7 +1302,7 @@ function legalPage({ cfg, user, csrf, kind }) {
 <h2>ไม่คืนเงินเมื่อ</h2>
 <ul><li>เปลี่ยนใจหลังดาวน์โหลดหรือปรับแต่งไฟล์แล้ว</li><li>ใช้ไม่ได้เพราะโปรแกรมของคุณไม่รองรับฟอร์แมต ทั้งที่ร้านมีฟอร์แมตอื่นให้เลือก (ร้านจะช่วยแนะนำวิธีใช้ก่อน)</li><li>ปัญหาจากฟอนต์ที่คุณอัปโหลดเอง</li></ul>
 <h2>วิธีขอคืนเงิน</h2>
-<ol><li>ติดต่อภายใน ${esc(L.refundDays)} วันหลังซื้อ ทาง ${legalFill(L.contactEmail, 'อีเมลติดต่อ')}</li><li>แจ้งรหัสคำสั่งซื้อ (8 ตัวในอีเมลยืนยัน) อีเมลบัญชี และอธิบายปัญหาพร้อมภาพหน้าจอ</li><li>ร้านตอบกลับภายใน 3 วันทำการ หากอนุมัติ จะคืนเงินผ่านช่องทางเดิมภายใน 7–14 วันทำการ และนำสินค้าออกจากคลังของบัญชี</li></ol>` },
+<ol><li>ติดต่อภายใน ${esc(L.refundDays)} วันหลังซื้อ ทาง ${legalFill(L.contactEmail, 'อีเมลติดต่อ')}</li><li>แจ้งรหัสคำสั่งซื้อ (8 ตัวในอีเมลยืนยัน) อีเมลบัญชี และอธิบายปัญหาพร้อมภาพหน้าจอ</li><li>ร้านตอบกลับภายใน 3 วันทำการ หากอนุมัติ จะคืนเงิน${manual ? 'โดยโอนกลับเข้าบัญชีที่คุณแจ้ง' : 'ผ่านช่องทางเดิม'}ภายใน 7–14 วันทำการ และนำสินค้าออกจากคลังของบัญชี</li></ol>` },
     privacy: { title: 'นโยบายความเป็นส่วนตัว (PDPA)', body: `
 <p>${who} ("ร้าน") เป็นผู้ควบคุมข้อมูลส่วนบุคคลตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 นโยบายนี้อธิบายว่าเราเก็บและใช้ข้อมูลของคุณอย่างไร</p>
 <h2>ข้อมูลที่เก็บ</h2>
@@ -1306,6 +1323,25 @@ function legalPage({ cfg, user, csrf, kind }) {
     title: p.title, shopName: cfg.shopName, user, csrf, page: 'page-legal',
     body: `<article class="narrow legal"><p class="eyebrow">${shop}</p><h1>${p.title}</h1><p class="muted small">${updated}</p>${p.body}
 <h2>ติดต่อร้าน</h2><p>${who} · ${contact}</p></article>`,
+  });
+}
+
+// หน้าติดต่อร้าน (ข้อมูลจาก .env: CONTACT_EMAIL, CONTACT_LINE, CONTACT_PHONE)
+function contactPage({ cfg, user, csrf }) {
+  const L = cfg.legal;
+  const rows = [
+    ['อีเมล', L.contactEmail ? `<a href="mailto:${esc(L.contactEmail)}">${esc(L.contactEmail)}</a>` : legalFill('', 'อีเมลติดต่อ')],
+    L.line ? ['LINE', /^https:\/\//.test(L.line) ? `<a href="${esc(L.line)}" rel="noopener">${esc(L.line)}</a>` : esc(L.line)] : null,
+    L.phone ? ['โทร', esc(L.phone)] : null,
+  ].filter(Boolean);
+  return layout({
+    title: 'ติดต่อร้าน', shopName: cfg.shopName, user, csrf, page: 'page-legal',
+    body: `<article class="narrow legal"><p class="eyebrow">${esc(cfg.shopName)}</p><h1>ติดต่อร้าน</h1>
+<p class="lead">มีปัญหาเรื่องการโอนเงิน ดาวน์โหลด หรือใช้ไฟล์ในโปรแกรมตัดต่อ ทักมาได้เลย</p>
+<section class="box"><dl class="contact-list">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></section>
+<h2>ช่วยให้ร้านตอบได้เร็วขึ้น</h2>
+<ul><li>แจ้งอีเมลที่ใช้สมัคร</li><li>ถ้าเป็นเรื่องการโอน แจ้งรหัสอ้างอิง (ขึ้นต้นด้วย AW-) ยอด และเวลาที่โอน</li><li>ถ้าไฟล์ใช้ไม่ได้ บอกชื่อโปรแกรมตัดต่อ และแนบภาพหน้าจอ</li></ul>
+<p class="muted small">ร้านตอบภายใน 1–3 วันทำการ · ดูเพิ่มเติม: <a href="/refund">นโยบายคืนเงิน</a> · <a href="/license">สิทธิ์การใช้งาน</a></p></article>`,
   });
 }
 
@@ -1349,8 +1385,12 @@ function licensePage({ cfg, user, csrf }) {
     <h2>ห้าม</h2>
     <ul class="ticks no">${LICENSE.not.map((t) => `<li>${ICON.x}<span>${esc(t)}</span></li>`).join('')}</ul>
   </section>
-  <p class="muted small">${esc(LICENSE.font)}</p>
-  <p><a class="btn" href="/library">${ICON.library} เปิดคลังของฉัน</a> <a class="btn ghost" href="/license/kanit-ofl.txt">สัญญาฟอนต์ Kanit</a></p>
+  <section class="box" id="fonts">
+    <h2>ฟอนต์ที่ใช้</h2>
+    <p class="muted small">${esc(LICENSE.font)} กดชื่อฟอนต์เพื่ออ่านสัญญาฉบับเต็ม</p>
+    <ul class="font-licenses">${(cfg.fonts || []).map((f) => `<li><a href="/fonts/thai/${esc(f.id)}/OFL.txt">${esc(f.label)}</a></li>`).join('')}</ul>
+  </section>
+  <p><a class="btn" href="/library">${ICON.library} เปิดคลังของฉัน</a></p>
 </div>`,
   });
 }
@@ -1424,4 +1464,4 @@ ${cfg.baseUrl}/library/${order.id}
 — ${cfg.shopName} · แอนิเมชันข้อความไทย`;
 }
 
-module.exports = { transferPay, adminTransfers, transferReceivedEmail, transferRejectedEmail, adminTransferEmail, bahtExact, omisePay, account, forgot, reset, legalPage, verifyEmailBody, resetEmailBody, home, product, mockPay, orderStatus, library, libraryItem, customize, customStatus, presetsPage, fontsPage, login, signup, licensePage, message, admin, emailBody, esc, baht, LICENSE };
+module.exports = { contactPage, transferPay, adminTransfers, transferReceivedEmail, transferRejectedEmail, adminTransferEmail, bahtExact, omisePay, account, forgot, reset, legalPage, verifyEmailBody, resetEmailBody, home, product, mockPay, orderStatus, library, libraryItem, customize, customStatus, presetsPage, fontsPage, login, signup, licensePage, message, admin, emailBody, esc, baht, LICENSE };

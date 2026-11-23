@@ -973,3 +973,17 @@ img[loading="lazy"]:not(.loaded) { opacity: 0; }
 .success-note { background: var(--ok-soft); color: var(--ok); padding: 10px 14px; border-radius: var(--radius-sm); }
 .review-cta.has { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 @media (max-width: 720px) { .review-actions > form, .review-actions .btn.lg { width: 100%; } .review-actions > form .btn { width: 100%; } }
+
+/* คลัง: คำสั่งซื้อที่ยังไม่เสร็จ · หน้าติดต่อร้าน · รายชื่อฟอนต์ในหน้าสิทธิ์ */
+.lib-open { margin-bottom: 24px; }
+.lib-open h2 { font-size: 1.05rem; margin: 0 0 8px; }
+.lib-open-list { list-style: none; margin: 0 0 8px; padding: 0; }
+.lib-open-list li + li { border-top: 1px solid var(--line); }
+.lib-open-list a { display: flex; align-items: center; gap: 10px; padding: 12px 2px; color: inherit; text-decoration: none; }
+.lib-open-list a b { flex: 1; min-width: 0; }
+.lib-open-list a i { font-style: normal; color: var(--muted); }
+.contact-list { display: grid; grid-template-columns: max-content 1fr; gap: 10px 16px; margin: 0; }
+.contact-list dt { color: var(--muted); }
+.contact-list dd { margin: 0; overflow-wrap: anywhere; }
+.font-licenses { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 8px 0 0; }
+.font-licenses a { display: inline-block; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; font-size: .9rem; }

@@ -64,7 +64,7 @@ function loadConfig(overrides = {}) {
     rateSignupPerHour: Number(env.RATE_SIGNUP_PER_HOUR || 10), // สมัครสมาชิกได้กี่ครั้งต่อ IP ต่อชั่วโมง
     // ข้อมูลร้านที่แสดงในหน้านโยบาย (เว้นว่าง = แสดงช่องให้กรอก)
     legal: {
-      name: env.LEGAL_NAME || '', contactEmail: env.CONTACT_EMAIL || '', phone: env.CONTACT_PHONE || '',
+      name: env.LEGAL_NAME || '', contactEmail: env.CONTACT_EMAIL || '', phone: env.CONTACT_PHONE || '', line: env.CONTACT_LINE || '',
       address: env.CONTACT_ADDRESS || '', taxId: env.TAX_ID || '', refundDays: Number(env.REFUND_DAYS || 7),
     },
     paymentProvider: env.PAYMENT_PROVIDER || 'mock',

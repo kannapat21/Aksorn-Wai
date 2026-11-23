@@ -422,6 +422,17 @@ test('หน้าสาธารณะ: /license, สัญญาฟอนต�
   assert.match(home, /favicon\.svg/);
   assert.match(home, new RegExp(cfg.shopName));
   assert.equal((await fetch(`${base}/orders/lookup`)).status, 404);
+  // หน้าติดต่อร้าน + ลิงก์ท้ายเว็บ
+  const contact = await fetch(`${base}/contact`);
+  assert.equal(contact.status, 200);
+  assert.match(await contact.text(), /ติดต่อร้าน/);
+  assert.match(home, /href="\/contact"/);
+  // หน้าสิทธิ์ลิสต์ฟอนต์ของร้านทุกตัว พร้อมลิงก์สัญญา OFL ที่เปิดได้จริง
+  const licHtml = await (await fetch(`${base}/license`)).text();
+  for (const f of cfg.fonts) {
+    assert.ok(licHtml.includes(`/fonts/thai/${f.id}/OFL.txt`), `ไม่มีลิงก์สัญญาฟอนต์ ${f.id}`);
+    assert.equal((await fetch(`${base}/fonts/thai/${f.id}/OFL.txt`)).status, 200);
+  }
 });
 
 async function adminClient() {
@@ -1402,6 +1413,14 @@ test('manual: ลูกค้ากดยืนยันโอน → รอต�
     assert.equal(o1r.status, 'review'); assert.equal(o1r.transfer_time, '14:35'); assert.equal(o1r.paid_at, null);
     assert.equal((await alice.req(`/library/${id}`)).status, 404, 'ยังไม่อนุมัติ = ยังไม่มีในคลัง');
     assert.match(await (await alice.req(`/order/${id}`)).text(), /รอร้านตรวจสอบ/);
+    // คลังแสดงคำสั่งซื้อที่ยังไม่เสร็จ พร้อมลิงก์กลับไปทำต่อ (ของใครของมัน)
+    const aliceLib = await (await alice.req('/library')).text();
+    assert.ok(aliceLib.includes('คำสั่งซื้อที่ยังไม่เสร็จ') && aliceLib.includes(`href="/order/${id}"`) && aliceLib.includes('รอร้านตรวจสอบ'));
+    const bobLib = await (await bob.req('/library')).text();
+    assert.ok(bobLib.includes(`href="/pay/transfer/${o2.id}"`) && bobLib.includes('รอโอนเงิน') && !bobLib.includes(id));
+    // เงื่อนไขการใช้งานบอกขั้นตอนโอน + ร้านอนุมัติ (ไม่ใช่ "เข้าคลังทันที")
+    const terms = await (await alice.req('/terms')).text();
+    assert.match(terms, /PromptPay/); assert.match(terms, /เมื่อร้านอนุมัติ/);
     assert.equal((await (await alice.req(`/order/${id}/status`)).json()).status, 'review');
     assert.ok(mctx.mailer.sent.some((m) => m.to === 'alice@example.com' && /รอตรวจสอบ/.test(m.subject)), 'แจ้งลูกค้าว่ารับแจ้งแล้ว');
     assert.ok(mctx.mailer.sent.some((m) => m.to === 'boss@shop.test' && m.text.includes(o1r.pay_ref)), 'แจ้งแอดมิน');

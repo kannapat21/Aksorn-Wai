@@ -107,6 +107,7 @@ function createApp(cfg, opts = {}) {
     deleteSessionsOf: db.prepare('DELETE FROM sessions WHERE user_id = ?'),
     // คลัง
     libraryOrders: db.prepare("SELECT * FROM orders WHERE user_id = ? AND status = 'paid' ORDER BY paid_at DESC"),
+    openOrders: db.prepare("SELECT * FROM orders WHERE user_id = ? AND status IN ('pending','review','rejected') ORDER BY created_at DESC LIMIT 10"),
     ownedPaid: db.prepare("SELECT * FROM orders WHERE user_id = ? AND product_slug = ? AND status = 'paid' LIMIT 1"),
     logDownload: db.prepare('INSERT INTO download_log (user_id, order_id, file, editor, at) VALUES (?, ?, ?, ?, ?)'),
     downloadsSince: db.prepare('SELECT COUNT(*) AS n FROM download_log WHERE user_id = ? AND at > ?'),
@@ -464,6 +465,7 @@ function createApp(cfg, opts = {}) {
 
   app.get('/license', (req, res) => send(req, res, 'licensePage'));
   for (const kind of ['terms', 'refund', 'privacy']) app.get(`/${kind}`, (req, res) => send(req, res, 'legalPage', { kind }));
+  app.get('/contact', (req, res) => send(req, res, 'contactPage'));
   app.get('/license/kanit-ofl.txt', (req, res) => {
     res.type('text/plain; charset=utf-8').send(fs.readFileSync(path.join(cfg.root, 'fonts', 'OFL.txt')));
   });
@@ -849,10 +851,15 @@ function createApp(cfg, opts = {}) {
 
   app.get('/library', requireUser, (req, res) => {
     res.set('Cache-Control', 'no-store');
+    if (isManual()) expireStale();
+    // ออเดอร์ที่ยังไม่เสร็จ (รอโอน / รอร้านตรวจ / ร้านยังไม่พบยอด) ให้ลูกค้ากลับไปทำต่อได้จากคลัง
+    const open = q.openOrders.all(req.user.id)
+      .map((o) => ({ order: o, p: productsBySlug.get(o.product_slug) }))
+      .filter((x) => x.p);
     const items = q.libraryOrders.all(req.user.id)
       .map((o) => ({ order: o, p: productsBySlug.get(o.product_slug) }))
       .filter((x) => x.p);
-    send(req, res, 'library', { items, customs: customizer.byUser(req.user.id), fonts: customizer.fontsFor(req.user.id), limits: customizer.limits(req.user.id) });
+    send(req, res, 'library', { items, open, customs: customizer.byUser(req.user.id), fonts: customizer.fontsFor(req.user.id), limits: customizer.limits(req.user.id) });
   });
 
   // ---------- ปรับแต่งแอนิเมชัน (เวอร์ชันของฉัน) ----------

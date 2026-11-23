@@ -107,9 +107,10 @@
   });
   // ส่งฟอร์มสั่งซื้อ: ปุ่มแสดงสถานะกำลังโหลด กันกดซ้ำ
   document.querySelectorAll('form').forEach(function (f) {
-    f.addEventListener('submit', function () {
+    f.addEventListener('submit', function (e) {
       var b = f.querySelector('button[type=submit]');
-      if (b && f.method.toLowerCase() === 'post') setTimeout(function () { b.classList.add('loading'); }, 0);
+      // รอให้ตัวจัดการอื่น (เช่น กล่องถามยืนยัน) ทำงานก่อน ถ้ากด "ยกเลิก" ไม่ต้องหมุนค้าง
+      if (b && f.method.toLowerCase() === 'post') setTimeout(function () { if (!e.defaultPrevented) b.classList.add('loading'); }, 0);
     });
   });
   // เมื่อกดย้อนกลับมา (bfcache) ให้ปุ่มกลับมาใช้ได้
@@ -350,9 +351,6 @@
     };
     setTimeout(jtick, 1200);
   }
-  document.querySelectorAll('form[data-confirm]').forEach(function (f) {
-    f.addEventListener('submit', function (e) { if (!confirm(f.getAttribute('data-confirm'))) e.preventDefault(); });
-  });
 
   // ---------- อัปโหลดฟอนต์ของฉัน ----------
   var up = document.querySelector('[data-font-upload]');
