@@ -252,7 +252,9 @@ function createApp(cfg, opts = {}) {
     next();
   });
 
-  const page = (req, fn, args = {}) => views[fn]({ cfg, user: req.user || null, csrf: req.csrf, ...args });
+  // ปิดอีเมลอยู่ (MAIL_MODE=off): ไม่แสดงแถบ "ยืนยันอีเมล" เพราะส่งลิงก์ให้ไม่ได้
+  const viewUser = (u) => (u && cfg.mail.mode === 'off' ? { ...u, hideVerifyBar: true } : u || null);
+  const page = (req, fn, args = {}) => views[fn]({ cfg, user: viewUser(req.user), csrf: req.csrf, ...args });
   const send = (req, res, fn, args, status = 200) => res.status(status).send(page(req, fn, args));
   const notFound = (req, res, text = '') => send(req, res, 'message', { title: 'ไม่พบหน้านี้', text }, 404);
 

@@ -143,7 +143,7 @@ ${intro ? `<div class="loader" data-loader aria-hidden="true">
   </div>
 </header>
 <main id="main" class="${wide ? 'wide' : ''}">
-${user && !user.email_verified_at ? `<div class="verify-bar" role="status">${ICON.mail}<span>ยืนยันอีเมล <b>${esc(user.email)}</b> เพื่อรับใบยืนยันการซื้อและกู้รหัสผ่านได้ · เราส่งลิงก์ไปให้แล้ว</span>
+${user && !user.email_verified_at && !user.hideVerifyBar ? `<div class="verify-bar" role="status">${ICON.mail}<span>ยืนยันอีเมล <b>${esc(user.email)}</b> เพื่อรับใบยืนยันการซื้อและกู้รหัสผ่านได้ · เราส่งลิงก์ไปให้แล้ว</span>
   <form method="post" action="/verify-email/resend"><input type="hidden" name="csrf" value="${esc(csrf)}"><button class="linklike" type="submit">ส่งอีกครั้ง</button></form></div>` : ''}
 ${body}
 </main>
