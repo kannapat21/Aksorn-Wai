@@ -52,6 +52,7 @@ const ICON = {
   user: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
   library: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="16" rx="1"/><path d="m17 5 4 1-3 14-4-1"/></svg>',
   edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg>',
+  cc: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10.5 10.2a2.4 2.4 0 1 0 0 3.6M17 10.2a2.4 2.4 0 1 0 0 3.6"/></svg>',
   download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
 };
 
@@ -790,7 +791,12 @@ ${items.length ? `<div class="lib-grid">${list}</div>` : `
   <p class="muted small">ซื้อแล้วจะมาอยู่ที่นี่ทันที ใช้ได้ตลอด</p>
   <p><a class="btn primary" href="/#catalog">เลือกแอนิเมชัน</a></p>
 </div>`}
-${items.length ? `<nav class="lib-tools" aria-label="เครื่องมือปรับแต่ง">
+${items.length ? `<a class="cz-cta sub-cta" href="/subtitles">
+  <span class="cz-cta-icon">${ICON.cc}</span>
+  <span><b>ใหม่! ใส่ซับอัตโนมัติด้วยแบบในคลัง</b><small>อัปคลิปที่มีเสียงพูด ระบบทำซับไทยให้ แก้คำได้ แล้วได้คลิปพร้อมซับ + ไฟล์ .srt</small></span>
+  <span class="cz-cta-go">›</span>
+</a>
+<nav class="lib-tools" aria-label="เครื่องมือปรับแต่ง">
   <a href="/library/styles" class="lib-tool">${ICON.edit}<span><b>สไตล์ของฉัน</b><small>ฟอนต์ + สีที่บันทึกไว้ กดทีเดียวใช้ได้</small></span></a>
   <a href="/library/fonts" class="lib-tool">${ICON.film}<span><b>ฟอนต์ของฉัน</b><small>อัปโหลดฟอนต์มาใช้เอง</small></span></a>
 </nav>` : ''}
@@ -1475,3 +1481,6 @@ ${cfg.baseUrl}/library/${order.id}
 }
 
 module.exports = { contactPage, transferPay, adminTransfers, transferReceivedEmail, transferRejectedEmail, adminTransferEmail, bahtExact, omisePay, account, forgot, reset, legalPage, verifyEmailBody, resetEmailBody, home, product, mockPay, orderStatus, library, libraryItem, customize, customStatus, presetsPage, fontsPage, login, signup, licensePage, message, admin, emailBody, esc, baht, LICENSE };
+// ตัวช่วยสำหรับหน้าซับอัตโนมัติ (src/views-subtitles.js)
+module.exports._h = { layout, esc, ICON, V, fontFaces, fmtBytes, thDate, FILL_SWATCHES, STROKE_SWATCHES };
+Object.assign(module.exports, require('./views-subtitles'));

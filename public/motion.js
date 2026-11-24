@@ -199,8 +199,9 @@
         var units = el.__units || [], shineUnits = el.__shineUnits || [], n = units.length || 1;
         var fs = parseFloat(el.style.fontSize) || 100;
         var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
-        var stagger = Math.min(0.045, 0.5 / Math.max(1, n - 1));
-        var dur = intro - 0.1 - stagger * (n - 1);
+        // ช่วงเข้าสั้น (โหมดซับ) ไม่ให้ลำดับทีละตัวยาวเกินช่วงเข้า · ช่วงเข้าปกติ 1.2 วิได้ค่าเดิมทุกพิกเซล
+        var stagger = Math.min(0.045, 0.5 / Math.max(1, n - 1), Math.max(0, intro - 0.25) / Math.max(1, n - 1));
+        var dur = Math.max(0.12, intro - 0.1 - stagger * (n - 1));
         var mid = (n - 1) / 2;
         units.forEach(function (s, i) {
           var p = 1, x = 0, y = 0, blur = 0, op = 1;
@@ -226,7 +227,7 @@
         });
         // แถบแสงวิ่ง (เฉพาะช่วงค้าง ตอนตัวอักษรนิ่งแล้ว)
         var band = -1;
-        if (t >= intro) {
+        if (t >= intro && !timing.still) {
           var h = (t - intro) % (timing.loop || 2.4);
           if (h >= 0.05 && h < 0.85) band = easeInOutSine((h - 0.05) / 0.8);
         }
@@ -296,8 +297,8 @@
         var outLen = timing.fadeEnd - timing.fadeStart;
         var off = t >= timing.fadeStart ? (t - timing.fadeStart) / outLen : -1;
         units.forEach(function (s, i) {
-          var L = t < intro ? lit(t - el.__on[i]) : 1;
-          if (h >= 1.5 && h < 1.62 && i === el.__buzz) L = (h < 1.53 || (h >= 1.57 && h < 1.6)) ? 0.25 : 1;
+          var L = t < intro ? lit(t - el.__on[i] * intro) : 1;
+          if (!timing.still && h >= 1.5 && h < 1.62 && i === el.__buzz) L = (h < 1.53 || (h >= 1.57 && h < 1.6)) ? 0.25 : 1;
           if (off >= 0) {
             // ไฟตก: (เฟรมแรกยังสว่างเท่าท่าค้าง ต่อจากภาพนิ่งได้เนียน) หรี่ → ติด → ดับ → วูบ → ดับสนิท
             var o2 = off < 0.06 ? 1 : off < 0.14 ? 0.35 : off < 0.22 ? 1 : off < 0.34 ? 0 : off < 0.42 ? 0.6 : 0;
@@ -322,7 +323,8 @@
     kinetic: {
       intro: 1.0, outro: 0.5, loop: 2.0, fit: 1.12,
       build: function (el, o) {
-        el.__units = buildUnits(el.querySelector('.fill'), wordUnits(o.text));
+        // โหมดซับ: ส่งคำมาเอง (o.words) ให้ตรงกับเวลาที่พูดแต่ละคำ
+        el.__units = buildUnits(el.querySelector('.fill'), o.words ? o.words.map(function (w) { return /^\s+$/.test(w) ? { space: true, text: w } : { text: w }; }) : wordUnits(o.text));
         // สีไฮไลต์คำที่กำลังเด้ง: ตัวอักษรสีอ่อน → เหลือง · สีอื่น → ขาว
         el.__fill = o.fill;
         el.__hl = luminance(o.fill) > 0.8 ? '#FFD400' : '#FFFFFF';
@@ -331,11 +333,21 @@
         var units = el.__units || [], n = units.length || 1;
         var fs = parseFloat(el.style.fontSize) || 100;
         var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
-        var dur = 0.38, stagger = n > 1 ? Math.min(0.2, (intro - dur - 0.04) / (n - 1)) : 0;
-        var h = t >= intro ? (t - intro) % (timing.loop || 2) : -1;
+        var dur = 0.38, stagger = n > 1 ? Math.max(0, Math.min(0.2, (intro - dur - 0.04) / (n - 1))) : 0;
+        var h = t >= intro && !timing.still ? (t - intro) % (timing.loop || 2) : -1;
+        var at = timing.wordAt; // โหมดซับ: เวลาที่พูดแต่ละคำ (วินาทีจากต้นบรรทัด)
         units.forEach(function (s, i) {
           var sc = 1, y = 0, rot = 0, op = 1, hl = 0;
-          if (t < intro) {
+          if (at && at.length === n) {
+            // คำเด้งขึ้นตอนพูด เป็นสีไฮไลต์จนถึงคำถัดไป แล้วค่อยกลับสีเดิม
+            var pa = clamp((t - at[i]) / dur, 0, 1);
+            var next = i + 1 < n ? at[i + 1] : at[i] + dur + 0.25;
+            hl = pa <= 0 ? 0 : 1 - clamp((t - Math.max(next, at[i] + dur)) / 0.2, 0, 1);
+            sc = pa <= 0 ? 0 : easeOutBack(pa);
+            y = (1 - easeOutCubic(pa)) * 0.3 * fs;
+            rot = (1 - easeOutCubic(pa)) * (i % 2 ? 9 : -9);
+            op = clamp(pa * 4, 0, 1);
+          } else if (t < intro) {
             var p = clamp((t - 0.02 - stagger * i) / dur, 0, 1);
             hl = p <= 0 ? 0 : 1 - clamp((t - 0.02 - stagger * i - dur) / 0.25, 0, 1); // คำที่เพิ่งเด้งเป็นสีไฮไลต์ แล้วค่อยกลับสีเดิม
             sc = p <= 0 ? 0 : easeOutBack(p);
@@ -376,6 +388,34 @@
   }
 
   /*
+   * เวลาของซับหนึ่งบรรทัด ยาว d วินาที (ช่วงเข้า/ออกสั้นลงให้ทันคำพูด ช่วงค้างนิ่ง)
+   *   wordAt: เวลาเริ่มพูดแต่ละคำ (ท่าคำเด้งใช้ให้คำเด้งตรงจังหวะพูด)
+   */
+  function subtitleTiming(motion, d, fps, wordAt) {
+    var m = MOTIONS[motion] || MOTIONS.pop;
+    fps = fps || 30;
+    var outro = Math.min(m.outro, 0.3, d * 0.25);
+    var intro = Math.min(m.intro, Math.max(0.12, d * 0.4), d - outro - 1 / fps);
+    var tm = { popUp: Math.min(0.3, intro * 0.6), settle: intro, fadeStart: d - outro, fadeEnd: d - 1 / fps, loop: m.loop, still: true };
+    if (motion === 'kinetic' && wordAt && wordAt.length) tm.wordAt = wordAt;
+    return tm;
+  }
+  // ช่วงเวลาที่ภาพขยับ (ต้องวาดทุกเฟรม) นอกนั้นนิ่ง วาดเฟรมเดียวใช้ซ้ำได้
+  function subtitleMoving(motion, t, tm) {
+    if (t < tm.settle + 0.02 || t >= tm.fadeStart) return true;
+    if (tm.wordAt) {
+      var at = tm.wordAt, n = at.length;
+      for (var i = 0; i < n; i++) {
+        // เด้งเข้า (0.38 วิ) และไฮไลต์จางกลับสีเดิม (0.2 วิ) ตรงกับท่า kinetic ด้านบน
+        var next = i + 1 < n ? at[i + 1] : at[i] + 0.63;
+        var fade = Math.max(next, at[i] + 0.38);
+        if ((t >= at[i] - 0.001 && t < at[i] + 0.4) || (t >= fade - 0.001 && t < fade + 0.22)) return true;
+      }
+    }
+    return false;
+  }
+
+  /*
    * จัดข้อความให้พอดีพื้นที่ แล้วตั้งสี/ขอบ/เงา
    * opts: { text, fontFamily, weight, fill, stroke, strokeRatio, shadow, width, height, filterId, motion }
    */
@@ -394,7 +434,7 @@
     var W = opts.width, H = opts.height;
     el.__H = H; // ท่า drop ใช้ความสูงของเวที
     var vertical = H > W;
-    var maxW = vertical ? 0.86 : 0.70, maxH = vertical ? 0.22 : 0.40;
+    var maxW = opts.maxW || (vertical ? 0.86 : 0.70), maxH = opts.maxH || (vertical ? 0.22 : 0.40);
     el.style.transform = 'none';
     el.style.opacity = '1';
     var size = 400;
@@ -404,6 +444,7 @@
     // เผื่อขนาดตอนขยายเกิน/แสงฟุ้ง
     var k = Math.min((W * maxW) / r.width, (H * maxH) / r.height) / M.fit;
     size = Math.max(4, Math.floor(size * k));
+    if (opts.fixedSize) size = Math.min(size, Math.round(opts.fixedSize)); // โหมดซับ: ขนาดเท่ากันทุกบรรทัด (ย่อเฉพาะบรรทัดที่ยาวเกิน)
     el.style.fontSize = size + 'px';
 
     var doc = el.ownerDocument;
@@ -435,5 +476,5 @@
     el.style.opacity = o.toFixed(5);
   }
 
-  g.TTMotion = { MOTIONS: NAMES, TIMING: TIMING, meta: meta, timingFor: timingFor, filterMarkup: filterMarkup, setup: setup, setTime: setTime };
+  g.TTMotion = { MOTIONS: NAMES, TIMING: TIMING, meta: meta, timingFor: timingFor, subtitleTiming: subtitleTiming, subtitleMoving: subtitleMoving, filterMarkup: filterMarkup, setup: setup, setTime: setTime };
 })(typeof window !== 'undefined' ? window : globalThis);
