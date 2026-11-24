@@ -51,8 +51,11 @@ class Database {
     if (options.simple) return rows.length ? rows[0][Object.keys(rows[0])[0]] : undefined;
     return rows;
   }
+  // Turso แบบ remote: แต่ละ exec เป็นคนละ stream, BEGIN ไม่คงอยู่ถึง COMMIT ("cannot commit - no transaction is active")
+  // จึงรันตรงๆ ทีละคำสั่ง (autocommit) · ส่วนที่ต้องกันซ้ำใช้ UPDATE ... WHERE เงื่อนไข + ตรวจ changes อยู่แล้ว
   transaction(fn) {
     const db = this;
+    if (this.remote) return (...a) => fn(...a);
     return (...a) => {
       db.exec('BEGIN');
       try {
