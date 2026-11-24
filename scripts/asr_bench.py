@@ -72,12 +72,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
 def wav_seconds(path):
-    import wave
-    try:
-        with wave.open(str(path)) as w:
-            return w.getnframes() / w.getframerate()
-    except Exception:
-        return 0.0
+    """ความยาวเสียง (อ่านจาก ffmpeg รองรับทุกรูปแบบไฟล์)"""
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(path)], capture_output=True, text=True)
+    m = re.search(r"Duration: (\d+):(\d+):([\d.]+)", r.stderr)
+    return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3)) if m else 0.0
 
 
 def one(model, out, extra, vad):
@@ -86,6 +84,7 @@ def one(model, out, extra, vad):
     import transcribe as T
     T.progress = lambda p: None  # ไม่ต้องพิมพ์ PROGRESS ตอนวัดผล
     refs = json.loads((DATA / "refs.json").read_text()) if (DATA / "refs.json").exists() else []
+    refs = refs[:int(os.environ.get("BENCH_LIMIT", "0")) or None]
     text = lambda f, v: T.run_mlx(str(f), model, "th", "", vad=v)["text"]
     t0 = time.time()
     text(DATA / refs[0]["file"] if refs else extra[0], False)  # โหลดโมเดล + อุ่นเครื่อง

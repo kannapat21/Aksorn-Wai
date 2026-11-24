@@ -108,6 +108,16 @@ def default_mlx_model():
     return LOCAL_TH if os.path.exists(os.path.join(LOCAL_TH, "config.json")) else MLX_MODEL
 
 
+def model_opts(model):
+    """ตัวเลือกเฉพาะโมเดล (shop.json ข้างโมเดลที่แปลงเอง) เช่นโมเดลไทยที่เทรนต่อมักทำนายเวลาเองไม่ได้
+    → ถอดเป็นข้อความล้วน แล้วให้ word timestamps หาเวลาคำจาก cross-attention แทน"""
+    try:
+        with open(os.path.join(model, "shop.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 def run_mlx(audio, model, language, prompt, vad=True):
     import mlx_whisper
     progress(2)  # โหลดโมเดลแล้ว กำลังเริ่มฟัง
@@ -121,6 +131,8 @@ def run_mlx(audio, model, language, prompt, vad=True):
             kw["initial_prompt"] = prompt
         if clips:
             kw["clip_timestamps"] = clips
+        if model_opts(kw["path_or_hf_repo"]).get("without_timestamps"):
+            kw["without_timestamps"] = True
         try:
             r = mlx_whisper.transcribe(audio, hallucination_silence_threshold=2.0, **kw)
         except TypeError:

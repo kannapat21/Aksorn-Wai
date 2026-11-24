@@ -30,12 +30,13 @@ PAIRS=("current-large-v3-turbo=mlx-community/whisper-large-v3-turbo")
 for m in typhoon-turbo typhoon-turbo-q8 thonburian-medium-q8; do
   [ -f "models/$m/config.json" ] && PAIRS+=("$m=models/$m")
 done
-# รอบ 1: ทุกโมเดล ชุดทดสอบ FLEURS (มีคำตอบ) แบบเดิม (ไม่ตัดช่วงเงียบ)
-$PY scripts/asr_bench.py run "${PAIRS[@]}"
-cp bench/results.json bench/results-all.json; cp bench/results.md bench/results-all.md
-# รอบ 2: ตัดช่วงเงียบ (แบบที่ร้านจะใช้) + คลิปจริงเพิ่มเติม
+# โมเดลที่แปลงก่อนมี shop.json: ถอดแบบไม่ใช้โทเคนเวลา
+for m in typhoon-turbo typhoon-turbo-q8 thonburian-medium-q8; do
+  [ -f "models/$m/config.json" ] && [ ! -f "models/$m/shop.json" ] && echo '{"without_timestamps": true}' > "models/$m/shop.json"
+done
+# ตัดช่วงเงียบแบบเดียวกับร้าน + คลิปจริงเพิ่มเติม (ค่าเริ่มต้น 12 คลิปทดสอบ ตั้ง BENCH_LIMIT=0 เพื่อใช้ทั้งหมด)
+export BENCH_LIMIT=${BENCH_LIMIT:-12}
 ARGS=(--vad)
 [ ${#EXTRA[@]} -gt 0 ] && ARGS+=(--extra "${EXTRA[@]}")
 $PY scripts/asr_bench.py run "${PAIRS[@]}" "${ARGS[@]}"
-cp bench/results.json bench/results-vad.json; cp bench/results.md bench/results-vad.md
-echo "เสร็จ: bench/results-all.md และ bench/results-vad.md"
+echo "เสร็จ: bench/results.md"

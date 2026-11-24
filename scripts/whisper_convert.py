@@ -104,6 +104,8 @@ def convert(src, out, bits=None, dtype=mx.float16):
     out.mkdir(parents=True, exist_ok=True)
     mx.save_safetensors(str(out / "weights.safetensors"), {k: v for k, v in tree_flatten(model.parameters()) if k != "alignment_heads"})
     (out / "config.json").write_text(json.dumps(conf, indent=2))
+    # โมเดลที่เทรนต่อจาก Whisper ส่วนใหญ่ไม่ได้ฝึกโทเคนเวลา: ร้านจะถอดแบบไม่ใช้โทเคนเวลา (scripts/transcribe.py)
+    (out / "shop.json").write_text(json.dumps({"source": str(src), "without_timestamps": True}, indent=2))
     size = (out / "weights.safetensors").stat().st_size
     print(json.dumps({"ok": True, "out": str(out), "mb": round(size / 1e6), "dims": dims, "bits": bits or 16}))
 
