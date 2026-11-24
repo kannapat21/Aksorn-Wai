@@ -105,7 +105,7 @@ function client() {
       return r;
     },
     async csrf() { if (!jar.csrf) await c.req('/login'); return decodeURIComponent(jar.csrf); },
-    async post(p, form = {}) { return c.req(p, { method: 'POST', form: { csrf: await c.csrf(), ...form } }); },
+    async post(p, form = {}) { return c.req(p, { method: 'POST', form: { csrf: await c.csrf(), ...(p === '/signup' && form.password !== undefined && form.password2 === undefined ? { password2: form.password } : {}), ...form } }); },
     async json(p, obj) { return c.req(p, { method: 'POST', headers: { 'content-type': 'application/json', 'x-csrf-token': await c.csrf() }, body: JSON.stringify(obj) }); },
     async upload(buf, { style, name = 'คลิปของฉัน.mp4', csrf = true } = {}) {
       return c.req('/subtitles/upload', {

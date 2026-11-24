@@ -24,3 +24,18 @@ test('production: console ยังห้าม และชื่อโหม�
   assert.throws(() => loadConfig(prod()), /MAIL_MODE/);
   assert.throws(() => loadConfig(prod({ MAIL_MODE: 'smtpp' })), /MAIL_MODE/);
 });
+
+test('MAIL_MODE=brevo ส่งผ่าน HTTPS API (ไม่ใช้พอร์ต SMTP) และ production ตรวจค่าที่ต้องมี', async () => {
+  assert.throws(() => loadConfig(prod({ MAIL_MODE: 'brevo' })), /BREVO_API_KEY/);
+  const cfg = loadConfig(prod({ MAIL_MODE: 'brevo', BREVO_API_KEY: 'k-123', MAIL_FROM: 'ร้านอักษรไหว <shop@gmail.com>' }));
+  const calls = [];
+  const m = createMailer(cfg, { fetch: async (url, init) => { calls.push({ url, init }); return { ok: true, status: 201, text: async () => '' }; } });
+  await m.send({ to: 'u@x.co', subject: 'หัวข้อ', text: 'เนื้อหา' });
+  assert.equal(calls[0].url, 'https://api.brevo.com/v3/smtp/email');
+  assert.equal(calls[0].init.headers['api-key'], 'k-123');
+  const body = JSON.parse(calls[0].init.body);
+  assert.deepEqual(body.sender, { name: 'ร้านอักษรไหว', email: 'shop@gmail.com' });
+  assert.deepEqual(body.to, [{ email: 'u@x.co' }]);
+  const bad = createMailer(cfg, { fetch: async () => ({ ok: false, status: 401, text: async () => 'unauthorized' }) });
+  await assert.rejects(bad.send({ to: 'u@x.co', subject: 's', text: 't' }), /401/);
+});
