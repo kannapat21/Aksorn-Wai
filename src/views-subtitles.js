@@ -232,7 +232,23 @@ ${!rendering && !cues.length ? `<div class="note">${ICON.shield}<span><b>ระ�
       <button type="button" class="sub-play" data-play aria-label="เล่น/หยุด">${ICON.play}</button>
     </div>
     ${bm ? `<div data-local-clip="${esc(job.id)}">${clipAsk('เลือกคลิปเดิมเพื่อดูตัวอย่างและสร้างคลิป')}</div>` : ''}
-    <div class="sub-scrub"><input type="range" min="0" max="${esc(Math.round(job.duration * 100))}" value="0" step="1" data-scrub aria-label="เลื่อนเวลา"><span data-clock>0:00</span></div>
+    <div class="sub-tl" data-tl>
+      <div class="sub-tl-bar">
+        <button type="button" class="sub-mini sub-tl-play" data-tl-play aria-label="เล่น/หยุด">${ICON.play}</button>
+        <span class="sub-tl-clock" data-clock>0:00</span>
+        <button type="button" class="sub-mini" data-tl-split title="แบ่งบรรทัดตรงเส้นเวลา (S)" ${rendering ? 'disabled' : ''}>✂ แบ่ง</button>
+        <button type="button" class="sub-mini" data-tl-undo title="เลิกทำ (Ctrl/⌘+Z)" disabled>↶ เลิกทำ</button>
+        <span class="sub-tl-zoom"><button type="button" class="sub-mini" data-tl-zoom="-1" aria-label="ย่อไทม์ไลน์">−</button><button type="button" class="sub-mini" data-tl-zoom="1" aria-label="ขยายไทม์ไลน์">+</button></span>
+      </div>
+      <div class="sub-tl-scroll" data-tl-scroll>
+        <div class="sub-tl-track" data-tl-track role="slider" tabindex="0" aria-label="ไทม์ไลน์ เลื่อนเวลา" aria-valuemin="0" aria-valuemax="${esc(Math.round(job.duration))}" aria-valuenow="0">
+          <div class="sub-tl-cues" data-tl-cues></div>
+          <div class="sub-tl-head" data-tl-head></div>
+        </div>
+        <canvas class="sub-tl-wave" data-tl-wave aria-hidden="true"></canvas>
+      </div>
+      <p class="muted small sub-tl-hint">ลากขอบบล็อกเพื่อปรับเวลาเริ่ม/จบ · ลากกลางบล็อกเพื่อเลื่อนทั้งบรรทัด · <kbd>S</kbd> แบ่ง · <kbd>Delete</kbd> ลบ · <kbd>←</kbd><kbd>→</kbd> เลื่อนทีละ 0.1 วิ</p>
+    </div>
     <div data-filters></div>
     <p class="muted small">ตัวอย่างนี้ใช้ท่าเคลื่อนไหวเดียวกับไฟล์จริง${p.motion === 'kinetic' ? ' · คำเด้งตามจังหวะพูด' : ''}</p>
   </div>

@@ -253,15 +253,36 @@ export async function probeClip(file) {
 }
 
 // เสียง WAV 16 kHz โมโน (16-bit) → แบ่งท่อนละไม่เกิน ~3.5 MB (ประมาณ 110 วินาที) ให้ส่งผ่าน Netlify ได้
-export async function extractSpeech(file, onProgress = () => {}) {
+async function toWav(file, sampleRate, onProgress = () => {}) {
   const M = await mediabunny();
   const input = new M.Input({ source: new M.BlobSource(file), formats: M.ALL_FORMATS });
   const output = new M.Output({ format: new M.WavOutputFormat(), target: new M.BufferTarget() });
-  const conv = await M.Conversion.init({ input, output, video: { discard: true }, audio: { numberOfChannels: 1, sampleRate: 16000, codec: 'pcm-s16' } });
+  const conv = await M.Conversion.init({ input, output, video: { discard: true }, audio: { numberOfChannels: 1, sampleRate, codec: 'pcm-s16' } });
   if (!conv.isValid) throw new Error('อ่านเสียงในคลิปนี้ไม่ได้');
   conv.onProgress = (p) => onProgress(p);
   await conv.execute();
-  return splitWav(new Uint8Array(output.target.buffer));
+  return new Uint8Array(output.target.buffer);
+}
+
+export async function extractSpeech(file, onProgress = () => {}) {
+  return splitWav(await toWav(file, 16000, onProgress));
+}
+
+// คลื่นเสียงสำหรับไทม์ไลน์ (รูปแบบเดียวกับ render/subtitles.js peaks ของเซิร์ฟเวอร์)
+export async function wavePeaks(file, perSec = 50) {
+  const rate = 8000, per = Math.round(rate / perSec);
+  const [part] = splitWav(await toWav(file, rate), Infinity);
+  const buf = await part.blob.arrayBuffer();
+  const pcm = new Int16Array(buf, 44, (buf.byteLength - 44) >> 1);
+  const out = [];
+  for (let i = 0; i < pcm.length; i += per) {
+    let m = 0;
+    for (let k = i; k < i + per && k < pcm.length; k++) { const v = Math.abs(pcm[k]); if (v > m) m = v; }
+    out.push(m);
+  }
+  const sorted = out.slice().sort((a, b) => a - b);
+  const ref = Math.max(500, sorted[Math.floor(sorted.length * 0.99)] || 0);
+  return { perSec, data: out.map((v) => Math.min(255, Math.round(Math.sqrt(v / ref) * 255))) };
 }
 
 export function splitWav(bytes, maxBytes = 3.5 * 1024 * 1024) {

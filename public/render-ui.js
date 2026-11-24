@@ -1,5 +1,5 @@
 // โหมด serverless: ปุ่มและแถบความคืบหน้าของงานที่เบราว์เซอร์ลูกค้าทำเอง (แอนิเมชันปรับแต่ง · ฟังเสียง · เบิร์นซับ)
-import { renderAnimation, burnSubtitles, extractSpeech, probeClip, saveBlob, keepClip, loadClip, dropOldClips, supportInfo } from './render-engine.js';
+import { renderAnimation, burnSubtitles, extractSpeech, wavePeaks, probeClip, saveBlob, keepClip, loadClip, dropOldClips, supportInfo } from './render-engine.js';
 
 const $ = (sel, el) => (el || document).querySelector(sel);
 const csrfOf = (el) => el.getAttribute('data-csrf') || (document.querySelector('meta[name="csrf"]') || {}).content || '';
@@ -176,7 +176,13 @@ if (local) {
   const id = local.getAttribute('data-local-clip');
   const video = $('[data-video]');
   const ask = $('[data-clip-ask]');
-  const use = (f) => { clipFile = f; if (video) { video.src = URL.createObjectURL(f); video.load(); } if (ask) ask.hidden = true; };
+  const use = (f) => {
+    clipFile = f;
+    if (video) { video.src = URL.createObjectURL(f); video.load(); }
+    if (ask) ask.hidden = true;
+    // คลื่นเสียงของไทม์ไลน์ คำนวณจากคลิปในเครื่อง (ร้านไม่มีคลิป)
+    if ($('[data-tl-wave]')) wavePeaks(f).then((peaks) => document.dispatchEvent(new CustomEvent('aw:peaks', { detail: peaks }))).catch(() => {});
+  };
   if (ask) $('input[type=file]', ask).addEventListener('change', async (e) => { const f = e.target.files[0]; if (f) { await keepClip(id, f); use(f); } });
   loadClip(id).then((f) => { if (f) use(f); else if (ask) ask.hidden = false; });
 }

@@ -17,3 +17,5 @@ storage/subtitles/
 sample-clips/
 __pycache__/
 public/vendor/
+bench/
+models/

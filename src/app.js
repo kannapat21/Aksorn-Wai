@@ -154,7 +154,7 @@ function createApp(cfg, opts = {}) {
   const transcriber = opts.transcriber || createTranscriber(cfg);
   const subRender = opts.subtitleRenderer || (() => {
     const R = require('../render/subtitles');
-    return { render: (o) => R.renderSubtitled(o), extractAudio: R.extractAudio, probe: R.probe };
+    return { render: (o) => R.renderSubtitled(o), extractAudio: R.extractAudio, probe: R.probe, peaks: R.peaks };
   })();
   const subtitles = createSubtitles({
     db, cfg, log, now, transcriber, renderer: subRender,
@@ -1408,6 +1408,21 @@ function createApp(cfg, opts = {}) {
     const job = ownSub(req);
     if (!job) return res.status(404).json({ error: 'ไม่พบคลิปนี้' });
     res.json({ status: job.status, progress: job.progress, stage: job.stage, position: subtitles.position(job), elapsed: ['transcribing', 'rendering'].includes(job.status) ? Math.max(0, now() - job.updated_at) : 0 });
+  });
+
+  // คลื่นเสียงสำหรับไทม์ไลน์ในหน้าแก้ซับ
+  app.get('/subtitles/:id/peaks', requireUser, async (req, res) => {
+    const job = ownSub(req);
+    res.set('Cache-Control', 'private, no-store');
+    if (!job) return res.status(404).json({ error: 'ไม่พบคลิปนี้' });
+    try {
+      const p = await subtitles.peaksOf(job);
+      if (!p) return res.status(404).json({ error: 'ไม่มีข้อมูลเสียง' });
+      res.json(p);
+    } catch (e) {
+      log(`[subtitles] อ่านคลื่นเสียงไม่สำเร็จ ${job.id}: ${String(e.message).split('\n')[0]}`);
+      res.status(500).json({ error: 'อ่านคลื่นเสียงไม่สำเร็จ' });
+    }
   });
 
   // คลิปต้นฉบับ (ใช้เล่นในหน้าแก้ซับ รองรับเลื่อนเวลาแบบ Range) เจ้าของเท่านั้น

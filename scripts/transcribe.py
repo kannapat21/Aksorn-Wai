@@ -21,6 +21,9 @@ import re
 import sys
 
 MLX_MODEL = "mlx-community/whisper-large-v3-turbo"
+HERE = os.path.dirname(os.path.abspath(__file__))
+# โมเดลภาษาไทยที่แปลงไว้ในเครื่อง (scripts/whisper_convert.py) ถ้ามี จะใช้ก่อนโมเดลทั่วไป
+LOCAL_TH = os.path.join(HERE, "..", "models", "whisper-th")
 FW_MODEL = "large-v3-turbo"
 
 
@@ -36,6 +39,45 @@ def pick_engine(want):
         import faster_whisper  # noqa: F401
         return "faster-whisper"
     raise RuntimeError("unknown engine " + want)
+
+
+def speech_regions(path, duration=None):
+    """ช่วงที่มีเสียงพูด [เริ่ม, จบ, เริ่ม, จบ, ...] จาก ffmpeg silencedetect (เบามาก ไม่ต้องโหลดโมเดล VAD)
+    ข้ามช่วงเงียบยาวๆ ทำให้เร็วขึ้นและลดอาการ "แต่งคำ" ในช่วงที่ไม่มีคนพูด"""
+    import subprocess
+    if duration is None:
+        try:
+            import wave
+            with wave.open(path) as w:
+                duration = w.getnframes() / float(w.getframerate())
+        except Exception:
+            return None
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-af", "silencedetect=noise=-38dB:d=0.8", "-f", "null", "-"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    sil, start = [], None
+    for line in r.stderr.splitlines():
+        m = re.search(r"silence_start: (-?[\d.]+)", line)
+        if m:
+            start = max(0.0, float(m.group(1)))
+        m = re.search(r"silence_end: ([\d.]+)", line)
+        if m and start is not None:
+            sil.append((start, float(m.group(1))))
+            start = None
+    if start is not None:
+        sil.append((start, duration))
+    out, t = [], 0.0
+    for a, b in sil:
+        if a - t > 0.3:
+            out += [round(max(0.0, t - 0.25), 2), round(min(duration, a + 0.25), 2)]
+        t = b
+    if duration - t > 0.3:
+        out += [round(max(0.0, t - 0.25), 2), round(duration, 2)]
+    if not out:
+        return None
+    spoken = sum(out[i + 1] - out[i] for i in range(0, len(out), 2))
+    return out if spoken < duration * 0.9 else None  # แทบไม่มีช่วงเงียบ ก็ไม่ต้องตัด
 
 
 def progress(p):
@@ -62,19 +104,27 @@ class TqdmToProgress:
         pass
 
 
-def run_mlx(audio, model, language, prompt):
+def default_mlx_model():
+    return LOCAL_TH if os.path.exists(os.path.join(LOCAL_TH, "config.json")) else MLX_MODEL
+
+
+def run_mlx(audio, model, language, prompt, vad=True):
     import mlx_whisper
     progress(2)  # โหลดโมเดลแล้ว กำลังเริ่มฟัง
+    clips = speech_regions(audio) if vad else None
     real = sys.stderr
     sys.stderr = TqdmToProgress(real)
     try:
-        kw = dict(path_or_hf_repo=model or MLX_MODEL, language=language, word_timestamps=True,
+        kw = dict(path_or_hf_repo=model or default_mlx_model(), language=language, word_timestamps=True,
                   verbose=False, condition_on_previous_text=False)
         if prompt:
             kw["initial_prompt"] = prompt
+        if clips:
+            kw["clip_timestamps"] = clips
         try:
             r = mlx_whisper.transcribe(audio, hallucination_silence_threshold=2.0, **kw)
         except TypeError:
+            kw.pop("clip_timestamps", None)
             r = mlx_whisper.transcribe(audio, **kw)
     finally:
         sys.stderr = real
@@ -104,6 +154,7 @@ def main():
     ap.add_argument("--language", default="th")
     ap.add_argument("--prompt", default="")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--no-vad", action="store_true")
     a = ap.parse_args()
     try:
         engine = pick_engine(a.engine)
@@ -111,12 +162,12 @@ def main():
         print(json.dumps({"ok": False, "error": str(e)}))
         sys.exit(3)
     if a.check:
-        print(json.dumps({"ok": True, "engine": engine}))
+        print(json.dumps({"ok": True, "engine": engine, "model": (a.model or default_mlx_model()) if engine == "mlx" else (a.model or FW_MODEL)}))
         return
     if not a.audio or not a.out:
         ap.error("ต้องระบุไฟล์เสียงและ --out")
     progress(0)
-    r = run_mlx(a.audio, a.model, a.language, a.prompt) if engine == "mlx" else run_fw(a.audio, a.model, a.language, a.prompt)
+    r = run_mlx(a.audio, a.model, a.language, a.prompt, vad=not a.no_vad) if engine == "mlx" else run_fw(a.audio, a.model, a.language, a.prompt)
     words, segments = [], []
     for s in r.get("segments", []):
         segments.append({"start": s["start"], "end": s["end"], "text": s.get("text", "")})
