@@ -28,13 +28,17 @@ const SUBDIR = fs.mkdtempSync(path.join(os.tmpdir(), 'shop-subs-'));
 // ไฟล์ "คลิป" จำลอง: ข้อมูลคลิปอยู่ในไฟล์เป็น JSON (ตัวตรวจคลิปจำลองอ่านจากไฟล์) ไม่ต้องมี ffmpeg
 const fakeClip = (o = {}) => Buffer.from(JSON.stringify({ ok: true, width: 1080, height: 1920, duration: 16.5, audio: true, hdr: false, ...o }));
 let asrGate = null;
+let asrFail = null;
+let lastAsrTimeout = 0;
 const transcribed = [];
 const rendered = [];
 const transcriber = {
   check: async () => ({ ok: true, engine: 'เทสต์' }),
-  transcribe: async (wav, { onProgress, outFile }) => {
+  transcribe: async (wav, { onProgress, outFile, timeoutMs }) => {
     transcribed.push(wav);
+    lastAsrTimeout = timeoutMs;
     onProgress(50);
+    if (asrFail) { const e = asrFail; asrFail = null; throw e; }
     if (asrGate) await asrGate.promise;
     fs.writeFileSync(outFile, '{}');
     return { engine: 'เทสต์', words: FIX.words };
@@ -395,6 +399,37 @@ test('จำกัดต่อวัน และลบอัตโนมัต�
   assert.equal(jobOf(ids[0]), undefined);
 });
 
+test('ถอดเสียงนานเกินกำหนด → แจ้งลูกค้าเป็นภาษาไทย กดลองใหม่ได้ · หลอดบอกเวลาที่ผ่านไป', async () => {
+  const c = await newUser('slow@example.com');
+  const free = await claim(c);
+  asrGate = {}; asrGate.promise = new Promise((r) => { asrGate.open = r; });
+  const id = await uploadOk(c, free);
+  await new Promise((r) => setTimeout(r, 30));
+  clock += 65 * 1000;
+  const st = await (await c.req(`/subtitles/${id}/status`)).json();
+  assert.equal(st.status, 'transcribing');
+  assert.equal(st.elapsed, 65 * 1000, 'บอกเวลาที่ผ่านไปตั้งแต่เริ่มฟัง');
+  assert.match(await (await c.req(`/subtitles/${id}`)).text(), /data-job-time/);
+  asrGate.open(); asrGate = null;
+  await ctx.subtitles.idle();
+  assert.ok(lastAsrTimeout >= 5 * 60e3 && lastAsrTimeout <= cfg.subtitles.asrTimeoutMin * 60e3, `จำกัดเวลาตามความยาวคลิป (${lastAsrTimeout})`);
+
+  // รอบที่สอง: ตัวถอดเสียงถูกตัดเพราะเกินเวลา
+  asrFail = Object.assign(new Error('python จบด้วย SIGKILL'), {});
+  const id2 = await uploadOk(c, free);
+  await ctx.subtitles.idle();
+  assert.equal(jobOf(id2).status, 'failed');
+  const page = await (await c.req(`/subtitles/${id2}`)).text();
+  assert.match(page, /ถอดเสียงนานเกินกำหนด/);
+  assert.match(page, new RegExp(`action="/subtitles/${id2}/retry"`));
+  assert.doesNotMatch(page, /data-sub-editor/, 'ไม่เปิดหน้าแก้ซับเปล่าๆ');
+  const csrf = await c.csrf();
+  const rr = await c.req(`/subtitles/${id2}/retry`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: `csrf=${encodeURIComponent(csrf)}`, redirect: 'manual' });
+  assert.equal(rr.status, 303);
+  await ctx.subtitles.idle();
+  assert.equal(jobOf(id2).status, 'review', 'ลองใหม่แล้วถอดเสียงสำเร็จ');
+});
+
 test('งานค้างตอนปิดร้านกลับเข้าคิว และระบบถอดเสียงไม่พร้อม → ปิดปุ่มอัป พร้อมข้อความบอกลูกค้า', async () => {
   const { createSubtitles } = require('../src/subtitles');
   const t = Date.now();
@@ -466,4 +501,20 @@ test('เรนเดอร์จริง: เบิร์นซับท่า
     const bright = raw.filter((x) => x > 200).length;
     assert.ok(bright > 500, `มีตัวอักษรในแถบซับ (${bright} จุด)`);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('transcribe.py: บรรทัด PROGRESS ส่งออกได้ระหว่างที่ tqdm ถูกดักไว้ (หลอดต้องขยับ)', (t) => {
+  const { spawnSync } = require('child_process');
+  const code = [
+    'import sys, importlib.util',
+    `spec = importlib.util.spec_from_file_location("t", ${JSON.stringify(path.join(__dirname, '..', 'scripts', 'transcribe.py'))})`,
+    'm = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)',
+    'real = sys.stderr; sys.stderr = m.TqdmToProgress(real)',
+    'sys.stderr.write(" 40%|####\\r"); m.progress(50)',
+    'sys.stderr = real',
+  ].join('\n');
+  const r = spawnSync('python3', ['-I', '-c', code], { encoding: 'utf8' });
+  if (r.error) return t.skip('ไม่มี python3');
+  assert.match(r.stderr, /PROGRESS 43\n/);
+  assert.match(r.stderr, /PROGRESS 50\n/);
 });

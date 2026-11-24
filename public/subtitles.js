@@ -91,7 +91,8 @@
   var poll = $('[data-sub-poll]');
   if (poll) (function () {
     var url = poll.getAttribute('data-sub-poll'), first = poll.getAttribute('data-status');
-    var pbar = $('[data-job-bar]', poll), ppct = $('[data-job-pct]', poll), pstage = $('[data-job-stage]', poll);
+    var pbar = $('[data-job-bar]', poll), ppct = $('[data-job-pct]', poll), pstage = $('[data-job-stage]', poll), ptime = $('[data-job-time]', poll);
+    var mmss = function (ms) { var s = Math.floor(ms / 1000); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); };
     var phase = function (s) { return s === 'queued' || s === 'transcribing' ? 'asr' : s === 'queued_render' || s === 'rendering' ? 'render' : 'idle'; };
     var tick = function () {
       fetch(url, { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
@@ -99,6 +100,7 @@
         pbar.style.width = j.progress + '%';
         ppct.textContent = j.progress + '%';
         pstage.textContent = j.position ? 'รอคิว (ลำดับที่ ' + j.position + ')' : (j.stage || 'กำลังทำ');
+        if (ptime) ptime.textContent = j.elapsed ? '· ผ่านไป ' + mmss(j.elapsed) : '';
         setTimeout(tick, 1500);
       }).catch(function () { setTimeout(tick, 4000); });
     };

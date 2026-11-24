@@ -71,12 +71,12 @@ function createTranscriber(cfg) {
     return inflight;
   }
 
-  async function transcribe(audioFile, { onProgress = () => {}, outFile }) {
+  async function transcribe(audioFile, { onProgress = () => {}, outFile, timeoutMs }) {
     const args = [SCRIPT, audioFile, '--out', outFile, '--engine', S.engine, '--language', 'th'];
     if (S.model) args.push('--model', S.model);
     await run(S.python, args, {
       env,
-      timeoutMs: S.asrTimeoutMin * 60 * 1000,
+      timeoutMs: timeoutMs || S.asrTimeoutMin * 60 * 1000,
       onLine: (line) => { const m = /^PROGRESS (\d+)/.exec(line); if (m) onProgress(Number(m[1])); },
     });
     return JSON.parse(fs.readFileSync(outFile, 'utf8'));

@@ -1219,7 +1219,7 @@ function createApp(cfg, opts = {}) {
     res.set('Cache-Control', 'no-store');
     const job = ownSub(req);
     if (!job) return res.status(404).json({ error: 'ไม่พบคลิปนี้' });
-    res.json({ status: job.status, progress: job.progress, stage: job.stage, position: subtitles.position(job) });
+    res.json({ status: job.status, progress: job.progress, stage: job.stage, position: subtitles.position(job), elapsed: ['transcribing', 'rendering'].includes(job.status) ? Math.max(0, now() - job.updated_at) : 0 });
   });
 
   // คลิปต้นฉบับ (ใช้เล่นในหน้าแก้ซับ รองรับเลื่อนเวลาแบบ Range) เจ้าของเท่านั้น
@@ -1262,6 +1262,13 @@ function createApp(cfg, opts = {}) {
       log('[subtitles] ลูกค้าสั่งสร้างคลิป');
     }
     res.json({ ok: true, cues: r.cues });
+  });
+
+  app.post('/subtitles/:id/retry', requireUser, requireCsrf, (req, res) => {
+    const job = ownSub(req);
+    if (!job) return notFound(req, res, 'ไม่พบคลิปนี้');
+    subtitles.retry(job);
+    res.redirect(303, `/subtitles/${job.id}`);
   });
 
   app.post('/subtitles/:id/edit', requireUser, requireCsrf, (req, res) => {

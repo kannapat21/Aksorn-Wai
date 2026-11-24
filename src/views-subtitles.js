@@ -20,7 +20,7 @@ const MOTION_NOTE = {
 
 const fmtDur = (sec) => { const s = Math.max(0, Math.round(sec)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const hoursLeft = (job, now) => { const ms = job.expires_at - now; return ms <= 0 ? 'กำลังลบ' : ms < 3600e3 ? `${Math.max(1, Math.round(ms / 60e3))} นาที` : `${Math.round(ms / 3600e3)} ชม.`; };
-const badge = (job) => { const [l, c] = STATUS[job.status] || [job.status, '']; const { esc } = h(); return `<span class="badge ${c}">${esc(job.status === 'transcribing' || job.status === 'rendering' ? `${l} ${job.progress}%` : l)}</span>`; };
+const badge = (job) => { const [l, c] = STATUS[job.status] || [job.status, '']; const { esc } = h(); return `<span class="badge ${c}">${esc(l)}</span>`; };
 
 function jobList(jobs, now) {
   const { esc, ICON } = h();
@@ -120,13 +120,25 @@ function subtitleJob({ cfg, user, csrf, job, cues, owned, fonts, layoutInfo, pos
   <div class="sub-wave" aria-hidden="true">${'<i></i>'.repeat(9)}</div>
   <h2>${title}</h2>
   <div class="job-bar"><i data-job-bar style="width:${esc(job.progress)}%"></i></div>
-  <p><b data-job-pct>${esc(job.progress)}%</b> · <span data-job-stage>${position ? `รอคิว (ลำดับที่ ${esc(position)})` : esc(job.stage || 'กำลังเริ่ม')}</span></p>
+  <p><b data-job-pct>${esc(job.progress)}%</b> · <span data-job-stage>${position ? `รอคิว (ลำดับที่ ${esc(position)})` : esc(job.stage || 'กำลังเริ่ม')}</span> <span class="muted" data-job-time></span></p>
   <p class="muted small">${note}</p>
 </div>`;
+  if (job.status === 'failed' && !job.cues_json) {
+    return layout({
+      title: 'ถอดเสียงไม่สำเร็จ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-subtitles',
+      body: `${head}
+<div class="job sub-wait">
+  <h2>ถอดเสียงไม่สำเร็จ</h2>
+  <p>${esc(job.error || 'ถอดเสียงไม่สำเร็จ')}</p>
+  <form method="post" action="/subtitles/${esc(job.id)}/retry"><input type="hidden" name="csrf" value="${esc(csrf)}"><button class="btn primary" type="submit">ลองถอดเสียงใหม่</button></form>
+</div>
+${removeForm(job, csrf)}`,
+    });
+  }
   if (asr) {
     return layout({
       title: 'กำลังฟังเสียง', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-subtitles',
-      body: `${head}${poll('ระบบกำลังฟังเสียงพูดในคลิป', `คลิปยาว ${esc(fmtDur(job.duration))} นาที ใช้เวลาประมาณ ${esc(Math.max(1, Math.round(job.duration / 60 + 0.5)))}–${esc(Math.max(2, Math.round(job.duration / 30 + 1)))} นาที · ปิดหน้านี้ได้ กลับมาที่ "ใส่ซับอัตโนมัติ" ในคลังภายหลัง`)}
+      body: `${head}${poll('ระบบกำลังฟังเสียงพูดในคลิป', `คลิปยาว ${esc(fmtDur(job.duration))} นาที ใช้เวลาประมาณ ${esc(Math.max(1, Math.round(job.duration / 60 + 0.5)))}–${esc(Math.max(3, Math.round(job.duration / 20 + 1)))} นาที (นานขึ้นถ้าเครื่องร้านทำงานหนัก) · ปิดหน้านี้ได้ กลับมาที่ "ใส่ซับอัตโนมัติ" ในคลังภายหลัง`)}
 ${removeForm(job, csrf)}
 <script src="/subtitles.js?v=${V}" defer></script>`,
     });

@@ -39,8 +39,10 @@ def pick_engine(want):
 
 
 def progress(p):
-    sys.stderr.write("PROGRESS %d\n" % max(0, min(100, int(p))))
-    sys.stderr.flush()
+    # เขียนตรงไปที่ stderr จริงเสมอ (ระหว่างถอดเสียง sys.stderr ถูกสลับเป็นตัวแปลง tqdm)
+    err = sys.__stderr__
+    err.write("PROGRESS %d\n" % max(0, min(100, int(p))))
+    err.flush()
 
 
 class TqdmToProgress:
@@ -52,7 +54,7 @@ class TqdmToProgress:
     def write(self, s):
         m = re.findall(r"(\d+)%\|", s)
         if m:
-            progress(int(m[-1]))
+            progress(5 + int(m[-1]) * 0.95)
         return len(s)
 
     def flush(self):
@@ -61,6 +63,7 @@ class TqdmToProgress:
 
 def run_mlx(audio, model, language, prompt):
     import mlx_whisper
+    progress(2)  # โหลดโมเดลแล้ว กำลังเริ่มฟัง
     real = sys.stderr
     sys.stderr = TqdmToProgress(real)
     try:

@@ -76,6 +76,7 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     review: db.prepare("UPDATE subtitle_jobs SET status = 'review', progress = 100, stage = '', cues_json = ?, engine = ?, updated_at = ? WHERE id = ?"),
     done: db.prepare("UPDATE subtitle_jobs SET status = 'done', progress = 100, stage = '', out_bytes = ?, renders = renders + 1, finished_at = ?, updated_at = ? WHERE id = ?"),
     fail: db.prepare("UPDATE subtitle_jobs SET status = 'failed', stage = '', error = ?, updated_at = ?, finished_at = ? WHERE id = ?"),
+    retryAsr: db.prepare("UPDATE subtitle_jobs SET status = 'queued', progress = 0, stage = '', error = NULL, queued_at = ?, updated_at = ? WHERE id = ? AND status = 'failed' AND cues_json IS NULL"),
     backToReview: db.prepare("UPDATE subtitle_jobs SET status = 'review', stage = '', error = NULL, updated_at = ? WHERE id = ? AND status IN ('done','failed') AND cues_json IS NOT NULL"),
     saveCues: db.prepare("UPDATE subtitle_jobs SET cues_json = ?, updated_at = ? WHERE id = ? AND status IN ('review','done','failed')"),
     setStyle: db.prepare(`UPDATE subtitle_jobs SET order_id = @order_id, product_slug = @product_slug, font = @font, fill = @fill, stroke = @stroke,
@@ -173,7 +174,15 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     const wav = path.join(dir, 'audio.wav');
     await renderer.extractAudio(srcOf(job), wav);
     onProgress(8, 'กำลังฟังเสียงพูด');
-    const r = await transcriber.transcribe(wav, { outFile: path.join(dir, 'asr.json'), onProgress: (p) => onProgress(8 + p * 0.9, 'กำลังฟังเสียงพูด') });
+    // จำกัดเวลาตามความยาวคลิป (ราว 6 เท่าของความยาว อย่างน้อย 5 นาที ไม่เกินค่าที่ตั้งไว้) งานที่ค้างจะจบเป็น "ไม่สำเร็จ" ให้กดลองใหม่ได้
+    const timeoutMs = Math.min(cfg.subtitles.asrTimeoutMin * 60e3, Math.max(5 * 60e3, (job.duration || 60) * 6e3));
+    let r;
+    try {
+      r = await transcriber.transcribe(wav, { outFile: path.join(dir, 'asr.json'), timeoutMs, onProgress: (p) => onProgress(8 + p * 0.9, 'กำลังฟังเสียงพูด') });
+    } catch (e) {
+      if (/SIGKILL/.test(String(e.message))) e.userMessage = 'ถอดเสียงนานเกินกำหนด (เครื่องร้านอาจทำงานหนักอยู่) กดลองใหม่ได้เลย';
+      throw e;
+    }
     const fresh = q.get.get(job.id);
     if (!fresh || fresh.status !== 'transcribing') return; // ลูกค้าลบระหว่างทำ
     const maxChars = cuesLib.maxCharsFor(job.width, job.height);
@@ -239,6 +248,12 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     return ok;
   }
 
+  function retry(job) {
+    const ok = q.retryAsr.run(now(), now(), job.id).changes > 0;
+    if (ok) setImmediate(pump);
+    return ok;
+  }
+
   function reopen(job) { return q.backToReview.run(now(), job.id).changes > 0; }
 
   function remove(id, userId) {
@@ -287,7 +302,7 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     get: (id) => q.get.get(String(id || '')),
     byUser: (userId) => q.byUser.all(userId),
     position: (job) => (job.status === 'queued' || job.status === 'queued_render' ? q.position.get(job.queued_at).n + 1 : 0),
-    limits, validateStyle, receive, saveCues, setStyle, queueRender, reopen, remove, sweep, pump, idle,
+    limits, validateStyle, receive, saveCues, setStyle, queueRender, retry, reopen, remove, sweep, pump, idle,
     cuesOf, srcOf, outOf, dirOf, busy: (job) => busyStates.includes(job.status),
     tmpDir: () => { const d = path.join(S.dir, '.incoming'); fs.mkdirSync(d, { recursive: true, mode: 0o700 }); return d; },
   };
