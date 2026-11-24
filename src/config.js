@@ -102,7 +102,8 @@ function loadConfig(overrides = {}) {
     mockAllowPublic: env.MOCK_ALLOW_PUBLIC === '1',
     mail: {
       // ตั้ง SMTP_HOST แล้วไม่ได้ระบุ MAIL_MODE = ส่งจริงผ่าน SMTP · ไม่ได้ตั้ง = พิมพ์ลงหน้าจอ (โหมดทดสอบ)
-      mode: env.MAIL_MODE || (env.SMTP_HOST ? 'smtp' : 'console'),
+      mode: env.MAIL_MODE || (env.BREVO_API_KEY ? 'brevo' : env.SMTP_HOST ? 'smtp' : 'console'),
+      brevoKey: env.BREVO_API_KEY || '',
       from: env.MAIL_FROM || 'no-reply@example.com',
       host: env.SMTP_HOST, port: Number(env.SMTP_PORT || 587), user: env.SMTP_USER, pass: env.SMTP_PASS,
     },
@@ -177,7 +178,8 @@ function loadConfig(overrides = {}) {
     if (cfg.paymentProvider === 'mock') problems.push('ห้ามใช้ PAYMENT_PROVIDER=mock ตอน NODE_ENV=production');
     if (!cfg.baseUrl.startsWith('https://')) problems.push('BASE_URL ต้องเป็น https ตอนขายจริง');
     if (cfg.mail.mode === 'console') problems.push('MAIL_MODE=console ใช้ได้เฉพาะตอนทดสอบ (ยังไม่มี SMTP ให้ตั้ง MAIL_MODE=off)');
-    if (!['console', 'smtp', 'off'].includes(cfg.mail.mode)) problems.push('MAIL_MODE ต้องเป็น console / smtp / off');
+    if (!['console', 'smtp', 'brevo', 'off'].includes(cfg.mail.mode)) problems.push('MAIL_MODE ต้องเป็น console / smtp / brevo / off');
+    if (cfg.mail.mode === 'brevo' && (!cfg.mail.brevoKey || !/@/.test(cfg.mail.from) || /@example\.com/.test(cfg.mail.from))) problems.push('ตั้ง BREVO_API_KEY และ MAIL_FROM (อีเมลผู้ส่งที่ยืนยันกับ Brevo แล้ว)');
     if (cfg.mail.mode === 'smtp' && (!cfg.mail.host || !cfg.mail.user || !cfg.mail.pass)) problems.push('ตั้ง SMTP_HOST / SMTP_USER / SMTP_PASS ให้ครบ');
     if (!cfg.legal.name || !cfg.legal.contactEmail) problems.push('ตั้ง LEGAL_NAME และ CONTACT_EMAIL สำหรับหน้านโยบาย');
   }

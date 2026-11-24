@@ -390,7 +390,8 @@ function createApp(cfg, opts = {}) {
     if (last && now() - last.created_at < 2 * MIN_MS) return done(); // กันกดรัว ส่งซ้ำไม่เกินทุก 2 นาที
     const token = issueEmailToken(user.id, 'reset');
     mailer.send({ to: user.email, subject: `ตั้งรหัสผ่านใหม่ – ${cfg.shopName}`, text: views.resetEmailBody({ cfg, user, url: `${cfg.baseUrl}/reset?t=${token}` }) })
-      .then(done).catch(next);
+      .catch((e) => log(`[mail] ส่งอีเมลตั้งรหัสผ่านไม่สำเร็จ: ${e.message}`)) // ไม่บอกลูกค้า กันเดาได้ว่าอีเมลไหนมีบัญชี
+      .then(done);
   });
 
   function resetRow(token) {
@@ -409,6 +410,7 @@ function createApp(cfg, opts = {}) {
       const token = String(req.body.t || '');
       const password = String(req.body.password || '');
       if (password.length < 8 || password.length > 200) return send(req, res, 'reset', { token, error: 'รหัสผ่านต้องยาว 8–200 ตัวอักษร' }, 400);
+      if (password !== String(req.body.password2 || '')) return send(req, res, 'reset', { token, error: 'รหัสผ่านสองช่องไม่ตรงกัน กรุณากรอกใหม่' }, 400);
       const row = resetRow(token);
       if (!row) return send(req, res, 'message', { title: 'ลิงก์ตั้งรหัสผ่านใช้ไม่ได้', text: 'ลิงก์อาจหมดอายุหรือถูกใช้ไปแล้ว ขอลิงก์ใหม่ได้เลย', action: { href: '/forgot', label: 'ขอลิงก์ใหม่' } }, 400);
       const hash = await auth.hashPassword(password);
@@ -533,6 +535,7 @@ function createApp(cfg, opts = {}) {
       if (email.length > 200 || !EMAIL_RE.test(email)) error = 'กรุณากรอกอีเมลให้ถูกต้อง';
       else if (password.length < 8) error = 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร';
       else if (password.length > 200) error = 'รหัสผ่านยาวเกินไป';
+      else if (password !== String(req.body.password2 || '')) error = 'รหัสผ่านสองช่องไม่ตรงกัน กรุณากรอกใหม่';
       else if (q.userByEmail.get(email)) error = 'อีเมลนี้มีบัญชีอยู่แล้ว กรุณาเข้าสู่ระบบ';
       if (error) return send(req, res, 'signup', { form, next: nextUrl, error }, 400);
       const id = crypto.randomBytes(16).toString('hex');
