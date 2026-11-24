@@ -129,7 +129,8 @@ function loadConfig(overrides = {}) {
     userFontMax: Number(env.USER_FONT_MAX || 20), // ฟอนต์ที่อัปโหลดได้ต่อบัญชี
     // ซับอัตโนมัติ: ลูกค้าอัปคลิป ร้านถอดเสียงด้วย Whisper ในเครื่อง แล้วเบิร์นซับด้วยแบบในคลัง
     subtitles: {
-      engine: env.SUBTITLE_ENGINE || (env.GROQ_API_KEY ? 'groq' : 'auto'), // auto | mlx | faster-whisper | groq | off
+      // auto | mlx | faster-whisper | groq | off · ตั้ง GROQ_API_KEY ไว้ = auto ใช้ Groq (ไม่กินแรมเครื่องร้าน)
+      engine: (!env.SUBTITLE_ENGINE || env.SUBTITLE_ENGINE === 'auto') && env.GROQ_API_KEY ? 'groq' : env.SUBTITLE_ENGINE || 'auto',
       python: env.SUBTITLE_PYTHON || (fs.existsSync(path.join(ROOT, '.venv-stt', 'bin', 'python')) ? path.join(ROOT, '.venv-stt', 'bin', 'python') : 'python3'),
       model: env.SUBTITLE_MODEL || '', // ว่าง = whisper-large-v3-turbo
       dir: writable('storage/subtitles', 'SUBTITLE_DIR'),
@@ -186,7 +187,7 @@ function loadConfig(overrides = {}) {
   if (cfg.renderMode === 'browser' && S.engine !== 'groq' && S.engine !== 'off') problems.push('RENDER_MODE=browser ถอดเสียงในเซิร์ฟเวอร์ไม่ได้: ตั้ง GROQ_API_KEY (หรือ SUBTITLE_ENGINE=off)');
   const ST = cfg.storage;
   if (!['local', 'supabase'].includes(ST.driver)) problems.push('STORAGE_DRIVER ต้องเป็น local หรือ supabase');
-  if (ST.driver === 'supabase' && (!/^https:\/\//.test(ST.supabaseUrl) || !ST.supabaseKey)) problems.push('ตั้ง SUPABASE_URL (https://xxxx.supabase.co) และ SUPABASE_SERVICE_KEY ให้ครบ');
+  if (ST.driver === 'supabase' && (!(cfg.env === 'production' ? /^https:\/\// : /^https?:\/\//).test(ST.supabaseUrl) || !ST.supabaseKey)) problems.push('ตั้ง SUPABASE_URL (https://xxxx.supabase.co) และ SUPABASE_SERVICE_KEY ให้ครบ');
   if (serverless && ST.driver === 'local') problems.push('บน Netlify ต้องเก็บไฟล์สินค้าบน Supabase: ตั้ง SUPABASE_URL และ SUPABASE_SERVICE_KEY');
   if (serverless && /^\//.test(cfg.databaseFile) && !/^[a-z]+:\/\//.test(env.DATABASE_URL || '')) problems.push('บน Netlify ต้องใช้ฐานข้อมูล Turso: ตั้ง DATABASE_URL (libsql://...) และ DATABASE_AUTH_TOKEN');
   if (!(S.maxMb >= 5 && S.maxMb <= 4000)) problems.push('SUBTITLE_MAX_MB ต้องอยู่ระหว่าง 5–4000');

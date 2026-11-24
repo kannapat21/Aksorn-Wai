@@ -108,10 +108,12 @@ async function groqTranscribe(cfg, wavBuf, { offset = 0, fetchImpl = globalThis.
     return fd;
   };
   let r;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  // ลองซ้ำ 1 ครั้งถ้า Groq ยุ่ง (รอไม่เกิน 3 วินาที ฟังก์ชันบน Netlify มีเวลาจำกัด)
+  for (let attempt = 0; attempt < 2; attempt++) {
     r = await fetchImpl(`${G.apiBase}/audio/transcriptions`, { method: 'POST', headers: { Authorization: `Bearer ${G.apiKey}` }, body: form() });
-    if (r.status !== 429 && r.status < 500) break;
-    const wait = Math.min(8, Number(r.headers.get('retry-after')) || 2 * (attempt + 1));
+    if ((r.status !== 429 && r.status < 500) || attempt === 1) break;
+    const ra = r.headers.get('retry-after');
+    const wait = Math.min(3, ra !== null && ra !== '' ? Number(ra) || 0 : 1);
     await new Promise((ok) => setTimeout(ok, wait * 1000));
   }
   if (!r.ok) {

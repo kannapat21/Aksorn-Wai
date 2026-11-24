@@ -1047,7 +1047,22 @@ ${versions.length ? `<section class="lib-versions"><h2>เวอร์ชัน�
   });
 }
 
-function customStatus({ cfg, user, csrf, job, p, position, fonts = cfg.fonts }) {
+// โหมดเบราว์เซอร์: กล่องสร้างไฟล์ในเครื่องลูกค้า (public/render-ui.js)
+function browserJobBox(job, csrf, { mode, auto, title, note }) {
+  return `<div class="job" data-browser-job data-base="/library/custom/${esc(job.id)}" data-mode="${mode}" data-csrf="${esc(csrf)}" ${auto ? 'data-auto' : ''}>
+  <h2>${title}</h2>
+  <div class="job-bar"><i data-bar style="width:0%"></i></div>
+  <p><b data-pct>0%</b> · <span data-stage>${auto ? 'กำลังเริ่ม' : 'พร้อมสร้าง'}</span></p>
+  <p class="error small" data-err role="alert" hidden></p>
+  <button type="button" class="btn primary lg block" data-go ${auto ? 'hidden' : ''}>${ICON.download} ${mode === 'download' ? 'สร้างไฟล์และดาวน์โหลด' : 'สร้างไฟล์'}</button>
+  <p class="muted small">${note}</p>
+  <p data-after hidden><a class="btn ghost" href="/library/custom/${esc(job.id)}">เสร็จแล้ว · กลับไปที่เวอร์ชันนี้</a></p>
+</div>`;
+}
+const BROWSER_NOTE = 'ไฟล์สร้างในเบราว์เซอร์ของคุณเอง (ไม่ต้องรอคิวร้าน) เปิดหน้านี้ค้างไว้จนเสร็จ · ใช้เวลาราว 20 วินาที – 3 นาที ตามความยาวและชนิดไฟล์ · ครั้งแรกต้องโหลดตัวเข้ารหัสราว 32 MB';
+const browserScripts = () => `<script src="/motion.js?v=${V}" defer></script><script src="/subplan.js?v=${V}" defer></script><script type="module" src="/render-ui.js?v=${V}"></script>`;
+
+function customStatus({ cfg, user, csrf, job, p, position, fonts = cfg.fonts, browserMode = false, save = false }) {
   const font = fonts.find((f) => f.id === job.font) || { label: 'ฟอนต์ที่ลบไปแล้ว', weight: 700, id: job.font };
   const ed = cfg.editorsConfig.editors[job.editor] || { label: job.editor };
   const one = JSON.parse(job.files_json || '[]').find((x) => x.format === 'single');
@@ -1056,7 +1071,16 @@ function customStatus({ cfg, user, csrf, job, p, position, fonts = cfg.fonts }) 
     ? `<p class="muted small">ฟอนต์ "${esc(font.label)}" เป็นฟอนต์ที่คุณอัปโหลดเอง ร้านไม่ได้ให้สิทธิ์ใช้งานฟอนต์นี้ กรุณาตรวจว่ามีสิทธิ์ใช้เชิงพาณิชย์</p>`
     : `<p class="muted small">ฟอนต์ ${esc(font.label)} ใช้สัญญา SIL Open Font License ใช้เชิงพาณิชย์ได้ · <a href="/fonts/thai/${esc(font.id)}/OFL.txt">อ่านสัญญาฟอนต์</a></p>`;
   const outlineLabel = { none: 'ไม่มีขอบ', thin: 'ขอบบาง', medium: 'ขอบกลาง', thick: 'ขอบหนา' }[job.outline] || job.outline;
-  const body = job.status === 'done' ? (one ? `
+  const body = browserMode && job.status !== 'done'
+    ? browserJobBox(job, csrf, { mode: 'create', auto: job.status !== 'failed', title: job.status === 'failed' ? 'สร้างไฟล์ไม่สำเร็จ ลองอีกครั้งได้' : 'กำลังสร้างไฟล์ในเครื่องของคุณ', note: BROWSER_NOTE })
+    : browserMode && one && one.browser ? `
+<section class="ready-box">
+  <div class="ready-head">${ICON.check}<div><h2>${save ? 'กำลังสร้างไฟล์ให้อีกครั้ง' : 'สร้างเสร็จแล้ว'}</h2><p class="muted small">${esc(fileLabel(cfg, fmt))} · ${esc(SIZE_LABEL[job.size] || '')} · ${esc(job.seconds)} วินาที · ใช้กับ ${esc(ed.label)}</p></div></div>
+  ${browserJobBox(job, csrf, { mode: 'download', auto: save, title: 'ดาวน์โหลดอีกครั้ง', note: 'ร้านเก็บแค่ "สูตร" ของเวอร์ชันนี้ กดแล้วเบราว์เซอร์จะสร้างไฟล์เดิมให้ใหม่ทันที (นับเป็น 1 ครั้งในโควตาดาวน์โหลดต่อวัน)' })}
+</section>
+${ed.guide ? howToBlock(cfg, ed, fmt) : ''}
+${fontNote}`
+    : job.status === 'done' ? (one ? `
 <section class="ready-box">
   <div class="ready-head">${ICON.check}<div><h2>พร้อมดาวน์โหลด</h2><p class="muted small">${esc(fileLabel(cfg, fmt))} · ${esc(SIZE_LABEL[job.size] || '')} · ${esc(job.seconds)} วินาที · ใช้กับ ${esc(ed.label)}</p></div></div>
   <a class="btn primary lg block" href="/library/custom/${esc(job.id)}/download">${ICON.download} ดาวน์โหลด · ${fmtBytes(one.bytes)}</a>
@@ -1093,7 +1117,8 @@ ${body}
 ${job.status === 'done' || job.status === 'failed' ? `<form method="post" action="/library/custom/${esc(job.id)}/delete" class="danger-zone" data-confirm-title="ลบเวอร์ชันนี้ออกจากคลัง?" data-confirm="ไฟล์จะถูกลบถาวร กู้คืนไม่ได้" data-confirm-ok="ลบเลย" data-confirm-danger>
   <input type="hidden" name="csrf" value="${esc(csrf)}">
   <button type="submit" class="linklike danger">ลบเวอร์ชันนี้</button>
-</form>` : ''}`,
+</form>` : ''}
+${browserMode ? browserScripts() : ''}`,
   });
 }
 
@@ -1480,7 +1505,7 @@ ${cfg.baseUrl}/library/${order.id}
 — ${cfg.shopName} · แอนิเมชันข้อความไทย`;
 }
 
-module.exports = { contactPage, transferPay, adminTransfers, transferReceivedEmail, transferRejectedEmail, adminTransferEmail, bahtExact, omisePay, account, forgot, reset, legalPage, verifyEmailBody, resetEmailBody, home, product, mockPay, orderStatus, library, libraryItem, customize, customStatus, presetsPage, fontsPage, login, signup, licensePage, message, admin, emailBody, esc, baht, LICENSE };
+module.exports = { browserScripts, contactPage, transferPay, adminTransfers, transferReceivedEmail, transferRejectedEmail, adminTransferEmail, bahtExact, omisePay, account, forgot, reset, legalPage, verifyEmailBody, resetEmailBody, home, product, mockPay, orderStatus, library, libraryItem, customize, customStatus, presetsPage, fontsPage, login, signup, licensePage, message, admin, emailBody, esc, baht, LICENSE };
 // ตัวช่วยสำหรับหน้าซับอัตโนมัติ (src/views-subtitles.js)
-module.exports._h = { layout, esc, ICON, V, fontFaces, fmtBytes, thDate, FILL_SWATCHES, STROKE_SWATCHES };
+module.exports._h = { browserScripts, layout, esc, ICON, V, fontFaces, fmtBytes, thDate, FILL_SWATCHES, STROKE_SWATCHES };
 Object.assign(module.exports, require('./views-subtitles'));

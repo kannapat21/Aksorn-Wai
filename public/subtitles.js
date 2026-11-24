@@ -383,6 +383,12 @@
       saving = null;
       if (!res.ok) { setErr(res.j.error || 'บันทึกไม่สำเร็จ'); saveState.textContent = 'ยังไม่ได้บันทึก'; return false; }
       setErr('');
+      if (render && res.j.spec) {
+        // โหมดเบราว์เซอร์: เครื่องนี้สร้างคลิปเอง (public/render-ui.js)
+        return new Promise(function (ok) {
+          document.dispatchEvent(new CustomEvent('aw:render-subtitles', { detail: { spec: res.j.spec, csrf: D.csrf, done: function (r) { saveState.textContent = r ? 'สร้างคลิปเสร็จแล้ว' : 'บันทึกแล้ว'; ok(r ? 'browser' : false); } } }));
+        });
+      }
       if (render) return true;
       // รับเวลาคำที่ร้านคำนวณ (ถ้าระหว่างนั้นไม่ได้แก้เพิ่ม)
       if (!pending && sentFor.length === cues.length && res.j.cues) {
@@ -400,6 +406,7 @@
     if (!cues.length) return;
     renderBtn.classList.add('loading'); renderBtn.disabled = true;
     save(true).then(function (ok) {
+      if (ok === 'browser' || (ok === false && D.browser)) { renderBtn.classList.remove('loading'); renderBtn.disabled = false; return; }
       if (ok) { try { sessionStorage.setItem('noIntroOnce', '1'); } catch (e) { /* ข้าม */ } location.reload(); return; }
       renderBtn.classList.remove('loading'); renderBtn.disabled = false;
     });

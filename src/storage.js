@@ -14,7 +14,8 @@ function createStorage(cfg, opts = {}) {
   if (S.driver !== 'supabase') return { driver: 'local' };
   const fetchImpl = opts.fetch || globalThis.fetch;
   const base = `${S.supabaseUrl}/storage/v1`;
-  const headers = { Authorization: `Bearer ${S.supabaseKey}`, apikey: S.supabaseKey };
+  // คีย์แบบใหม่ (sb_secret_…) ส่งใน apikey อย่างเดียว · คีย์เก่า service_role (JWT) ส่งทั้งสองหัว
+  const headers = String(S.supabaseKey).startsWith('sb_') ? { apikey: S.supabaseKey } : { Authorization: `Bearer ${S.supabaseKey}`, apikey: S.supabaseKey };
   const enc = (key) => key.split('/').map(encodeURIComponent).join('/');
 
   async function call(method, url, body, extra = {}) {

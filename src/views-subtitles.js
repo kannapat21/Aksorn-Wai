@@ -36,9 +36,10 @@ function jobList(jobs, now) {
     </li>`).join('')}</ul></section>`;
 }
 
-function subtitlesHome({ cfg, user, csrf, owned, jobs, limits, ready, now, picked }) {
+function subtitlesHome({ cfg, user, csrf, owned, jobs, limits, ready, now, picked, browserMode = false }) {
   const { layout, esc, ICON, V } = h();
   const S = cfg.subtitles;
+  const bm = Boolean(browserMode);
   const left = limits.maxPerDay > 0 ? Math.max(0, limits.maxPerDay - limits.today) : Infinity;
   const busy = limits.active > 0;
   const can = ready.ok && owned.length > 0 && left > 0 && !busy;
@@ -72,13 +73,13 @@ function subtitlesHome({ cfg, user, csrf, owned, jobs, limits, ready, now, picke
 </div>
 ${state}
 ${owned.length ? `
-<form class="sub-new" data-sub-new data-csrf="${esc(csrf)}" data-max-mb="${esc(S.maxMb)}" data-max-sec="${esc(S.maxSeconds)}" ${can ? '' : 'data-off'}>
+<form class="sub-new" data-sub-new ${bm ? 'data-browser' : ''} data-csrf="${esc(csrf)}" data-max-mb="${esc(S.maxMb)}" data-max-sec="${esc(S.maxSeconds)}" ${can ? '' : 'data-off'}>
   <fieldset class="cz-field">
     <legend>1. เลือกแบบตัวอักษรจากคลัง <span class="muted small">เปลี่ยนฟอนต์ สี และแบบได้อีกทีตอนตรวจคำ</span></legend>
     <div class="sub-styles">${cards}</div>
   </fieldset>
   <fieldset class="cz-field">
-    <legend>2. อัปโหลดคลิป</legend>
+    <legend>2. ${bm ? 'เลือกคลิป <span class="muted small">คลิปอยู่ในเครื่องคุณ ไม่ถูกอัปโหลด ร้านรับแค่เสียงพูดไปถอดเป็นข้อความ</span>' : 'อัปโหลดคลิป'}</legend>
     <label class="sub-drop" data-drop>
       <input type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.m4v,.webm,.mkv" data-file ${can ? '' : 'disabled'}>
       <span class="sub-drop-icon">${ICON.film}</span>
@@ -100,11 +101,12 @@ ${owned.length ? `
   <p><a class="btn primary" href="/#catalog">เลือกแบบตัวอักษร</a></p>
 </div>`}
 ${jobList(jobs, now)}
-<script src="/subtitles.js?v=${V}" defer></script>`,
+<script src="/subtitles.js?v=${V}" defer></script>
+${bm ? h().browserScripts() : ''}`,
   });
 }
 
-function subtitleJob({ cfg, user, csrf, job, cues, owned, fonts, layoutInfo, position, now }) {
+function subtitleJob({ cfg, user, csrf, job, cues, owned, fonts, layoutInfo, position, now, save = false }) {
   const { layout, esc, ICON, V, fontFaces, fmtBytes, FILL_SWATCHES, STROKE_SWATCHES } = h();
   const busy = ['queued', 'transcribing', 'queued_render', 'rendering'].includes(job.status);
   const asr = job.status === 'queued' || job.status === 'transcribing';
@@ -123,6 +125,46 @@ function subtitleJob({ cfg, user, csrf, job, cues, owned, fonts, layoutInfo, pos
   <p><b data-job-pct>${esc(job.progress)}%</b> · <span data-job-stage>${position ? `รอคิว (ลำดับที่ ${esc(position)})` : esc(job.stage || 'กำลังเริ่ม')}</span> <span class="muted" data-job-time></span></p>
   <p class="muted small">${note}</p>
 </div>`;
+  const bm = Boolean(job.browser);
+  const clipAsk = (text) => `<label class="sub-drop" data-clip-ask hidden><input type="file" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv"><span class="sub-drop-icon">${ICON.film}</span><b>${text}</b><small class="muted">${esc(job.src_name || '')} · ร้านไม่ได้เก็บคลิปของคุณไว้</small></label>`;
+  if (bm && (job.status === 'transcribing' || (job.status === 'failed' && !job.cues_json))) {
+    return layout({
+      title: 'กำลังฟังเสียง', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-subtitles',
+      body: `${head}
+<div class="job sub-wait" data-sub-resume data-id="${esc(job.id)}" data-csrf="${esc(csrf)}">
+  <div class="sub-wave" aria-hidden="true">${'<i></i>'.repeat(9)}</div>
+  <h2>${job.status === 'failed' ? esc(job.error || 'ฟังเสียงไม่สำเร็จ') : 'ฟังเสียงพูดต่อจากคลิปในเครื่องคุณ'}</h2>
+  <div class="job-bar"><i data-bar style="width:0%"></i></div>
+  <p><b data-pct>0%</b> · <span data-stage>กำลังหาคลิปในเครื่อง</span></p>
+  <p class="error small" data-err role="alert" hidden></p>
+  <label class="sub-drop" data-pick hidden><input type="file" accept="video/*,.mp4,.mov,.m4v,.webm,.mkv"><span class="sub-drop-icon">${ICON.film}</span><b>เลือกคลิปเดิมอีกครั้ง (${esc(job.src_name || 'คลิป')})</b><small class="muted">เปิดหน้านี้ค้างไว้จนเสร็จ</small></label>
+</div>
+${removeForm(job, csrf)}
+${h().browserScripts()}`,
+    });
+  }
+  if (bm && job.status === 'done') {
+    return layout({
+      title: 'คลิปพร้อมซับ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-subtitles',
+      body: `${head}
+<section class="ready-box sub-result" data-burn-again="${esc(job.id)}" data-csrf="${esc(csrf)}" ${save ? 'data-auto' : ''}>
+  <div class="ready-head">${ICON.check}<div><h2>สร้างคลิปพร้อมซับแล้ว</h2><p class="muted small">MP4 ${esc(layoutInfo.w)}×${esc(layoutInfo.h)} · ใช้แบบ "${esc(p.title || '')}" · คลิปบันทึกลงเครื่องคุณตอนสร้างเสร็จ</p></div></div>
+  ${clipAsk('เลือกคลิปต้นฉบับเพื่อสร้างไฟล์อีกครั้ง')}
+  <div class="job-bar"><i data-bar style="width:0%"></i></div>
+  <p class="small"><b data-pct>0%</b> · <span data-stage>กดปุ่มด้านล่างเพื่อสร้างไฟล์อีกครั้ง</span></p>
+  <p class="error small" data-err role="alert" hidden></p>
+  <video class="sub-out ${job.height > job.width ? 'v' : 'h'}" data-out-video controls playsinline hidden></video>
+  <div class="dl-pair">
+    <button type="button" class="btn primary lg block" data-go>${ICON.download} สร้างและดาวน์โหลด MP4 อีกครั้ง</button>
+    <a class="btn block" href="/subtitles/${esc(job.id)}/srt">${ICON.download} ไฟล์ซับ .srt</a>
+  </div>
+  <form method="post" action="/subtitles/${esc(job.id)}/edit"><input type="hidden" name="csrf" value="${esc(csrf)}"><button class="btn ghost block" type="submit">${ICON.edit} แก้ซับหรือเปลี่ยนแบบ แล้วสร้างใหม่</button></form>
+</section>
+${removeForm(job, csrf)}
+<span data-local-clip="${esc(job.id)}" hidden></span>
+${h().browserScripts()}`,
+    });
+  }
   if (job.status === 'failed' && !job.cues_json) {
     return layout({
       title: 'ถอดเสียงไม่สำเร็จ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-subtitles',
@@ -166,7 +208,7 @@ ${removeForm(job, csrf)}
     style: { order: job.order_id, font: job.font, fill: job.fill, stroke: job.stroke, outline: job.outline, shadow: Boolean(job.shadow), size: job.size, position: job.position },
     owned: owned.map(({ order, p: pp }) => ({ id: order.id, title: pp.title, motion: pp.motion })),
     fonts: fonts.map((f) => ({ id: f.id, weight: f.weight, chars: f.chars || null, label: f.label })),
-    csrf, disabled: rendering,
+    csrf, disabled: rendering, browser: bm,
   };
   const json = JSON.stringify(data).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
   const swatches = (name, list, cur) => list.map((c) => `<button type="button" class="swatch${c === cur ? ' active' : ''}" data-swatch="${name}" data-color="${c}" style="--c:${c}" aria-label="สี ${c}"></button>`).join('');
@@ -185,10 +227,11 @@ ${!rendering && !cues.length ? `<div class="note">${ICON.shield}<span><b>ระ�
 <div class="sub-editor${rendering ? ' is-off' : ''}" data-sub-editor>
   <div class="sub-player-col">
     <div class="sub-player" data-player style="aspect-ratio:${esc(layoutInfo.w)} / ${esc(layoutInfo.h)}">
-      <video src="/subtitles/${esc(job.id)}/source" playsinline preload="metadata" data-video></video>
+      <video ${bm ? '' : `src="/subtitles/${esc(job.id)}/source" `}playsinline preload="metadata" data-video></video>
       <div class="sub-band" data-band aria-hidden="true"><div class="cz-text sub-text" data-sub-text><span class="fill"></span></div></div>
       <button type="button" class="sub-play" data-play aria-label="เล่น/หยุด">${ICON.play}</button>
     </div>
+    ${bm ? `<div data-local-clip="${esc(job.id)}">${clipAsk('เลือกคลิปเดิมเพื่อดูตัวอย่างและสร้างคลิป')}</div>` : ''}
     <div class="sub-scrub"><input type="range" min="0" max="${esc(Math.round(job.duration * 100))}" value="0" step="1" data-scrub aria-label="เลื่อนเวลา"><span data-clock>0:00</span></div>
     <div data-filters></div>
     <p class="muted small">ตัวอย่างนี้ใช้ท่าเคลื่อนไหวเดียวกับไฟล์จริง${p.motion === 'kinetic' ? ' · คำเด้งตามจังหวะพูด' : ''}</p>
@@ -231,10 +274,18 @@ ${!rendering && !cues.length ? `<div class="note">${ICON.shield}<span><b>ระ�
   <button type="button" class="btn primary" data-render ${rendering ? 'disabled' : ''}>${ICON.bolt} สร้างคลิปพร้อมซับ</button>
 </div>
 <p class="error" data-err role="alert" hidden></p>
+${bm ? `<section class="ready-box sub-result" data-burn hidden>
+  <div class="job-bar"><i data-bar style="width:0%"></i></div>
+  <p class="small"><b data-pct>0%</b> · <span data-stage>กำลังเริ่ม</span></p>
+  <p class="error small" data-err role="alert" hidden></p>
+  <p class="muted small">สร้างในเบราว์เซอร์ของคุณ เปิดหน้านี้ค้างไว้จนเสร็จ (คลิป 1 นาทีใช้ราว 1–3 นาที)</p>
+  <video class="sub-out ${job.height > job.width ? 'v' : 'h'}" data-out-video controls playsinline hidden></video>
+</section>` : ''}
 ${removeForm(job, csrf)}
 <script type="application/json" id="sub-data">${json}</script>
 <script src="/motion.js?v=${V}" defer></script>
-<script src="/subtitles.js?v=${V}" defer></script>`,
+<script src="/subtitles.js?v=${V}" defer></script>
+${bm ? `<script src="/subplan.js?v=${V}" defer></script><script type="module" src="/render-ui.js?v=${V}"></script>` : ''}`,
   });
 }
 

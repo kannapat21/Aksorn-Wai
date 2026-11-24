@@ -35,6 +35,14 @@ function createApp(cfg, opts = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');
+  // Netlify: คำขอผ่าน CDN ของ Netlify เสมอ IP จริงของลูกค้าอยู่ใน x-nf-client-connection-ip (ใช้จำกัดจำนวนครั้ง/กันเดารหัส)
+  if (cfg.serverless) {
+    app.use((req, res, next) => {
+      const ip = req.get('x-nf-client-connection-ip') || String(req.get('x-forwarded-for') || '').split(',')[0].trim();
+      if (ip) Object.defineProperty(req, 'ip', { value: ip, configurable: true });
+      next();
+    });
+  }
 
   const productsBySlug = new Map(cfg.products.map((p) => [p.slug, p]));
 

@@ -8,6 +8,7 @@
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 
+const PLAYWRIGHT = 'playwright';
 function tryRequire(name) {
   try { return require(name); } catch { return null; }
 }
@@ -34,7 +35,7 @@ const CHROME_PATHS = [
 
 // เปิดเบราว์เซอร์สำหรับวาดเฟรม: ใช้ Chromium ของ Playwright ถ้ามี ไม่งั้นใช้ Google Chrome ในเครื่อง
 async function launchBrowser() {
-  const { chromium } = require('playwright');
+  const { chromium } = require(PLAYWRIGHT); // ชื่อในตัวแปร: ไม่ให้ตัวรวมไฟล์ของ Netlify ดึง Playwright เข้าไปในฟังก์ชัน
   try {
     return await chromium.launch();
   } catch (e) {
@@ -54,7 +55,7 @@ function checkRenderTools() {
   } else {
     result.ffmpeg.missing = ['ffmpeg'];
   }
-  const pw = tryRequire('playwright');
+  const pw = tryRequire(PLAYWRIGHT);
   if (pw) {
     let exe = '';
     try { exe = pw.chromium.executablePath(); } catch { exe = ''; }
