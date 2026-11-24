@@ -9,20 +9,23 @@ const fs = require('fs');
 const { spawnSync } = require('child_process');
 
 const PLAYWRIGHT = 'playwright';
+// ชื่อในตัวแปร: ตัวรวมไฟล์ของ Netlify จะไม่ดึง ffmpeg/ffprobe (400MB+) เข้าไปในฟังก์ชัน
+const FFMPEG_PKG = 'ffmpeg-static';
+const FFPROBE_PKG = 'ffprobe-static';
 function tryRequire(name) {
   try { return require(name); } catch { return null; }
 }
 
 function ffmpegPath() {
   if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
-  const s = tryRequire('ffmpeg-static');
+  const s = tryRequire(FFMPEG_PKG);
   if (typeof s === 'string' && fs.existsSync(s)) return s;
   return 'ffmpeg';
 }
 
 function ffprobePath() {
   if (process.env.FFPROBE_PATH) return process.env.FFPROBE_PATH;
-  const s = tryRequire('ffprobe-static');
+  const s = tryRequire(FFPROBE_PKG);
   if (s && s.path && fs.existsSync(s.path)) return s.path;
   return 'ffprobe';
 }
