@@ -131,7 +131,7 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     const outline = String(body.outline || 'medium');
     if (!/^#[0-9a-f]{6}$/.test(fill)) return { error: 'สีตัวอักษรไม่ถูกต้อง' };
     if (!(outline in OUTLINES)) return { error: 'ความหนาขอบไม่ถูกต้อง' };
-    const size = SIZES.includes(body.size) ? body.size : 'md';
+    const size = String(require('../public/subplan').sizePct(String(body.size || 'md')));
     const position = POSITIONS.includes(body.position) ? body.position : 'bottom';
     const shadow = body.shadow === true || body.shadow === '1' || body.shadow === 'on' || body.shadow === 1;
     return {

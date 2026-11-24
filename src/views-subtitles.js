@@ -204,8 +204,7 @@ ${removeForm(job, csrf)}
   const rendering = job.status === 'queued_render' || job.status === 'rendering';
   const data = {
     id: job.id, duration: job.duration, width: layoutInfo.w, height: layoutInfo.h, cues,
-    sizes: layoutInfo.sizes, positions: layoutInfo.positions,
-    style: { order: job.order_id, font: job.font, fill: job.fill, stroke: job.stroke, outline: job.outline, shadow: Boolean(job.shadow), size: job.size, position: job.position },
+    style: { order: job.order_id, font: job.font, fill: job.fill, stroke: job.stroke, outline: job.outline, shadow: Boolean(job.shadow), size: String(sizePct(job.size)), position: job.position },
     owned: owned.map(({ order, p: pp }) => ({ id: order.id, title: pp.title, motion: pp.motion })),
     fonts: fonts.map((f) => ({ id: f.id, weight: f.weight, chars: f.chars || null, label: f.label })),
     csrf, disabled: rendering, browser: bm,
@@ -213,7 +212,7 @@ ${removeForm(job, csrf)}
   const json = JSON.stringify(data).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
   const swatches = (name, list, cur) => list.map((c) => `<button type="button" class="swatch${c === cur ? ' active' : ''}" data-swatch="${name}" data-color="${c}" style="--c:${c}" aria-label="สี ${c}"></button>`).join('');
   const seg = (name, opts, cur) => `<div class="seg seg-wide">${opts.map(([k, l]) => `<label class="seg-opt"><input type="radio" name="${name}" value="${k}" ${cur === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>`;
-  const fontOpts = fonts.map((f) => `<option value="${esc(f.id)}" ${f.id === job.font ? 'selected' : ''}>${esc(f.label)}${f.user ? ' (ของฉัน)' : ''}</option>`).join('');
+  const fontOpts = fonts.map((f) => `<label class="font-opt"><input type="radio" name="font" value="${esc(f.id)}" ${f.id === job.font ? 'checked' : ''}><span class="font-sample" style="font-family:'tt-${esc(f.id)}';font-weight:${esc(f.weight || 700)}">ซับไทย สวัสดี</span><small>${esc(f.label)}${f.user ? ' · <b>ของฉัน</b>' : ''}</small></label>`).join('');
   const styleCards = owned.map(({ order, p: pp }) => `<label class="sub-chip"><input type="radio" name="order" value="${esc(order.id)}" ${order.id === job.order_id ? 'checked' : ''}><span>${esc(pp.title)}</span></label>`).join('');
 
   return layout({
@@ -232,78 +231,85 @@ ${!rendering && !cues.length ? `<div class="note">${ICON.shield}<span><b>ระ�
       <button type="button" class="sub-play" data-play aria-label="เล่น/หยุด">${ICON.play}</button>
     </div>
     ${bm ? `<div data-local-clip="${esc(job.id)}">${clipAsk('เลือกคลิปเดิมเพื่อดูตัวอย่างและสร้างคลิป')}</div>` : ''}
-    <div class="sub-tl" data-tl>
-      <div class="sub-tl-bar">
-        <button type="button" class="sub-mini sub-tl-play" data-tl-play aria-label="เล่น/หยุด">${ICON.play}</button>
-        <span class="sub-tl-clock" data-clock>0:00</span>
-        <button type="button" class="sub-mini" data-tl-split title="แบ่งบรรทัดตรงเส้นเวลา (S)" ${rendering ? 'disabled' : ''}>✂ แบ่ง</button>
-        <button type="button" class="sub-mini" data-tl-undo title="เลิกทำ (Ctrl/⌘+Z)" disabled>↶ เลิกทำ</button>
-        <span class="sub-tl-zoom"><button type="button" class="sub-mini" data-tl-zoom="-1" aria-label="ย่อไทม์ไลน์">−</button><button type="button" class="sub-mini" data-tl-zoom="1" aria-label="ขยายไทม์ไลน์">+</button></span>
-      </div>
-      <div class="sub-tl-scroll" data-tl-scroll>
-        <div class="sub-tl-track" data-tl-track role="slider" tabindex="0" aria-label="ไทม์ไลน์ เลื่อนเวลา" aria-valuemin="0" aria-valuemax="${esc(Math.round(job.duration))}" aria-valuenow="0">
-          <div class="sub-tl-cues" data-tl-cues></div>
-          <div class="sub-tl-head" data-tl-head></div>
-        </div>
-        <canvas class="sub-tl-wave" data-tl-wave aria-hidden="true"></canvas>
-      </div>
-      <p class="muted small sub-tl-hint">ลากขอบบล็อกเพื่อปรับเวลาเริ่ม/จบ · ลากกลางบล็อกเพื่อเลื่อนทั้งบรรทัด · <kbd>S</kbd> แบ่ง · <kbd>Delete</kbd> ลบ · <kbd>←</kbd><kbd>→</kbd> เลื่อนทีละ 0.1 วิ</p>
+  </div>
+  <div class="sub-tl" data-tl>
+    <div class="sub-tl-bar">
+      <button type="button" class="sub-mini sub-tl-play" data-tl-play aria-label="เล่น/หยุด">${ICON.play}</button>
+      <span class="sub-tl-clock" data-clock>0:00</span>
+      <button type="button" class="sub-mini" data-tl-undo title="เลิกทำ (Ctrl/⌘+Z)" aria-label="เลิกทำ" disabled>↶</button>
+      <span class="sub-tl-zoom"><button type="button" class="sub-mini" data-tl-zoom="-1" aria-label="ย่อไทม์ไลน์">−</button><button type="button" class="sub-mini" data-tl-zoom="1" aria-label="ขยายไทม์ไลน์">+</button></span>
     </div>
-    <div data-filters></div>
-    <p class="muted small">ตัวอย่างนี้ใช้ท่าเคลื่อนไหวเดียวกับไฟล์จริง${p.motion === 'kinetic' ? ' · คำเด้งตามจังหวะพูด' : ''}</p>
-  </div>
-  <div class="sub-side">
-    <details class="sub-look" open>
-      <summary><b>หน้าตาซับ</b><span class="muted small" data-look-sum></span></summary>
-      <fieldset class="cz-field" ${rendering ? 'disabled' : ''} data-look>
-        <legend class="sr-only">หน้าตาซับ</legend>
-        <p class="sub-label">แบบในคลัง</p>
-        <div class="sub-chips">${styleCards}</div>
-        <p class="muted small" data-motion-note></p>
-        <label class="sub-label" for="sub-font">ฟอนต์</label>
-        <select id="sub-font" name="font" class="sub-select">${fontOpts}</select>
-        <p class="sub-label">สีตัวอักษร</p>
-        <div class="swatches">${swatches('fill', FILL_SWATCHES, job.fill)}<label class="swatch-pick"><input type="color" name="fill" value="${esc(job.fill)}" aria-label="เลือกสีเอง"><span>เลือกเอง</span></label></div>
-        <p class="sub-label">ขอบ</p>
-        ${seg('outline', [['none', 'ไม่มี'], ['thin', 'บาง'], ['medium', 'กลาง'], ['thick', 'หนา']], job.outline)}
-        <div class="swatches" data-stroke-row>${swatches('stroke', STROKE_SWATCHES, job.stroke)}<label class="swatch-pick"><input type="color" name="stroke" value="${esc(job.stroke)}" aria-label="เลือกสีขอบเอง"><span>เลือกเอง</span></label></div>
-        <label class="toggle sub-toggle"><input type="checkbox" name="shadow" value="1" ${job.shadow ? 'checked' : ''}><span class="toggle-ui"></span><span>เงาใต้ตัวอักษร <small class="muted">(อ่านง่ายบนพื้นสว่าง)</small></span></label>
-        <p class="sub-label">ขนาด</p>
-        ${seg('size', [['sm', 'เล็ก'], ['md', 'กลาง'], ['lg', 'ใหญ่']], job.size)}
-        <p class="sub-label">ตำแหน่ง</p>
-        ${seg('position', [['top', 'บน'], ['middle', 'กลาง'], ['bottom', 'ล่าง']], job.position)}
-      </fieldset>
-    </details>
-    <section class="sub-cues" aria-label="ข้อความซับ">
-      <div class="sub-cues-head">
-        <b>ข้อความซับ <span class="muted small" data-count></span></b>
-        <span class="muted small">แตะเวลาเพื่อไปที่ช่วงนั้น · แก้คำที่ผิดได้เลย</span>
+    <div class="sub-tl-scroll" data-tl-scroll>
+      <div class="sub-tl-track" data-tl-track role="slider" tabindex="0" aria-label="ไทม์ไลน์ เลื่อนเวลา" aria-valuemin="0" aria-valuemax="${esc(Math.round(job.duration))}" aria-valuenow="0">
+        <div class="sub-tl-cues" data-tl-cues></div>
+        <div class="sub-tl-head" data-tl-head></div>
       </div>
-      <ol class="sub-list" data-list></ol>
-      <button type="button" class="btn small" data-add ${rendering ? 'disabled' : ''}>+ เพิ่มบรรทัดตรงเวลาที่เล่นอยู่</button>
-    </section>
+      <canvas class="sub-tl-wave" data-tl-wave aria-hidden="true"></canvas>
+    </div>
+    <div class="sub-tl-tools" ${rendering ? 'hidden' : ''}>
+      <button type="button" class="sub-tool" data-tl-edit>✎ แก้คำ</button>
+      <button type="button" class="sub-tool" data-tl-split title="แบ่งบรรทัดตรงเส้นเวลา (S)">✂ แบ่ง</button>
+      <button type="button" class="sub-tool" data-tl-del>🗑 ลบ</button>
+      <button type="button" class="sub-tool" data-add>+ เพิ่ม</button>
+    </div>
+    <p class="muted small sub-tl-hint">แตะบล็อกซับเพื่อเลือก แตะซ้ำ (หรือกด ✎) เพื่อพิมพ์แก้ในบล็อกได้เลย · ลากขอบบล็อกเพื่อปรับเวลาเริ่ม/จบ</p>
   </div>
+  <div data-filters></div>
+  <div class="sub-go">
+    <button type="button" class="btn primary lg block" data-render ${rendering ? 'disabled' : ''}>${ICON.bolt} สร้างคลิปพร้อมซับ</button>
+    <p class="small muted sub-save" data-save-state role="status">บันทึกอัตโนมัติ</p>
+    <p class="error" data-err role="alert" hidden></p>
+${bm ? `    <section class="ready-box sub-result" data-burn hidden>
+      <div class="job-bar"><i data-bar style="width:0%"></i></div>
+      <p class="small"><b data-pct>0%</b> · <span data-stage>กำลังเริ่ม</span></p>
+      <p class="error small" data-err role="alert" hidden></p>
+      <p class="muted small">สร้างในเบราว์เซอร์ของคุณ เปิดหน้านี้ค้างไว้จนเสร็จ (คลิป 1 นาทีใช้ราว 1–3 นาที)</p>
+      <video class="sub-out ${job.height > job.width ? 'v' : 'h'}" data-out-video controls playsinline hidden></video>
+    </section>
+` : ''}  </div>
+  <details class="sub-look">
+    <summary><b>หน้าตาซับ</b><span class="muted small" data-look-sum></span></summary>
+    <fieldset class="cz-field" ${rendering ? 'disabled' : ''} data-look>
+      <legend class="sr-only">หน้าตาซับ</legend>
+      <p class="sub-label">แบบในคลัง</p>
+      <div class="sub-chips">${styleCards}</div>
+      <p class="muted small" data-motion-note></p>
+      <p class="sub-label" id="sub-font-l">ฟอนต์</p>
+      <div class="font-pick" data-font-pick>
+        <button type="button" class="font-cur" data-font-cur aria-expanded="false" aria-labelledby="sub-font-l"><span data-font-cur-name></span><i aria-hidden="true">▾</i></button>
+        <div class="font-list" data-font-list role="radiogroup" aria-labelledby="sub-font-l" hidden>
+          ${fontOpts}
+          <a class="font-add" href="/library/fonts">+ เพิ่มฟอนต์ของฉัน (.ttf / .otf)</a>
+        </div>
+      </div>
+      <div class="sub-size">
+        <label class="sub-label" for="sub-size">ขนาดตัวอักษร <output data-size-out></output></label>
+        <input type="range" id="sub-size" name="size" min="${SIZE_MIN}" max="${SIZE_MAX}" step="5" value="${esc(sizePct(job.size))}" data-size>
+        <div class="sub-size-q"><button type="button" class="sub-mini" data-size-q="80">เล็ก</button><button type="button" class="sub-mini" data-size-q="100">กลาง</button><button type="button" class="sub-mini" data-size-q="125">ใหญ่</button><button type="button" class="sub-mini" data-size-q="150">ใหญ่มาก</button></div>
+      </div>
+      <p class="sub-label">ตำแหน่ง</p>
+      ${seg('position', [['top', 'บน'], ['middle', 'กลาง'], ['bottom', 'ล่าง']], job.position)}
+      <p class="sub-label">สีตัวอักษร</p>
+      <div class="swatches">${swatches('fill', FILL_SWATCHES, job.fill)}<label class="swatch-pick"><input type="color" name="fill" value="${esc(job.fill)}" aria-label="เลือกสีเอง"><span>เลือกเอง</span></label></div>
+      <p class="sub-label">ขอบ</p>
+      ${seg('outline', [['none', 'ไม่มี'], ['thin', 'บาง'], ['medium', 'กลาง'], ['thick', 'หนา']], job.outline)}
+      <div class="swatches" data-stroke-row>${swatches('stroke', STROKE_SWATCHES, job.stroke)}<label class="swatch-pick"><input type="color" name="stroke" value="${esc(job.stroke)}" aria-label="เลือกสีขอบเอง"><span>เลือกเอง</span></label></div>
+      <label class="toggle sub-toggle"><input type="checkbox" name="shadow" value="1" ${job.shadow ? 'checked' : ''}><span class="toggle-ui"></span><span>เงาใต้ตัวอักษร <small class="muted">(อ่านง่ายบนพื้นสว่าง)</small></span></label>
+    </fieldset>
+  </details>
+  <p class="sub-more"><a class="btn small ghost" href="/subtitles/${esc(job.id)}/srt" data-srt>${ICON.download} ไฟล์ซับ .srt</a></p>
 </div>
-<div class="sub-bar" data-sub-bar>
-  <span class="small muted" data-save-state role="status">บันทึกอัตโนมัติ</span>
-  <a class="btn small ghost" href="/subtitles/${esc(job.id)}/srt" data-srt>${ICON.download} .srt</a>
-  <button type="button" class="btn primary" data-render ${rendering ? 'disabled' : ''}>${ICON.bolt} สร้างคลิปพร้อมซับ</button>
-</div>
-<p class="error" data-err role="alert" hidden></p>
-${bm ? `<section class="ready-box sub-result" data-burn hidden>
-  <div class="job-bar"><i data-bar style="width:0%"></i></div>
-  <p class="small"><b data-pct>0%</b> · <span data-stage>กำลังเริ่ม</span></p>
-  <p class="error small" data-err role="alert" hidden></p>
-  <p class="muted small">สร้างในเบราว์เซอร์ของคุณ เปิดหน้านี้ค้างไว้จนเสร็จ (คลิป 1 นาทีใช้ราว 1–3 นาที)</p>
-  <video class="sub-out ${job.height > job.width ? 'v' : 'h'}" data-out-video controls playsinline hidden></video>
-</section>` : ''}
 ${removeForm(job, csrf)}
 <script type="application/json" id="sub-data">${json}</script>
 <script src="/motion.js?v=${V}" defer></script>
+<script src="/subplan.js?v=${V}" defer></script>
 <script src="/subtitles.js?v=${V}" defer></script>
-${bm ? `<script src="/subplan.js?v=${V}" defer></script><script type="module" src="/render-ui.js?v=${V}"></script>` : ''}`,
+${bm ? `<script type="module" src="/render-ui.js?v=${V}"></script>` : ''}`,
   });
 }
+
+// ขนาดซับเป็น % ของขนาดมาตรฐาน (ค่าเก่า sm/md/lg ยังอ่านได้)
+const { SIZE_MIN, SIZE_MAX, sizePct } = require('../public/subplan');
 
 function removeForm(job, csrf) {
   const { esc } = h();

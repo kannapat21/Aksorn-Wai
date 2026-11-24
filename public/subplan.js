@@ -9,6 +9,13 @@
   var FPS = 30;
   var MAX_SIDE = 1920; // คลิปใหญ่กว่านี้ (2K/4K) ย่อเหลือด้านยาว 1920 ให้เรนเดอร์ทันและไฟล์ไม่ใหญ่เกิน
   var SIZE_K = { sm: 0.066, md: 0.082, lg: 0.1 };
+  var SIZE_MIN = 50, SIZE_MAX = 200;
+  // ขนาดซับ: '50'..'200' (% ของขนาดกลาง) หรือค่าเก่า sm / md / lg
+  function sizePct(v) {
+    if (SIZE_K[v]) return Math.round((SIZE_K[v] / SIZE_K.md) * 20) * 5;
+    var n = Math.round(Number(v));
+    return isFinite(n) && n >= SIZE_MIN && n <= SIZE_MAX ? n : 100;
+  }
   var POS_Y = { bottom: { v: 0.70, h: 0.85 }, middle: { v: 0.5, h: 0.5 }, top: { v: 0.2, h: 0.16 } };
 
   // ขนาดไฟล์ผลลัพธ์ (เลขคู่ ด้านยาวไม่เกิน MAX_SIDE)
@@ -21,7 +28,7 @@
   // ขนาดตัวอักษร / แถบซับ / ตำแหน่ง ตามแนวคลิป
   function layoutFor(w, h, o) {
     o = o || {};
-    var fontPx = Math.round(Math.min(w, h) * (SIZE_K[o.size] || SIZE_K.md));
+    var fontPx = Math.round(Math.min(w, h) * SIZE_K.md * sizePct(o.size || 'md') / 100);
     var band = Math.min(h, Math.round((fontPx * 3.6) / 2) * 2);
     var vertical = h > w;
     var cy = h * (POS_Y[o.position] || POS_Y.bottom)[vertical ? 'v' : 'h'];
@@ -58,7 +65,7 @@
     return { total: total, frames: frames, shots: shots };
   }
 
-  var api = { FPS: FPS, MAX_SIDE: MAX_SIDE, SIZE_K: SIZE_K, POS_Y: POS_Y, outSize: outSize, layoutFor: layoutFor, planFrames: planFrames };
+  var api = { FPS: FPS, MAX_SIDE: MAX_SIDE, SIZE_K: SIZE_K, SIZE_MIN: SIZE_MIN, SIZE_MAX: SIZE_MAX, sizePct: sizePct, POS_Y: POS_Y, outSize: outSize, layoutFor: layoutFor, planFrames: planFrames };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   g.TTSubPlan = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

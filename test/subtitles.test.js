@@ -276,6 +276,15 @@ test('อัปคลิป → ถอดเสียง → แก้คำ/เ
   assert.match(ed, /data-tl-track/);
   assert.match(ed, /data-tl-wave/);
   assert.match(ed, /data-tl-split/);
+  // หน้าเรียบง่าย: แก้คำในบล็อก · ไม่มีรายการข้อความด้านขวา · ตัวเลือกฟอนต์ของเว็บ (ไม่ใช่ select) · ปรับขนาดได้
+  assert.match(ed, /data-tl-edit/);
+  assert.doesNotMatch(ed, /data-list|sub-cues/);
+  assert.match(ed, /data-font-pick/);
+  assert.doesNotMatch(ed, /<select[^>]*name="font"/);
+  assert.match(ed, /type="radio" name="font" value="kanit"/);
+  assert.match(ed, /type="range" id="sub-size" name="size" min="50" max="200"[^>]*value="100"/);
+  assert.match(ed, /href="\/library\/fonts"/);
+  assert.match(ed, /src="\/subplan\.js/);
   const pk = await c.req(`/subtitles/${id}/peaks`);
   assert.equal(pk.status, 200);
   assert.deepEqual((await pk.json()).data, [0, 128, 255]);
@@ -299,7 +308,12 @@ test('อัปคลิป → ถอดเสียง → แก้คำ/เ
   assert.equal(svj.cues[1].text, 'วันนี้เราจะมาลองทำซับไตเติ้ล');
   assert.equal(svj.cues[1].id, cues[1].id);
   assert.equal(jobOf(id).product_slug, 'order-now');
-  assert.equal(jobOf(id).size, 'lg');
+  assert.equal(jobOf(id).size, '120', 'ค่าเก่า lg เก็บเป็น % ของขนาดกลาง');
+  // ขนาดปรับละเอียดได้ 50–200% · ค่าแปลกๆ กลับเป็น 100
+  for (const [v, want] of [['145', '145'], [80, '80'], ['999', '100'], ['abc', '100']]) {
+    assert.equal((await c.json(`/subtitles/${id}/save`, { style: { ...style, size: v } })).status, 200);
+    assert.equal(jobOf(id).size, want, String(v));
+  }
   // แบบที่ไม่ได้เป็นเจ้าของ / ไม่มี CSRF / ข้อความผิด
   const notMine = await c.json(`/subtitles/${id}/save`, { style: { ...style, order: 'someone-else' } });
   assert.equal(notMine.status, 400);
