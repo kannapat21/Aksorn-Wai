@@ -3,6 +3,7 @@
  * ส่งอีเมล
  *  MAIL_MODE=console  พิมพ์ลง console (โหมดทดสอบ)
  *  MAIL_MODE=smtp     ส่งจริงผ่าน SMTP (ตั้ง SMTP_HOST/PORT/USER/PASS)
+ *  MAIL_MODE=off      ไม่ส่งอีเมลเลย (ใช้ตอนยังไม่มี SMTP: ลูกค้ายืนยันอีเมล/กู้รหัสผ่านทางอีเมลไม่ได้) ไม่พิมพ์ลิงก์ลง log
  */
 function createMailer(cfg, { log = console.log } = {}) {
   const sent = []; // เก็บไว้ให้เทสต์ตรวจได้
@@ -18,6 +19,7 @@ function createMailer(cfg, { log = console.log } = {}) {
     sent,
     async send({ to, subject, text }) {
       sent.push({ to, subject, text });
+      if (cfg.mail.mode === 'off') { log(`[mail] ปิดการส่งอีเมล (MAIL_MODE=off) ไม่ได้ส่งถึง ${to}: ${subject}`); return; }
       if (transport) {
         await transport.sendMail({ from: cfg.mail.from, to, subject, text });
         return;

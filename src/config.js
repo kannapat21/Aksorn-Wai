@@ -176,7 +176,8 @@ function loadConfig(overrides = {}) {
   if (cfg.env === 'production') {
     if (cfg.paymentProvider === 'mock') problems.push('ห้ามใช้ PAYMENT_PROVIDER=mock ตอน NODE_ENV=production');
     if (!cfg.baseUrl.startsWith('https://')) problems.push('BASE_URL ต้องเป็น https ตอนขายจริง');
-    if (cfg.mail.mode === 'console') problems.push('MAIL_MODE=console ใช้ได้เฉพาะตอนทดสอบ');
+    if (cfg.mail.mode === 'console') problems.push('MAIL_MODE=console ใช้ได้เฉพาะตอนทดสอบ (ยังไม่มี SMTP ให้ตั้ง MAIL_MODE=off)');
+    if (!['console', 'smtp', 'off'].includes(cfg.mail.mode)) problems.push('MAIL_MODE ต้องเป็น console / smtp / off');
     if (cfg.mail.mode === 'smtp' && (!cfg.mail.host || !cfg.mail.user || !cfg.mail.pass)) problems.push('ตั้ง SMTP_HOST / SMTP_USER / SMTP_PASS ให้ครบ');
     if (!cfg.legal.name || !cfg.legal.contactEmail) problems.push('ตั้ง LEGAL_NAME และ CONTACT_EMAIL สำหรับหน้านโยบาย');
   }

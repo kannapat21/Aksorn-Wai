@@ -18,6 +18,7 @@ const server = app.listen(cfg.port, () => {
   if (cfg.paymentProvider === 'mock') console.log('การชำระเงิน: โหมดทดสอบ (mock) ไม่มีเงินจริง');
   if (cfg.paymentProvider === 'omise') console.log(`การชำระเงิน: Omise ${/_test_/.test(cfg.omise.secretKey) ? 'โหมดทดสอบ (คีย์ test)' : 'คีย์จริง'}${cfg.omise.webhookSecret ? '' : ' · ยังไม่ได้ตั้ง OMISE_WEBHOOK_SECRET (webhook จะถูกปฏิเสธ ระบบถามสถานะเองระหว่างลูกค้ารอ)'}`);
   if (cfg.mail.mode === 'console') console.log('อีเมล: โหมดทดสอบ (พิมพ์ลงหน้าจอนี้)');
+  if (cfg.mail.mode === 'off') console.log('อีเมล: ปิดอยู่ (MAIL_MODE=off) ลูกค้ายืนยันอีเมลและกู้รหัสผ่านทางอีเมลไม่ได้ จนกว่าจะตั้ง SMTP');
   const t = checkRenderTools();
   if (t.ok) console.log(`ระบบปรับแต่ง: พร้อมเรนเดอร์ (${t.browser.how} + ffmpeg)`);
   else console.log(`ระบบปรับแต่ง: ยังเรนเดอร์ไม่ได้\n  - ${installHelp(t).join('\n  - ')}`);
