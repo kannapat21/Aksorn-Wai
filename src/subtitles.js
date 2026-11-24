@@ -152,7 +152,7 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     let last = -1;
     const onProgress = (p, stage) => {
       const v = Math.max(1, Math.min(99, Math.round(p)));
-      if (v !== last) { last = v; q.progress.run(v, String(stage || ''), job.id); }
+      if (v > last) { last = v; q.progress.run(v, String(stage || ''), job.id); }
     };
     try {
       if (phase === 'asr') await transcribe(job, onProgress);

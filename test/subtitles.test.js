@@ -510,11 +510,13 @@ test('transcribe.py: บรรทัด PROGRESS ส่งออกได้ร�
     `spec = importlib.util.spec_from_file_location("t", ${JSON.stringify(path.join(__dirname, '..', 'scripts', 'transcribe.py'))})`,
     'm = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)',
     'real = sys.stderr; sys.stderr = m.TqdmToProgress(real)',
-    'sys.stderr.write(" 40%|####\\r"); m.progress(50)',
+    'sys.stderr.write("Fetching 4 files: 100%|####| 4/4 [00:00<00:00]\\r")',
+    'sys.stderr.write(" 40%|####| 1200/3000 [00:10<00:20, 120.00frames/s]\\r"); m.progress(50)',
     'sys.stderr = real',
   ].join('\n');
   const r = spawnSync('python3', ['-I', '-c', code], { encoding: 'utf8' });
   if (r.error) return t.skip('ไม่มี python3');
+  assert.doesNotMatch(r.stderr, /PROGRESS 100/, 'แถบโหลดโมเดลไม่นับ');
   assert.match(r.stderr, /PROGRESS 43\n/);
   assert.match(r.stderr, /PROGRESS 50\n/);
 });

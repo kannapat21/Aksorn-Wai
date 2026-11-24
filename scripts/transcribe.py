@@ -52,7 +52,8 @@ class TqdmToProgress:
         self.real = real
 
     def write(self, s):
-        m = re.findall(r"(\d+)%\|", s)
+        # ใช้เฉพาะแถบถอดเสียง (หน่วย frames) ไม่เอาแถบโหลดโมเดลของ huggingface
+        m = re.findall(r"(\d+)%\|[^\r\n]*frames", s)
         if m:
             progress(5 + int(m[-1]) * 0.95)
         return len(s)
