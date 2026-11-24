@@ -1,12 +1,14 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const Database = require('better-sqlite3');
+const { Database } = require('./sqlite');
 
-function openDb(file) {
-  if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
-  const db = new Database(file);
-  db.pragma('journal_mode = WAL');
+// file = ไฟล์ในเครื่อง หรือ libsql://... (Turso) · authToken ใช้กับ Turso
+function openDb(file, opts = {}) {
+  const remote = /^(libsql|https?|wss?):\/\//.test(file);
+  if (!remote && file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
+  const db = new Database(file, opts);
+  if (!remote) db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(`
     CREATE TABLE IF NOT EXISTS orders (

@@ -52,7 +52,9 @@ function loadConfig(overrides = {}) {
     port: Number(env.PORT || 3000),
     baseUrl: (env.BASE_URL || `http://localhost:${env.PORT || 3000}`).replace(/\/+$/, ''),
     shopName: env.SHOP_NAME || 'อักษรไหว',
-    databaseFile: env.DATABASE_FILE || './data/shop.db',
+    // DATABASE_URL (libsql://...turso.io) ใช้ฐานข้อมูลบน Turso แทนไฟล์ในเครื่อง (จำเป็นบน Netlify ที่ไม่มีดิสก์ถาวร)
+    databaseFile: env.DATABASE_URL || env.DATABASE_FILE || './data/shop.db',
+    databaseAuthToken: env.DATABASE_AUTH_TOKEN || '',
     // บัญชีแอดมินสร้าง/ซิงก์จาก .env ทุกครั้งที่เปิดร้าน (ล็อกอินที่หน้าเข้าสู่ระบบปกติ)
     adminEmail: String(env.ADMIN_EMAIL || '').trim().toLowerCase(),
     adminPassword: env.ADMIN_PASSWORD || '',
@@ -122,7 +124,7 @@ function loadConfig(overrides = {}) {
     products: overrides.products || loadJson('config/products.json'),
     editorsConfig: overrides.editorsConfig || loadJson('config/editors.json'),
   };
-  if (!path.isAbsolute(cfg.databaseFile) && cfg.databaseFile !== ':memory:') {
+  if (!/^[a-z]+:\/\//.test(cfg.databaseFile) && !path.isAbsolute(cfg.databaseFile) && cfg.databaseFile !== ':memory:') {
     cfg.databaseFile = path.resolve(ROOT, cfg.databaseFile);
   }
 

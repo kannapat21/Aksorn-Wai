@@ -20,7 +20,7 @@ const DAY_MS = 24 * 60 * MIN_MS;
 const EMAIL_RE = /^[^\s@<>"',;]+@[^\s@<>"',;]+\.[^\s@<>"',;]{2,}$/;
 
 function createApp(cfg, opts = {}) {
-  const db = opts.db || openDb(cfg.databaseFile);
+  const db = opts.db || openDb(cfg.databaseFile, { authToken: cfg.databaseAuthToken });
   const mailer = opts.mailer || createMailer(cfg);
   const provider = opts.provider || getProvider(cfg.paymentProvider);
   const log = opts.log || console.log;

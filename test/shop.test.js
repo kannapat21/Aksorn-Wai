@@ -528,7 +528,7 @@ test('ไฟล์สินค้าไม่อยู่ในโฟลเด�
 });
 
 test('ฐานข้อมูลรุ่นเก่า ย้ายข้อมูลได้โดยไม่หาย (grant หลายอันต่อคำสั่งซื้อ + คอลัมน์ user_id)', () => {
-  const Database = require('better-sqlite3');
+  const { Database } = require('../src/sqlite');
   const { openDb } = require('../src/db');
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'shop-db-')), 'old.db');
   const old = new Database(file);
