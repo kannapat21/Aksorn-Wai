@@ -7,7 +7,8 @@
 (function (g) {
   'use strict';
   var FPS = 30;
-  var MAX_SIDE = 1920; // คลิปใหญ่กว่านี้ (2K/4K) ย่อเหลือด้านยาว 1920 ให้เรนเดอร์ทันและไฟล์ไม่ใหญ่เกิน
+  var MAX_SIDE = 1920; // เครื่องร้าน: คลิปใหญ่กว่านี้ (2K/4K) ย่อเหลือด้านยาว 1920 ให้เรนเดอร์ทันและไฟล์ไม่ใหญ่เกิน
+  var MAX_SIDE_BROWSER = 3840; // เบราว์เซอร์ลูกค้า: คงความละเอียดเดิมถึง 4K (เครื่องที่เข้ารหัสไม่ไหวจะย่อเอง)
   var SIZE_K = { sm: 0.066, md: 0.082, lg: 0.1 };
   var SIZE_MIN = 50, SIZE_MAX = 200;
   // ขนาดซับ: '50'..'200' (% ของขนาดกลาง) หรือค่าเก่า sm / md / lg
@@ -19,8 +20,8 @@
   var POS_Y = { bottom: { v: 0.70, h: 0.85 }, middle: { v: 0.5, h: 0.5 }, top: { v: 0.2, h: 0.16 } };
 
   // ขนาดไฟล์ผลลัพธ์ (เลขคู่ ด้านยาวไม่เกิน MAX_SIDE)
-  function outSize(w, h) {
-    var k = Math.min(1, MAX_SIDE / Math.max(w, h));
+  function outSize(w, h, max) {
+    var k = Math.min(1, (max || MAX_SIDE) / Math.max(w, h));
     var even = function (x) { return Math.max(2, Math.round((x * k) / 2) * 2); };
     return { w: even(w), h: even(h) };
   }
@@ -65,7 +66,7 @@
     return { total: total, frames: frames, shots: shots };
   }
 
-  var api = { FPS: FPS, MAX_SIDE: MAX_SIDE, SIZE_K: SIZE_K, SIZE_MIN: SIZE_MIN, SIZE_MAX: SIZE_MAX, sizePct: sizePct, POS_Y: POS_Y, outSize: outSize, layoutFor: layoutFor, planFrames: planFrames };
+  var api = { FPS: FPS, MAX_SIDE: MAX_SIDE, MAX_SIDE_BROWSER: MAX_SIDE_BROWSER, SIZE_K: SIZE_K, SIZE_MIN: SIZE_MIN, SIZE_MAX: SIZE_MAX, sizePct: sizePct, POS_Y: POS_Y, outSize: outSize, layoutFor: layoutFor, planFrames: planFrames };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   g.TTSubPlan = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

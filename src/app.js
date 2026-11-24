@@ -1367,7 +1367,7 @@ function createApp(cfg, opts = {}) {
     const R = require('../public/subplan');
     const p = productsBySlug.get(job.product_slug);
     const font = fontSpec(job.user_id, job.font);
-    const { w, h } = R.outSize(job.width, job.height);
+    const { w, h } = R.outSize(job.width, job.height, job.browser ? R.MAX_SIDE_BROWSER : R.MAX_SIDE);
     return {
       id: job.id, cues: subtitles.cuesOf(job), motion: (p && p.motion) || 'pop', fill: job.fill, stroke: job.stroke,
       strokeRatio: custom.OUTLINES[job.outline] || 0, shadow: Boolean(job.shadow), size: job.size, position: job.position,
@@ -1389,7 +1389,7 @@ function createApp(cfg, opts = {}) {
 
   function subLayout(job) {
     const R = require('../public/subplan');
-    const { w, h } = R.outSize(job.width, job.height);
+    const { w, h } = R.outSize(job.width, job.height, job.browser ? R.MAX_SIDE_BROWSER : R.MAX_SIDE);
     const sizes = {};
     for (const k of ['sm', 'md', 'lg']) for (const pos of ['top', 'middle', 'bottom']) sizes[`${k}:${pos}`] = R.layoutFor(w, h, { size: k, position: pos });
     return { w, h, sizes };
