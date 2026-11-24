@@ -3,7 +3,12 @@
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const baht = (satang) => `฿${(satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+// ยอดโอนต้องมีทศนิยม 2 ตำแหน่งเสมอ (49.50 ไม่ใช่ 49.5) ให้ตรงกับที่แอปธนาคารแสดง
+// ราคาที่แสดงบนหน้าร้าน: 0 = "ฟรี"
+const priceLabel = (p) => (p.price === 0 ? 'ฟรี' : baht(p.price));
+const bahtExact = (satang) => `฿${(satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const thDate = (ms) => new Date(ms).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' });
+const thTime = (ms) => new Date(ms).toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' }) + ' น.';
 const fmtBytes = (n) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.ceil(n / 1e3)} KB`);
 
 // เปลี่ยนทุกครั้งที่รีสตาร์ต เพื่อให้เบราว์เซอร์โหลด CSS/JS ใหม่หลังอัปเดต
@@ -24,7 +29,7 @@ const LICENSE = {
     'ห้ามนำไฟล์ไปรวมในชุดเทมเพลต แพ็กเอฟเฟกต์ หรือคลังสื่อเพื่อขายหรือแจก',
     'สิทธิ์เป็นของผู้ซื้อ (บุคคลหรือบริษัท) ที่สั่งซื้อเท่านั้น',
   ],
-  font: 'ฟอนต์ Kanit ใช้สัญญา SIL Open Font License',
+  font: 'ฟอนต์ไทยทุกตัวที่ร้านให้เลือกใช้สัญญา SIL Open Font License ใช้ในงานเชิงพาณิชย์ได้',
 };
 
 const ICON = {
@@ -47,6 +52,7 @@ const ICON = {
   user: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
   library: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="16" rx="1"/><path d="m17 5 4 1-3 14-4-1"/></svg>',
   edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg>',
+  cc: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10.5 10.2a2.4 2.4 0 1 0 0 3.6M17 10.2a2.4 2.4 0 1 0 0 3.6"/></svg>',
   download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
 };
 
@@ -76,12 +82,13 @@ function brand(shopName) {
 
 function layout({ title, body, shopName, user = null, csrf = '', noindex = false, wide = false, page = '', intro = true }) {
   const account = user ? `
-      <a href="/library" class="btn small ghost nav-lib">${ICON.library}<span>คลังของฉัน</span></a>
+      ${user.role === 'admin' ? `<a href="/admin" class="btn small primary nav-lib">${ICON.shield}<span>หลังบ้าน</span></a>` : `<a href="/library" class="btn small ghost nav-lib">${ICON.library}<span>คลังของฉัน</span></a>`}
       <details class="menu">
         <summary class="icon-btn" aria-label="บัญชี">${ICON.user}</summary>
         <div class="menu-pop">
           <p class="muted small">${esc(user.name || user.email)}<br>${user.name ? esc(user.email) : ''}</p>
           <a href="/library">คลังของฉัน</a>
+          ${user.role === 'admin' ? '<a href="/admin">หลังบ้าน</a>' : ''}
           <form method="post" action="/logout"><input type="hidden" name="csrf" value="${esc(csrf)}"><button type="submit" class="linklike">ออกจากระบบ</button></form>
         </div>
       </details>` : `
@@ -96,6 +103,13 @@ function layout({ title, body, shopName, user = null, csrf = '', noindex = false
 ${noindex ? '<meta name="robots" content="noindex, nofollow">' : ''}
 <title>${esc(title)} · ${esc(shopName)}</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="theme-color" content="#1E3A5F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="อักษรไหว">
 <link rel="preload" href="/fonts/Kanit-Bold.ttf" as="font" type="font/ttf" crossorigin>
 <script src="/theme.js?v=${V}"></script>
 <link rel="stylesheet" href="/style.css?v=${V}">
@@ -129,6 +143,8 @@ ${intro ? `<div class="loader" data-loader aria-hidden="true">
   </div>
 </header>
 <main id="main" class="${wide ? 'wide' : ''}">
+${user && !user.email_verified_at ? `<div class="verify-bar" role="status">${ICON.mail}<span>ยืนยันอีเมล <b>${esc(user.email)}</b> เพื่อรับใบยืนยันการซื้อและกู้รหัสผ่านได้ · เราส่งลิงก์ไปให้แล้ว</span>
+  <form method="post" action="/verify-email/resend"><input type="hidden" name="csrf" value="${esc(csrf)}"><button class="linklike" type="submit">ส่งอีกครั้ง</button></form></div>` : ''}
 ${body}
 </main>
 <footer class="foot">
@@ -139,15 +155,25 @@ ${body}
       <a href="/#catalog">สินค้าทั้งหมด</a>
       <a href="/library">คลังของฉัน</a>
       <a href="/license">สิทธิ์การใช้งาน</a>
+      <a href="/terms">เงื่อนไขการใช้งาน</a>
+      <a href="/refund">นโยบายคืนเงิน</a>
+      <a href="/privacy">ความเป็นส่วนตัว (PDPA)</a>
+      <a href="/contact">ติดต่อร้าน</a>
     </nav>
     <div class="foot-meta">
       <span>${ICON.shield} ลิงก์ดาวน์โหลดเข้ารหัสลายเซ็น</span>
       <span>${ICON.infinity} ซื้อครั้งเดียว ใช้ได้ตลอด</span>
-      <span>ฟอนต์ Kanit · SIL Open Font License</span>
+      <a href="/license#fonts">ฟอนต์ไทยของร้าน · SIL Open Font License</a>
     </div>
   </div>
 </footer>
 <button type="button" class="to-top" data-to-top aria-label="กลับขึ้นด้านบน" hidden>${ICON.up}</button>
+<nav class="tabbar" aria-label="เมนูแอป" data-tabbar>
+  <a href="/" data-tab="home">${ICON.grid}<span>หน้าแรก</span></a>
+  <a href="/#catalog" data-tab="shop">${ICON.search}<span>สินค้า</span></a>
+  <a href="/library" data-tab="library">${ICON.library}<span>คลัง</span></a>
+  <a href="/account" data-tab="account">${ICON.user}<span>${user ? 'บัญชี' : 'เข้าสู่ระบบ'}</span></a>
+</nav>
 <script src="/app.js?v=${V}" defer></script>
 </body>
 </html>`;
@@ -158,17 +184,18 @@ function card(p, i, owned) {
   const search = [p.title, p.subtitle, p.description, ...tags].join(' ').toLowerCase();
   return `
     <article class="card reveal" data-card data-cat="${esc(p.category || '')}" data-price="${esc(p.price)}" data-order="${i}" data-search="${esc(search)}">
-      <a class="card-link" href="/p/${esc(p.slug)}" aria-label="${esc(p.title)} ${baht(p.price)}">
+      <a class="card-link" href="/p/${esc(p.slug)}" aria-label="${esc(p.title)} ${priceLabel(p)}">
         <div class="thumb" data-hover-play>
           <img src="/previews/${esc(p.slug)}_horizontal.jpg" alt="" loading="lazy" width="960" height="540">
           <video data-src="/previews/${esc(p.slug)}_horizontal.mp4" muted loop playsinline preload="none"></video>
           <span class="play-hint">${ICON.play} ชี้เพื่อดูตัวอย่าง</span>
+          ${p.free ? '<span class="badge-free">ฟรี</span>' : p.premium ? '<span class="badge-premium">✦ พรีเมียม</span>' : ''}
           ${owned && owned.has(p.slug) ? '<span class="dur owned">อยู่ในคลังแล้ว</span>' : `<span class="dur">${ICON.stretch} ยืดได้</span>`}
         </div>
         <div class="card-body">
           <div class="card-top">
             <h3>${esc(p.title)}</h3>
-            <span class="price">${baht(p.price)}</span>
+            <span class="price${p.free ? ' free' : ''}">${priceLabel(p)}</span>
           </div>
           <p class="muted small">${esc(p.subtitle || '')}</p>
           <ul class="chips mini">${tags.slice(0, 3).map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
@@ -178,12 +205,15 @@ function card(p, i, owned) {
 }
 
 // ไทม์ไลน์ตัวอย่าง: ส่วนเข้า | ภาพนิ่ง (ยืดได้) | ส่วนออก
-function kitTimeline({ big = false } = {}) {
+function kitTimeline({ big = false, p = null } = {}) {
+  const tm = p && p.manifest && p.manifest.timing;
+  const inSec = tm && tm.settle ? tm.settle : 0.5;
+  const outSec = tm && tm.fadeStart ? Math.round((p.manifest.duration - tm.fadeStart) * 10) / 10 : 0.5;
   return `<div class="timeline${big ? ' big' : ''}" aria-hidden="true">
     <div class="tl-track">
-      <span class="tl-clip in"><b>เด้งเข้า</b><small>0.5 วิ</small></span>
+      <span class="tl-clip in"><b>${p && p.premium ? 'ท่าเข้า' : 'เด้งเข้า'}</b><small>${inSec} วิ</small></span>
       <span class="tl-clip hold"><b>ข้อความค้าง</b><small>นานเท่าที่เลือก 3–30 วิ</small><i class="tl-handle"></i></span>
-      <span class="tl-clip out"><b>จางออก</b><small>0.5 วิ</small></span>
+      <span class="tl-clip out"><b>${p && p.premium ? 'ท่าออก' : 'จางออก'}</b><small>${outSec} วิ</small></span>
     </div>
     <div class="tl-track ghost"><span class="tl-clip base">คลิปของคุณ</span></div>
   </div>`;
@@ -219,7 +249,7 @@ function home({ cfg, user, csrf, products, owned = new Set() }) {
       <li><b>${products.length}</b><span>แอนิเมชัน</span></li>
       <li><b>2</b><span>ขนาด แนวตั้ง/แนวนอน</span></li>
       <li><b>${editorNames.length}+</b><span>โปรแกรมตัดต่อ</span></li>
-      <li><b>${baht(minPrice)}</b><span>ราคาเริ่มต้น</span></li>
+      ${minPrice === 0 ? '<li><b>ฟรี</b><span>มีแบบให้ลองใช้</span></li>' : `<li><b>${baht(minPrice)}</b><span>ราคาเริ่มต้น</span></li>`}
     </ul>
   </div>
   ${lead ? `<a class="hero-visual" href="/p/${esc(lead.slug)}" aria-label="ดูตัวอย่าง ${esc(lead.title)}" data-tilt>
@@ -322,7 +352,10 @@ function editorOptions(editors, selected) {
 }
 
 function product({ cfg, user, csrf, p, owned }) {
-  const faq = (p.faq || []).map((f) => `<details><summary>${esc(f.q)}</summary><p>${esc(f.a)}</p></details>`).join('');
+  const manualPay = cfg.paymentProvider === 'manual';
+  // โหมดโอนเอง: สินค้าเข้าคลังเมื่อร้านยืนยันยอด (ไม่ใช่ "ทันที")
+  const payWhen = (a) => (manualPay ? a.replace('ทันทีหลังชำระเงินสำเร็จ', 'ทันทีที่ร้านยืนยันยอดโอน (ปกติไม่นาน)') : a);
+  const faq = (p.faq || []).map((f) => `<details><summary>${esc(f.q)}</summary><p>${esc(payWhen(f.a))}</p></details>`).join('');
   const tags = [p.category, ...(p.tags || [])].filter(Boolean);
   return layout({
     title: p.title, shopName: cfg.shopName, user, csrf, page: 'page-product',
@@ -356,8 +389,8 @@ function product({ cfg, user, csrf, p, owned }) {
 
     <section class="panel kit-panel">
       <h2>${ICON.stretch} ปรับแต่งเองได้หลังซื้อ</h2>
-      <p class="muted">นอกจากคลิปเต็ม ${esc(p.manifest.duration)} วินาที ยังเปลี่ยนข้อความ ฟอนต์ สี แนว และความยาว (สูงสุด 30 วินาที) ได้เอง ได้เป็นไฟล์เดียวที่ตรงกับโปรแกรมที่ใช้</p>
-      ${kitTimeline()}
+      <p class="muted">นอกจากคลิปเต็ม ${esc(p.manifest.duration)} วินาที ยังเปลี่ยนข้อความ ฟอนต์ สี แนว และความยาว (สูงสุด 30 วินาที) ได้เอง ได้เป็นไฟล์เดียวที่ตรงกับโปรแกรมที่ใช้${p.premium ? ' ช่วงค้างมีลูกเล่นวนต่อเนื่องเนียนตลอดความยาวที่เลือก' : ''}</p>
+      ${kitTimeline({ p })}
     </section>
 
     <section class="panel license-panel">
@@ -382,36 +415,36 @@ function product({ cfg, user, csrf, p, owned }) {
       <p class="eyebrow">${esc(p.category || 'แอนิเมชันข้อความ')}</p>
       <h1>${esc(p.title)}</h1>
       <p class="muted">${esc(p.subtitle || '')}</p>
-      <p class="price big">${baht(p.price)} <span class="price-note">จ่ายครั้งเดียว ใช้ได้ตลอด</span></p>
+      <p class="price big${p.free ? ' free' : ''}">${priceLabel(p)} <span class="price-note">${p.free ? 'ไม่ต้องจ่าย ใช้ได้ตลอด' : 'จ่ายครั้งเดียว ใช้ได้ตลอด'}</span></p>
       ${owned ? `
       <div class="owned-box">${ICON.check}<span>คุณมีแอนิเมชันนี้ในคลังแล้ว</span></div>
       <a class="btn primary block" href="/library/${esc(owned.id)}">เปิดใช้จากคลัง</a>` : user ? `
       <form method="post" action="/checkout" data-checkout>
         <input type="hidden" name="product" value="${esc(p.slug)}">
         <input type="hidden" name="csrf" value="${esc(csrf)}">
-        <button class="btn primary block" type="submit"><span>ซื้อเลย ${baht(p.price)}</span></button>
+        <button class="btn primary block" type="submit"><span>${p.free ? 'รับฟรีเข้าคลัง' : `ซื้อเลย ${baht(p.price)}`}</span></button>
       </form>
-      <p class="muted small center">ไฟล์จะเข้าไปอยู่ในคลังของ ${esc(user.email)}</p>` : `
-      <a class="btn primary block" href="/login?next=${encodeURIComponent('/p/' + p.slug)}">เข้าสู่ระบบเพื่อซื้อ</a>
+      <p class="muted small center">ไฟล์จะเข้าไปอยู่ในคลังของ ${esc(user.email)}<br>${p.free ? 'การกดรับ' : 'การกดซื้อ'}ถือว่ายอมรับ <a href="/terms">เงื่อนไขการใช้งาน</a>${p.free ? '' : ` และ <a href="/refund">นโยบายคืนเงิน</a>`}</p>` : `
+      <a class="btn primary block" href="/login?next=${encodeURIComponent('/p/' + p.slug)}">${p.free ? 'เข้าสู่ระบบเพื่อรับฟรี' : 'เข้าสู่ระบบเพื่อซื้อ'}</a>
       <p class="muted small center">ยังไม่มีบัญชี? <a href="/signup?next=${encodeURIComponent('/p/' + p.slug)}">สมัครสมาชิกฟรี</a> ใช้เวลาไม่ถึงนาที</p>`}
       <ul class="assure">
-        <li>${ICON.bolt} ได้ไฟล์ทันทีหลังชำระเงิน</li>
-        <li>${ICON.infinity} ซื้อครั้งเดียว อยู่ในคลังตลอดไป</li>
+        <li>${ICON.bolt} ${p.free ? 'กดรับแล้วเข้าคลังทันที ไม่ต้องจ่ายเงิน' : manualPay ? 'สแกนจ่ายด้วย PromptPay ได้ไฟล์เมื่อร้านยืนยันยอด' : 'ได้ไฟล์ทันทีหลังชำระเงิน'}</li>
+        <li>${ICON.infinity} ${p.free ? 'รับครั้งเดียว' : 'ซื้อครั้งเดียว'} อยู่ในคลังตลอดไป</li>
         <li>${ICON.film} เลือกโปรแกรมตัดต่อตอนใช้งาน เปลี่ยนได้ตลอด</li>
-        <li>${ICON.edit} ปรับแต่งข้อความ ฟอนต์ และสีเองได้หลังซื้อ</li>
+        <li>${ICON.edit} ปรับแต่งข้อความ ฟอนต์ และสีเองได้${p.free ? 'หลังรับ' : 'หลังซื้อ'}</li>
         <li>${ICON.check} ใช้ในงานลูกค้าและโฆษณาได้</li>
       </ul>
     </section>
   </aside>
 </div>
 <div class="buy-bar" data-buy-bar>
-  <div><b>${esc(p.title)}</b><span class="price">${baht(p.price)}</span></div>
-  <a class="btn primary" href="#buy">${owned ? 'เปิดในคลัง' : 'ซื้อเลย'}</a>
+  <div><b>${esc(p.title)}</b><span class="price${p.free ? ' free' : ''}">${priceLabel(p)}</span></div>
+  <a class="btn primary" href="#buy">${owned ? 'เปิดในคลัง' : p.free ? 'รับฟรี' : 'ซื้อเลย'}</a>
 </div>`,
   });
 }
 
-function mockPay({ cfg, user, csrf, order, p }) {
+function mockPay({ cfg, user, csrf, order, p, allowed = true }) {
   return layout({
     title: 'ชำระเงิน (โหมดทดสอบ)', shopName: cfg.shopName, user, csrf, noindex: true,
     body: `
@@ -424,22 +457,227 @@ function mockPay({ cfg, user, csrf, order, p }) {
   <p class="muted">คำสั่งซื้อ ${esc(order.id.slice(0, 8))}</p>
 </div>
 <p>ตอนขายจริง หน้านี้จะเป็นหน้า QR PromptPay หรือหน้ากรอกบัตรของผู้ให้บริการชำระเงิน</p>
-<form method="post" action="/pay/mock/${esc(order.id)}/simulate">
+${allowed ? `<form method="post" action="/pay/mock/${esc(order.id)}/simulate">
   <input type="hidden" name="csrf" value="${esc(csrf)}">
   <button class="btn primary block" type="submit">จำลองจ่ายสำเร็จ</button>
-</form>
+</form>` : '<div class="note warn"><span><b>ร้านยังไม่เปิดรับชำระเงิน</b> ตอนนี้เป็นโหมดทดสอบ ปุ่มจำลองจ่ายใช้ได้เฉพาะเจ้าของร้าน</span></div>'}
 <p><a href="/p/${esc(p.slug)}">ยกเลิก</a></p>
 </div>`,
   });
+}
+
+function omisePay({ cfg, user, csrf, order, p, publicKey, qr, error }) {
+  const test = /_test_/.test(publicKey);
+  const back = `/pay/omise/${esc(order.id)}`;
+  const failed = order.status === 'failed' || order.status === 'expired';
+  return layout({
+    title: 'ชำระเงิน', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-pay', intro: false,
+    body: `
+<div class="narrow pay">
+  ${test ? '<div class="banner test">โหมดทดสอบของ Omise: ไม่มีการตัดเงินจริง ใช้บัตรทดสอบ 4242 4242 4242 4242 (วันหมดอายุในอนาคต CVV อะไรก็ได้)</div>' : ''}
+  <h1>ชำระเงิน</h1>
+  <div class="box pay-sum"><div><b>${esc(p.title)}</b><small class="muted">คำสั่งซื้อ ${esc(order.id.slice(0, 8))} · เข้าคลังทันทีที่จ่ายสำเร็จ</small></div><span class="price big">${baht(order.amount)}</span></div>
+  ${error ? `<p class="error" role="alert">${esc(error)}</p>` : failed ? `<p class="error" role="alert">${order.status === 'expired' ? 'QR หมดอายุแล้ว' : 'การชำระเงินครั้งก่อนไม่สำเร็จ'} ลองใหม่ได้เลย</p>` : ''}
+  ${qr ? `
+  <section class="box qr-box" data-poll="/order/${esc(order.id)}/status">
+    <h2>สแกนจ่ายด้วยแอปธนาคาร (PromptPay)</h2>
+    <img src="${back}/qr" alt="QR PromptPay ยอด ${baht(order.amount)}" width="280" height="280" class="qr-img">
+    <p class="muted small">QR หมดอายุ ${esc(qr.expiresAt ? new Date(qr.expiresAt).toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' }) : '')} น. · จ่ายแล้วหน้านี้จะเปลี่ยนเอง</p>
+    <div class="spinner" aria-hidden="true"></div>
+    <p class="small"><a href="${back}">เปลี่ยนวิธีจ่าย</a></p>
+    ${test ? '<p class="muted small">โหมดทดสอบ: เปิด dashboard.omise.co → Charges → เลือกรายการนี้ → Actions → Mark as Successful</p>' : ''}
+  </section>` : `
+  <section class="box">
+    <h2>PromptPay (สแกน QR)</h2>
+    <p class="muted small">สแกนด้วยแอปธนาคารไหนก็ได้ ไม่มีค่าธรรมเนียมฝั่งลูกค้า</p>
+    <form method="post" action="${back}/promptpay"><input type="hidden" name="csrf" value="${esc(csrf)}"><button class="btn primary block lg" type="submit">สร้าง QR PromptPay</button></form>
+  </section>
+  <section class="box card-box">
+    <h2>บัตรเครดิต / เดบิต</h2>
+    <p class="muted small">เลขบัตรส่งตรงไปที่ Omise อย่างปลอดภัย ร้านไม่เห็นและไม่เก็บเลขบัตร</p>
+    <form method="post" action="${back}/card" data-omise-card data-pkey="${esc(publicKey)}">
+      <input type="hidden" name="csrf" value="${esc(csrf)}">
+      <input type="hidden" name="omiseToken" data-omise-token>
+      <label class="field">ชื่อบนบัตร<input type="text" data-card="name" autocomplete="cc-name" required></label>
+      <label class="field">เลขบัตร<input type="text" data-card="number" inputmode="numeric" autocomplete="cc-number" placeholder="4242 4242 4242 4242" required></label>
+      <div class="card-row">
+        <label class="field">เดือน<input type="text" data-card="expiration_month" inputmode="numeric" autocomplete="cc-exp-month" placeholder="MM" maxlength="2" required></label>
+        <label class="field">ปี<input type="text" data-card="expiration_year" inputmode="numeric" autocomplete="cc-exp-year" placeholder="YYYY" maxlength="4" required></label>
+        <label class="field">CVV<input type="text" data-card="security_code" inputmode="numeric" autocomplete="cc-csc" maxlength="4" required></label>
+      </div>
+      <p class="error small" data-card-error hidden></p>
+      <button class="btn primary block lg" type="submit">จ่าย ${baht(order.amount)} ด้วยบัตร</button>
+    </form>
+  </section>`}
+  <p class="muted small center">การชำระเงินดำเนินการโดย Omise (Opn Payments) · <a href="/refund">นโยบายคืนเงิน</a> · <a href="/p/${esc(p.slug)}">ยกเลิก</a></p>
+</div>
+<script src="https://cdn.omise.co/omise.js"></script>
+<script src="/pay.js?v=${V}" defer></script>`,
+  });
+}
+
+function transferPay({ cfg, user, csrf, order, p, expiresAt, error }) {
+  const T = cfg.transfer;
+  const amt = bahtExact(order.transfer_amount);
+  const satang = String(order.transfer_amount % 100).padStart(2, '0');
+  const bank = T.bankName && T.bankAccountNo && T.bankAccountName;
+  const rejected = order.status === 'rejected';
+  return layout({
+    title: 'โอนเงิน', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-pay', intro: false,
+    body: `
+<div class="narrow pay transfer" data-order="${esc(order.id)}">
+  <h1>โอนเงินเพื่อรับสินค้า</h1>
+  ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ''}
+  ${rejected ? `<div class="note warn"><span><b>ร้านยังไม่พบรายการโอนนี้</b><br>${esc(order.review_note || '')}<br><span class="small">ตรวจยอดและบัญชีผู้รับอีกครั้ง ถ้าโอนแล้วจริงกด "ยืนยันการโอนเงิน" ใหม่ด้านล่างได้</span></span></div>` : ''}
+  <div class="box pay-sum"><div><b>${esc(p.title)}</b><small class="muted">ราคา ${esc(baht(order.amount))} · ซื้อครั้งเดียว ใช้ได้ตลอด</small></div></div>
+
+  <section class="box xfer-amount" aria-label="ยอดที่ต้องโอน">
+    <p class="eyebrow">ยอดที่ต้องโอน (โอนให้ตรงทุกสตางค์)</p>
+    <p class="xfer-big"><span data-copy-text="${esc((order.transfer_amount / 100).toFixed(2))}">${esc(amt)}</span></p>
+    <button type="button" class="btn small" data-copy="${esc((order.transfer_amount / 100).toFixed(2))}">คัดลอกยอด</button>
+    ${T.uniqueSatang
+    ? `<p class="muted small">เศษสตางค์ <b>.${esc(satang)}</b> ใช้ให้ร้านจับคู่กับออเดอร์ของคุณ ถ้าโอนไม่ตรงยอด ร้านจะหารายการไม่เจอและอนุมัติไม่ได้</p>`
+    : '<p class="muted small">โอนตามยอดนี้เป๊ะ แล้วกด "ยืนยันการโอนเงิน" ด้านล่างทันทีหลังโอนเสร็จ</p>'}
+  </section>
+
+  ${T.promptpayId ? `<section class="box xfer-qr">
+    <h2>สแกนจ่ายด้วย PromptPay</h2>
+    <div class="qr-frame"><img class="qr-img" src="/pay/transfer/${esc(order.id)}/qr" alt="QR PromptPay ยอด ${esc(amt)}" width="280" height="280"><i class="qr-scan" aria-hidden="true"></i></div>
+    <p class="muted small">เปิดแอปธนาคาร สแกน QR นี้ ยอด ${esc(amt)} จะถูกใส่ให้อัตโนมัติ${T.promptpayName ? `<br>ชื่อผู้รับ: <b>${esc(T.promptpayName)}</b>` : ''}</p>
+  </section>` : ''}
+
+  ${bank ? `<section class="box xfer-bank">
+    <h2>${T.promptpayId ? 'หรือโอนเข้าบัญชี' : 'โอนเข้าบัญชี'}</h2>
+    <dl class="xfer-dl">
+      <div><dt>ธนาคาร</dt><dd>${esc(T.bankName)}</dd></div>
+      <div><dt>เลขบัญชี</dt><dd><b data-copy-text="${esc(T.bankAccountNo.replace(/\D/g, ''))}">${esc(T.bankAccountNo)}</b> <button type="button" class="btn small" data-copy="${esc(T.bankAccountNo.replace(/\D/g, ''))}">คัดลอก</button></dd></div>
+      <div><dt>ชื่อบัญชี</dt><dd>${esc(T.bankAccountName)}</dd></div>
+    </dl>
+  </section>` : ''}
+
+  <section class="box xfer-ref">
+    <p class="eyebrow">รหัสอ้างอิงออเดอร์</p>
+    <p class="xfer-code">${esc(order.pay_ref)}</p>
+    <p class="muted small">ถ้าแอปธนาคารมีช่อง "บันทึกช่วยจำ" ใส่รหัสนี้ลงไปด้วย ช่วยให้ร้านจับคู่ได้ง่ายขึ้น (ไม่บังคับ) · ออเดอร์นี้เก็บไว้ให้ถึง ${esc(thDate(expiresAt))}</p>
+  </section>
+
+  <form class="box xfer-confirm" method="post" action="/pay/transfer/${esc(order.id)}/confirm" data-confirm-title="โอนเงินแล้วใช่ไหม?" data-confirm="ยอด ${esc(amt)} · กดยืนยันแล้วร้านจะตรวจรายการ และส่งสินค้าเข้าคลังให้" data-confirm-ok="โอนแล้ว ยืนยันเลย" data-confirm-cancel="ยังไม่ได้โอน">
+    <input type="hidden" name="csrf" value="${esc(csrf)}">
+    <h2>โอนแล้วใช่ไหม</h2>
+    <button class="btn primary block lg" type="submit">ยืนยันการโอนเงิน</button>
+    <p class="muted small center">กดแล้วระบบจะแจ้งร้านให้ตรวจสอบ สินค้าจะเข้าคลังเมื่อร้านอนุมัติ (ไม่ได้เข้าทันที)</p>
+  </form>
+  <p class="center"><a href="/p/${esc(p.slug)}">ยกเลิก</a></p>
+</div>
+<script src="/transfer.js?v=${V}" defer></script>`,
+  });
+}
+
+function adminTransfers({ cfg, user, csrf, waiting, recent, audit, done, problem }) {
+  const productTitle = (slug) => (cfg.products.find((p) => p.slug === slug) || {}).title || slug;
+  const msg = done === 'approved' ? ['ok', 'อนุมัติแล้ว สินค้าเข้าคลังของลูกค้าและส่งอีเมลแจ้งแล้ว']
+    : done === 'rejected' ? ['ok', 'ปฏิเสธแล้ว ลูกค้าจะเห็นเหตุผลและแจ้งโอนใหม่ได้']
+    : problem === 'handled' ? ['bad', 'รายการนี้ถูกดำเนินการไปแล้ว (อนุมัติ/ปฏิเสธซ้ำไม่ได้)']
+    : problem === 'reason' ? ['bad', 'ใส่เหตุผลที่ปฏิเสธอย่างน้อย 3 ตัวอักษร'] : null;
+  const cards = waiting.map((o) => `
+  <article class="box review-card">
+    <div class="review-top">
+      <div><p class="eyebrow">ยอดที่ต้องเจอในแอปธนาคาร</p><p class="xfer-big small">${esc(bahtExact(o.transfer_amount))}</p></div>
+      <span class="xfer-code">${esc(o.pay_ref)}</span>
+    </div>
+    <dl class="xfer-dl">
+      <div><dt>สินค้า</dt><dd>${esc(productTitle(o.product_slug))} (ราคา ${esc(baht(o.amount))})</dd></div>
+      <div><dt>ลูกค้า</dt><dd>${esc(o.user_email || o.email)}</dd></div>
+      <div><dt>กดยืนยันโอนเมื่อ</dt><dd>${esc(thDate(o.confirmed_at))}${o.confirm_count > 1 ? ` · ครั้งที่ ${esc(o.confirm_count)}` : ''}</dd></div>
+      ${o.transfer_time ? `<div><dt>ลูกค้าบอกว่าโอนเวลา</dt><dd>${esc(o.transfer_time)} น.</dd></div>` : ''}
+      <div><dt>สร้างออเดอร์</dt><dd>${esc(thDate(o.created_at))}</dd></div>
+    </dl>
+    ${o.same && o.same.length ? `<div class="note warn same-amount"><span><b>ระวัง: มีออเดอร์ยอดเท่ากันอีก ${o.same.length} รายการ</b> ดูเวลาที่เงินเข้าในแอปธนาคาร เทียบกับเวลาที่ลูกค้ากดยืนยัน (${esc(o.transfer_time ? o.transfer_time + ' น.' : thTime(o.confirmed_at))}) ของรายการนี้ เงินที่เข้าก่อนให้อนุมัติออเดอร์ที่กดยืนยันก่อน
+      <ul>${o.same.map((x) => `<li>${esc(x.user_email || '-')} · <code>${esc(x.pay_ref)}</code> · ${x.status === 'review' ? `รอตรวจ กดยืนยัน ${esc(thDate(x.confirmed_at))}` : 'ยังไม่แจ้งโอน'}</li>`).join('')}</ul></span></div>` : ''}
+    <div class="review-actions">
+      <form method="post" action="/admin/transfers/${esc(o.id)}/approve" data-confirm-title="เห็นยอด ${esc(bahtExact(o.transfer_amount))} เข้าบัญชีแล้วใช่ไหม?" data-confirm="${o.same && o.same.length ? `มีออเดอร์ยอดเท่ากันอีก ${o.same.length} รายการ เทียบเวลาให้ตรงกับรายการนี้ · ` : ''}อนุมัติแล้วสินค้าเข้าคลังลูกค้าทันที และยกเลิกไม่ได้" data-confirm-ok="อนุมัติ" data-confirm-cancel="ยังก่อน">
+        <input type="hidden" name="csrf" value="${esc(csrf)}">
+        <button class="btn primary lg" type="submit">อนุมัติ</button>
+      </form>
+      <details class="reject">
+        <summary class="btn lg">ปฏิเสธ</summary>
+        <form method="post" action="/admin/transfers/${esc(o.id)}/reject">
+          <input type="hidden" name="csrf" value="${esc(csrf)}">
+          <label class="field">เหตุผล (ลูกค้าจะเห็น)<input type="text" name="reason" maxlength="200" required minlength="3" placeholder="เช่น ไม่พบรายการโอนยอด ${esc(bahtExact(o.transfer_amount))}"></label>
+          <button class="btn danger" type="submit">ยืนยันปฏิเสธ</button>
+        </form>
+      </details>
+    </div>
+  </article>`).join('');
+  const label = { paid: 'อนุมัติแล้ว', rejected: 'ปฏิเสธ', expired: 'หมดอายุ' };
+  const recentRows = recent.map((o) => `<tr><td>${esc(thDate(o.reviewed_at))}</td><td><code>${esc(o.pay_ref)}</code></td><td>${esc(bahtExact(o.transfer_amount))}</td><td>${esc(o.user_email || o.email)}</td><td><span class="tag ${esc(o.status)}">${esc(label[o.status] || o.status)}</span></td><td>${esc(o.reviewer_email || '-')}</td><td>${esc(o.status === 'rejected' ? o.review_note || '' : '')}</td></tr>`).join('');
+  const act = { customer_confirm: 'ลูกค้าแจ้งโอน', approve: 'อนุมัติ', reject: 'ปฏิเสธ', expire: 'หมดอายุ' };
+  const auditRows = audit.map((a) => `<tr><td>${esc(thDate(a.at))}</td><td><code>${esc(a.pay_ref || a.order_id.slice(0, 8))}</code></td><td>${esc(act[a.action] || a.action)}</td><td>${esc(a.actor_email || 'ระบบ')}</td><td>${esc(a.detail || '')}</td></tr>`).join('');
+  return layout({
+    title: 'ตรวจสอบการโอนเงิน', shopName: cfg.shopName, user, csrf, noindex: true, wide: true, page: 'page-admin-transfers',
+    body: `
+<nav class="crumb"><a href="/admin">หลังบ้าน</a><span>/</span><span aria-current="page">ตรวจสอบการโอนเงิน</span></nav>
+<h1>รอตรวจสอบการโอนเงิน <span class="badge wait">${waiting.length}</span></h1>
+${msg ? `<p class="${msg[0] === 'ok' ? 'success-note' : 'error'}" role="status">${esc(msg[1])}</p>` : ''}
+<p class="muted small">เปิดแอปธนาคารของร้าน ดูว่ามีเงินเข้าตรงยอดและเวลาไหม ถ้ามี กด "อนุมัติ" ถ้าไม่พบ กด "ปฏิเสธ" พร้อมเหตุผล · อนุมัติแล้วสินค้าเข้าคลังลูกค้าทันที และกดซ้ำไม่ได้</p>
+<div class="review-list">${cards || '<div class="empty"><p><b>ไม่มีรายการรอตรวจสอบ</b></p><p class="muted small">เมื่อมีลูกค้ากด "ยืนยันการโอนเงิน" จะขึ้นที่นี่ (และส่งอีเมลหาแอดมิน)</p></div>'}</div>
+<h2>ตัดสินล่าสุด</h2>
+<div class="table-wrap"><table><thead><tr><th>เวลา</th><th>รหัส</th><th>ยอด</th><th>ลูกค้า</th><th>ผล</th><th>โดย</th><th>เหตุผล</th></tr></thead><tbody>${recentRows || '<tr><td colspan="7" class="muted">ยังไม่มี</td></tr>'}</tbody></table></div>
+<h2>บันทึกการตรวจสอบ (audit log)</h2>
+<div class="table-wrap"><table><thead><tr><th>เวลา</th><th>รหัส</th><th>การกระทำ</th><th>ผู้ทำ</th><th>รายละเอียด</th></tr></thead><tbody>${auditRows || '<tr><td colspan="5" class="muted">ยังไม่มี</td></tr>'}</tbody></table></div>`,
+  });
+}
+
+function transferReceivedEmail({ cfg, order, p }) {
+  return `สวัสดีค่ะ
+
+เราได้รับแจ้งการโอนเงินสำหรับ "${p.title}" แล้ว กำลังรอร้านตรวจสอบ
+ยอดที่แจ้ง: ${bahtExact(order.transfer_amount)}
+รหัสอ้างอิง: ${order.pay_ref}
+
+เมื่อร้านตรวจพบรายการโอนและอนุมัติ แอนิเมชันจะเข้าไปอยู่ในคลังของคุณ และเราจะส่งอีเมลแจ้งอีกครั้ง
+ดูสถานะได้ที่: ${cfg.baseUrl}/order/${order.id}
+
+— ${cfg.shopName}`;
+}
+
+function transferRejectedEmail({ cfg, order, p, reason }) {
+  return `สวัสดีค่ะ
+
+ร้านยังไม่พบรายการโอนสำหรับ "${p.title}" (ยอด ${bahtExact(order.transfer_amount)} รหัส ${order.pay_ref})
+เหตุผล: ${reason}
+
+ถ้าโอนแล้วจริง ตรวจยอดและบัญชีผู้รับ แล้วกด "ยืนยันการโอนเงิน" อีกครั้งได้ที่:
+${cfg.baseUrl}/pay/transfer/${order.id}
+
+— ${cfg.shopName}`;
+}
+
+function adminTransferEmail({ cfg, order, p }) {
+  return `มีลูกค้าแจ้งโอนเงิน รอตรวจสอบ
+
+สินค้า: ${p.title}
+ยอดที่ต้องเจอในแอปธนาคาร: ${bahtExact(order.transfer_amount)}
+รหัสอ้างอิง: ${order.pay_ref}
+ลูกค้า: ${order.email}
+ลูกค้ากดยืนยันโอนเมื่อ: ${thDate(order.confirmed_at || Date.now())}
+
+ตรวจและอนุมัติที่: ${cfg.baseUrl}/admin/transfers`;
 }
 
 function orderStatus({ cfg, user, csrf, order, p }) {
   const paid = order.status === 'paid';
   return layout({
     title: paid ? 'ชำระเงินสำเร็จ' : 'รอยืนยันการชำระเงิน', shopName: cfg.shopName, user, csrf, noindex: true,
-    body: paid ? `
+    body: order.provider === 'manual' && ['pending', 'review', 'rejected', 'expired'].includes(order.status) ? manualStatusBody({ order, p }) : ['failed', 'expired', 'refunded'].includes(order.status) ? `
+<div class="narrow">
+<h1>${order.status === 'refunded' ? 'คืนเงินแล้ว' : order.status === 'expired' ? 'QR หมดอายุ' : 'ชำระเงินไม่สำเร็จ'}</h1>
+<p>${order.status === 'refunded' ? 'คำสั่งซื้อนี้คืนเงินแล้ว สินค้าถูกนำออกจากคลัง' : 'ยังไม่มีการตัดเงิน ลองชำระใหม่ได้เลย'}</p>
+${order.status === 'refunded' ? `<p><a class="btn" href="/p/${esc(p.slug)}">ไปหน้าสินค้า</a></p>` : `<p><a class="btn primary" href="/pay/${esc(order.provider)}/${esc(order.id)}">ชำระเงินอีกครั้ง</a></p>`}
+<p class="muted small">รหัสคำสั่งซื้อ ${esc(order.id.slice(0, 8))}</p>
+</div>` : paid ? `
 <div class="success narrow">
-  <div class="success-mark" aria-hidden="true">${ICON.check}</div>
+  <div class="success-mark" data-celebrate="always" aria-hidden="true">${ICON.check}</div>
   <h1>ชำระเงินสำเร็จ</h1>
   <p>ขอบคุณที่สั่งซื้อ <b>${esc(p.title)}</b> แอนิเมชันนี้อยู่ในคลังของคุณแล้ว</p>
   <p><a class="btn primary lg" href="/library/${esc(order.id)}">${ICON.library} เปิดใช้จากคลัง</a></p>
@@ -450,9 +688,43 @@ function orderStatus({ cfg, user, csrf, order, p }) {
 <h1>รอยืนยันการชำระเงิน…</h1>
 <p>ระบบกำลังรอการยืนยันจากผู้ให้บริการชำระเงิน หน้านี้จะเปลี่ยนเองเมื่อยืนยันแล้ว</p>
 <div class="spinner" data-poll="/order/${esc(order.id)}/status" aria-hidden="true"></div>
-<p class="muted small">ถ้ารอนานเกิน 5 นาที กรุณาติดต่อร้านพร้อมรหัสคำสั่งซื้อ ${esc(order.id.slice(0, 8))}</p>
+<p class="muted small">ถ้ารอนานเกิน 5 นาที กรุณา<a href="/contact">ติดต่อร้าน</a>พร้อมรหัสคำสั่งซื้อ ${esc(order.id.slice(0, 8))}</p>
 </div>`,
   });
+}
+
+function manualStatusBody({ order, p }) {
+  const amt = bahtExact(order.transfer_amount);
+  if (order.status === 'expired') return `
+<div class="narrow"><h1>ออเดอร์หมดอายุ</h1>
+<p>ออเดอร์นี้หมดเวลาแล้ว ยังไม่มีการอนุมัติ ถ้าโอนไปแล้ว กรุณาติดต่อร้านพร้อมรหัสอ้างอิง <b>${esc(order.pay_ref)}</b></p>
+<p><a class="btn primary" href="/p/${esc(p.slug)}">สั่งซื้อใหม่</a></p></div>`;
+  if (order.status === 'rejected') return `
+<div class="narrow"><h1>ร้านยังไม่พบรายการโอน</h1>
+<div class="note warn"><span><b>เหตุผล:</b> ${esc(order.review_note || '')}</span></div>
+<p>ยอดที่ต้องโอน <b>${esc(amt)}</b> · รหัสอ้างอิง <b>${esc(order.pay_ref)}</b></p>
+<p><a class="btn primary lg" href="/pay/transfer/${esc(order.id)}">ตรวจแล้วแจ้งโอนอีกครั้ง</a></p></div>`;
+  if (order.status === 'pending') return `
+<div class="narrow"><h1>ยังไม่ได้แจ้งโอน</h1>
+<p>ยอดที่ต้องโอน <b>${esc(amt)}</b></p>
+<p><a class="btn primary lg" href="/pay/transfer/${esc(order.id)}">ไปหน้าโอนเงิน</a></p></div>`;
+  return `
+<div class="narrow transfer-wait">
+  <div class="sent-mark" data-celebrate="once" data-order="${esc(order.id)}" aria-hidden="true"><svg viewBox="0 0 52 52"><circle class="sent-ring" cx="26" cy="26" r="23"/><path class="sent-tick" d="M15 27l7 7 15-16"/></svg></div>
+  <h1>แจ้งโอนสำเร็จ!</h1>
+  <p class="live-wait" data-poll="/order/${esc(order.id)}/status" data-poll-status="review"><i aria-hidden="true"></i> รอร้านตรวจสอบ · หน้านี้อัปเดตเอง</p>
+  <p>ร้านจะดูรายการโอนยอด <b>${esc(amt)}</b> ในบัญชี แล้วอนุมัติให้ หน้านี้จะเปลี่ยนเองเมื่ออนุมัติ ปิดหน้านี้ได้ เราจะส่งอีเมลแจ้ง</p>
+  <ol class="steps-line">
+    <li class="done">แจ้งโอนแล้ว</li><li class="now">ร้านกำลังตรวจสอบ</li><li>สินค้าเข้าคลัง</li>
+  </ol>
+  <div class="box"><dl class="xfer-dl">
+    <div><dt>สินค้า</dt><dd>${esc(p.title)}</dd></div>
+    <div><dt>ยอดที่แจ้ง</dt><dd><b>${esc(amt)}</b></dd></div>
+    <div><dt>รหัสอ้างอิง</dt><dd><b>${esc(order.pay_ref)}</b></dd></div>
+    <div><dt>แจ้งเมื่อ</dt><dd>${esc(thDate(order.confirmed_at))}</dd></div>
+  </dl></div>
+  <p class="muted small">ถ้ารอนานผิดปกติ <a href="/contact">ติดต่อร้าน</a>พร้อมรหัสอ้างอิงด้านบน</p>
+</div>`;
 }
 
 function fileRow({ f, href, label }) {
@@ -482,13 +754,23 @@ function versionList(cfg, versions, productsBySlug, fonts = cfg.fonts) {
     </li>`).join('')}</ul>`;
 }
 
-function library({ cfg, user, csrf, items, customs = [], fonts, limits }) {
+function library({ cfg, user, csrf, items, open = [], customs = [], fonts, limits }) {
+  const openLabel = { pending: 'รอโอนเงิน', review: 'รอร้านตรวจสอบ', rejected: 'ร้านยังไม่พบยอดโอน' };
+  const openHref = (o) => (o.provider === 'manual' && o.status !== 'review' ? `/pay/transfer/${o.id}` : `/order/${o.id}`);
+  const openList = open.length ? `
+<section class="box lib-open" aria-label="คำสั่งซื้อที่ยังไม่เสร็จ">
+  <h2>คำสั่งซื้อที่ยังไม่เสร็จ</h2>
+  <ul class="lib-open-list">${open.map(({ order: o, p }) => `
+    <li><a href="${openHref(o)}"><b>${esc(p.title)}</b><span class="muted small">${esc(openLabel[o.status] || o.status)}${o.pay_ref ? ` · ${esc(o.pay_ref)}` : ''}</span><i>›</i></a></li>`).join('')}
+  </ul>
+  <p class="muted small">สินค้าจะเข้าคลังเมื่อชำระเงินเสร็จ${cfg.paymentProvider === 'manual' ? 'และร้านอนุมัติแล้ว' : ''}</p>
+</section>` : '';
   const list = items.map(({ order, p }) => `
     <article class="lib-card reveal">
       <a href="/library/${esc(order.id)}" class="lib-thumb"><img src="/previews/${esc(p.slug)}_horizontal.jpg" alt="" loading="lazy" width="960" height="540"></a>
       <div class="lib-body">
         <h3>${esc(p.title)}</h3>
-        <p class="muted small">ซื้อเมื่อ ${esc(thDate(order.paid_at || order.created_at))} · รหัส ${esc(order.id.slice(0, 8))}</p>
+        <p class="muted small">${order.provider === 'free' ? 'รับฟรีเมื่อ' : 'ซื้อเมื่อ'} ${esc(thDate(order.paid_at || order.created_at))} · รหัส ${esc(order.id.slice(0, 8))}</p>
         <div class="lib-actions">
           <a class="btn primary" href="/library/${esc(order.id)}/customize">${ICON.edit} ปรับแต่งแล้วโหลด</a>
           <a class="btn" href="/library/${esc(order.id)}">${ICON.download} แบบต้นฉบับ</a>
@@ -502,13 +784,19 @@ function library({ cfg, user, csrf, items, customs = [], fonts, limits }) {
   <div><p class="eyebrow">บัญชี ${esc(user.email)}</p><h1>คลังของฉัน</h1></div>
   <p class="muted small">${items.length} รายการ · ใช้ได้ตลอด</p>
 </div>
+${openList}
 ${items.length ? `<div class="lib-grid">${list}</div>` : `
 <div class="empty">
   <p><b>ยังไม่มีแอนิเมชันในคลัง</b></p>
   <p class="muted small">ซื้อแล้วจะมาอยู่ที่นี่ทันที ใช้ได้ตลอด</p>
   <p><a class="btn primary" href="/#catalog">เลือกแอนิเมชัน</a></p>
 </div>`}
-${items.length ? `<nav class="lib-tools" aria-label="เครื่องมือปรับแต่ง">
+${items.length ? `<a class="cz-cta sub-cta" href="/subtitles">
+  <span class="cz-cta-icon">${ICON.cc}</span>
+  <span><b>ใหม่! ใส่ซับอัตโนมัติด้วยแบบในคลัง</b><small>อัปคลิปที่มีเสียงพูด ระบบทำซับไทยให้ แก้คำได้ แล้วได้คลิปพร้อมซับ + ไฟล์ .srt</small></span>
+  <span class="cz-cta-go">›</span>
+</a>
+<nav class="lib-tools" aria-label="เครื่องมือปรับแต่ง">
   <a href="/library/styles" class="lib-tool">${ICON.edit}<span><b>สไตล์ของฉัน</b><small>ฟอนต์ + สีที่บันทึกไว้ กดทีเดียวใช้ได้</small></span></a>
   <a href="/library/fonts" class="lib-tool">${ICON.film}<span><b>ฟอนต์ของฉัน</b><small>อัปโหลดฟอนต์มาใช้เอง</small></span></a>
 </nav>` : ''}
@@ -516,7 +804,7 @@ ${customs.length ? `<section class="lib-versions"><div class="section-head"><div
   });
 }
 
-function libraryItem({ cfg, user, csrf, order, p, editorId, left, size = 'vertical' }) {
+function libraryItem({ cfg, user, csrf, order, p, editorId, left, size = 'vertical', claimed = false }) {
   const { editors } = cfg.editorsConfig;
   const ed = editors[editorId];
   const q = (patch) => {
@@ -535,12 +823,13 @@ function libraryItem({ cfg, user, csrf, order, p, editorId, left, size = 'vertic
     title: `${p.title} · คลังของฉัน`, shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-library',
     body: `
 <nav class="crumb" aria-label="ตำแหน่งหน้า"><a href="/library">คลังของฉัน</a><span>/</span><span aria-current="page">${esc(p.title)}</span></nav>
+${claimed && order.provider === 'free' ? `<p class="claimed-bar" role="status">${ICON.check}<span><b>ได้รับแล้ว ฟรี!</b> "${esc(p.title)}" อยู่ในคลังของคุณ โหลดหรือปรับแต่งได้เลย</span></p>` : ''}
 <div class="lib-item-head">
   <img src="/previews/${esc(p.slug)}_horizontal.jpg" alt="" width="960" height="540">
   <div>
     <p class="eyebrow">อยู่ในคลังของคุณ · ใช้ได้ตลอด</p>
     <h1>${esc(p.title)}</h1>
-    <p class="muted small">ซื้อเมื่อ ${esc(thDate(order.paid_at || order.created_at))} · รหัส ${esc(order.id.slice(0, 8))}</p>
+    <p class="muted small">${order.provider === 'free' ? 'รับฟรีเมื่อ' : 'ซื้อเมื่อ'} ${esc(thDate(order.paid_at || order.created_at))} · รหัส ${esc(order.id.slice(0, 8))}</p>
   </div>
 </div>
 <a class="cz-cta" href="/library/${esc(order.id)}/customize">
@@ -610,7 +899,7 @@ function customize({ cfg, user, csrf, order, p, editorId, versions, limits, tool
   const myFonts = fonts.filter((f) => f.user);
   const swatches = (name, list, cur) => list.map((c) => `<button type="button" class="swatch${c === cur ? ' active' : ''}" data-swatch="${name}" data-color="${c}" style="--c:${c}" aria-label="สี ${c}"></button>`).join('');
   const fontOpt = (f) => `
-      <label class="font-opt${f.user ? ' mine' : ''}${f.thai && f.thai !== 'full' ? ' warn' : ''}">
+      <label class="font-opt${f.user ? ' mine' : ''}${f.thai && f.thai !== 'full' ? ' warn' : ''}" data-thai="${esc(f.thai || 'full')}">
         <input type="radio" name="font" value="${esc(f.id)}" data-weight="${esc(f.weight)}"${f.chars ? ` data-chars="${esc(f.chars)}" data-label="${esc(f.label)}"` : ''} ${f.id === v.font ? 'checked' : ''} required>
         <span class="font-sample" style="font-family:'tt-${esc(f.id)}';font-weight:${esc(f.weight)}">${f.thai === 'none' ? 'Hello Aa' : 'สวัสดี Aa'}</span>
         <small>${esc(f.label)} · ${esc(f.mood)}</small>
@@ -631,30 +920,13 @@ function customize({ cfg, user, csrf, order, p, editorId, versions, limits, tool
 <nav class="crumb" aria-label="ตำแหน่งหน้า"><a href="/library">คลังของฉัน</a><span>/</span><a href="/library/${esc(order.id)}">${esc(p.title)}</a><span>/</span><span aria-current="page">ปรับแต่ง</span></nav>
 <div class="cz-head">
   <div><p class="eyebrow">ปรับแต่งเป็นของคุณเอง</p><h1>${esc(p.title)}</h1></div>
-  <p class="muted small">ท่าเคลื่อนไหวเดิม · เปลี่ยนข้อความ ฟอนต์ สี ได้ตามใจ</p>
+  <p class="muted small">ท่าเคลื่อนไหวเดิม · เปลี่ยนข้อความ ฟอนต์ สี ได้ตามใจ${p.motion === 'neon' ? ' · สีตัวอักษร = สีไฟ, สีขอบ = แสงฟุ้งรอบนอก, ความหนาขอบ = ความแรงของแสง' : ''}</p>
 </div>
 ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ''}
-<section class="styles-bar" data-styles data-csrf="${esc(csrf)}">
-  <div class="styles-head">
-    <b>สไตล์ของฉัน</b>
-    <span class="muted small">กดเพื่อใช้ฟอนต์และสีนั้นทันที (ข้อความไม่เปลี่ยน)</span>
-    ${presets.length ? '<a class="small" href="/library/styles">เปลี่ยนชื่อ / จัดการ</a>' : ''}
-  </div>
-  <div class="style-chips" data-style-chips>
-    ${styleChips}
-    <button type="button" class="style-add" data-style-save>+ บันทึกสไตล์นี้</button>
-  </div>
-  <form class="style-form" data-style-form hidden>
-    <input type="text" maxlength="40" placeholder="ตั้งชื่อสไตล์ เช่น แดงขอบขาว" data-style-name aria-label="ชื่อสไตล์">
-    <button class="btn small primary" type="submit">บันทึก</button>
-    <button class="btn small ghost" type="button" data-style-cancel>ยกเลิก</button>
-  </form>
-  <p class="style-hint muted small" data-style-msg>${presets.length ? '' : 'ครั้งแรก: เลือกฟอนต์และสีที่ชอบด้านล่าง แล้วกด "+ บันทึกสไตล์นี้" ครั้งหน้ากดชื่อสไตล์ทีเดียวก็ได้หน้าตาเดิม'}</p>
-</section>
 <div class="cz">
   <div class="cz-preview-col">
     <div class="cz-preview">
-      <div class="cz-stage" data-stage data-ratio="${(v.size || 'vertical') === 'horizontal' ? 'h' : 'v'}" data-bg="checker">
+      <div class="cz-stage" data-stage data-motion="${esc(p.motion || 'pop')}" data-ratio="${(v.size || 'vertical') === 'horizontal' ? 'h' : 'v'}" data-bg="checker">
         <div class="cz-text" data-preview-text><span class="fill"></span></div>
       </div>
       <div class="cz-bar">
@@ -676,16 +948,37 @@ ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ''}
   </div>
 
   <form class="cz-form" method="post" action="/library/${esc(order.id)}/customize" data-cz-form>
+    <div class="wiz-head" data-wiz-head hidden>
+      <a class="wiz-x" href="/library/${esc(order.id)}" aria-label="ออกจากหน้าปรับแต่ง">✕</a>
+      <div class="wiz-title"><span class="wiz-n" data-wiz-n>1/5</span><b data-wiz-title></b></div>
+      <div class="wiz-dots" data-wiz-dots role="tablist" aria-label="ขั้นตอน"></div>
+    </div>
     <input type="hidden" name="csrf" value="${esc(csrf)}">
-    <fieldset class="cz-field">
-      <legend>แนวของคลิป</legend>
-      <div class="size-grid">${sizeOpts}</div>
-    </fieldset>
+    <div class="cz-step" data-step="1" data-title="พิมพ์ข้อความ">
     <fieldset class="cz-field">
       <legend>ข้อความ</legend>
-      <div class="cz-input"><input type="text" name="text" value="${esc(v.text)}" maxlength="120" required autocomplete="off" data-cz-text><span class="muted small" data-counter></span></div>
+      <div class="cz-input"><input type="text" name="text" value="${esc(v.text)}" maxlength="120" required autocomplete="off" enterkeyhint="next" data-cz-text><span class="muted small" data-counter></span></div>
       <p class="muted small">ไม่เกิน 40 ตัวอักษร · ภาษาไทย อังกฤษ ตัวเลข และเครื่องหมายทั่วไป</p>
     </fieldset>
+    <section class="styles-bar" data-styles data-csrf="${esc(csrf)}">
+      <div class="styles-head">
+        <b>สไตล์ของฉัน</b>
+        <span class="muted small">กดเพื่อใช้ฟอนต์และสีนั้นทันที (ข้อความไม่เปลี่ยน)</span>
+        ${presets.length ? '<a class="small" href="/library/styles">เปลี่ยนชื่อ / จัดการ</a>' : ''}
+      </div>
+      <div class="style-chips" data-style-chips>
+        ${styleChips}
+        <button type="button" class="style-add" data-style-save>+ บันทึกสไตล์นี้</button>
+      </div>
+      <div class="style-form" data-style-form hidden role="group" aria-label="ตั้งชื่อสไตล์">
+        <input type="text" maxlength="40" placeholder="ตั้งชื่อสไตล์ เช่น แดงขอบขาว" data-style-name aria-label="ชื่อสไตล์">
+        <button class="btn small primary" type="button" data-style-submit>บันทึก</button>
+        <button class="btn small ghost" type="button" data-style-cancel>ยกเลิก</button>
+      </div>
+      <p class="style-hint muted small" data-style-msg>${presets.length ? '' : 'ครั้งแรก: เลือกฟอนต์และสีที่ชอบด้านล่าง แล้วกด "+ บันทึกสไตล์นี้" ครั้งหน้ากดชื่อสไตล์ทีเดียวก็ได้หน้าตาเดิม'}</p>
+    </section>
+    </div>
+    <div class="cz-step" data-step="2" data-title="เลือกฟอนต์">
     <fieldset class="cz-field">
       <legend>ฟอนต์ <span class="muted small">ฟอนต์ของร้านใช้เชิงพาณิชย์ได้ทุกตัว (SIL OFL)</span></legend>
       <div class="font-grid">${fontsHtml}</div>
@@ -700,6 +993,8 @@ ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ''}
       </div>
       <p class="font-warn" data-font-warn hidden></p>
     </fieldset>
+    </div>
+    <div class="cz-step" data-step="3" data-title="เลือกสี">
     <fieldset class="cz-field">
       <legend>สีตัวอักษร</legend>
       <div class="swatches">${swatches('fill', FILL_SWATCHES, v.fill)}<label class="swatch-pick"><input type="color" name="fill" value="${esc(v.fill)}" data-cz-fill aria-label="เลือกสีเอง"><span>เลือกเอง</span></label></div>
@@ -713,10 +1008,19 @@ ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ''}
       <legend>เงา</legend>
       <label class="toggle"><input type="checkbox" name="shadow" value="1" ${v.shadow ? 'checked' : ''} data-cz-shadow><span class="toggle-ui"></span><span>เงานุ่มใต้ตัวอักษร <small class="muted">(สวยที่สุดกับไฟล์โปร่งใส ProRes/PNG)</small></span></label>
     </fieldset>
+    </div>
+    <div class="cz-step" data-step="4" data-title="แนวและความยาว">
     <fieldset class="cz-field">
-      <legend>ความยาวคลิป <span class="muted small">(ข้อความเด้งเข้า → ค้าง → จางออก)</span></legend>
+      <legend>แนวของคลิป</legend>
+      <div class="size-grid">${sizeOpts}</div>
+    </fieldset>
+    <fieldset class="cz-field">
+      <legend>ความยาวคลิป <span class="muted small">(เข้า → ค้าง → ออก)</span></legend>
       <div class="seg seg-wide">${secOpts}</div>
     </fieldset>
+    </div>
+    <div class="cz-step" data-step="5" data-title="ไฟล์ที่ได้ แล้วสร้าง">
+    <ul class="wiz-summary" data-wiz-summary hidden></ul>
     <fieldset class="cz-field">
       <legend>ตัดต่อด้วยโปรแกรมอะไร</legend>
       <div class="ed-grid">${edOpts}</div>
@@ -725,17 +1029,40 @@ ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ''}
     </fieldset>
     ${tools.ok ? '' : `<div class="note warn">${ICON.shield}<span><b>ระบบสร้างไฟล์ยังไม่พร้อม</b> ลองดูตัวอย่างและเลือกค่าไว้ได้ แต่ยังกดสร้างไฟล์ไม่ได้จนกว่าร้านจะเปิดระบบเรนเดอร์</span></div>`}
     ${full ? `<div class="note warn">${ICON.shield}<span><b>พื้นที่เก็บเวอร์ชันเต็มแล้ว</b> ลบเวอร์ชันเก่าที่ไม่ใช้ใน <a href="/library">คลัง</a> แล้วสร้างใหม่ได้ทันที</span></div>` : ''}
-    <button class="btn primary block lg" type="submit" name="action" value="render" ${canRender ? '' : 'disabled'}>${ICON.bolt} สร้างไฟล์ของฉัน</button>
+    <div class="cz-submit">
+    <button class="btn primary block lg" type="submit" name="action" value="render" data-render-btn ${canRender ? '' : 'disabled'}>${ICON.bolt} สร้างไฟล์ของฉัน</button>
     <p class="muted small center">${busy ? `มีงานที่กำลังสร้างอยู่${running ? ` <a href="/library/custom/${esc(running.id)}">ดูความคืบหน้า</a>` : ''} · ระหว่างนี้บันทึกสไตล์ไว้ได้` : 'สร้างได้ไม่จำกัดครั้ง · ใช้เวลาประมาณ 5–15 วินาที'}</p>
+    </div>
+    </div>
   </form>
+  <div class="wiz-bar" data-wiz-bar hidden>
+    <button type="button" class="btn ghost" data-wiz-back>‹ ย้อนกลับ</button>
+    <button type="button" class="btn primary" data-wiz-next>ถัดไป ›</button>
+  </div>
 </div>
 ${versions.length ? `<section class="lib-versions"><h2>เวอร์ชันของฉันจากแอนิเมชันนี้</h2>${versionList(cfg, versions, null, fonts)}</section>` : ''}
 <script src="/motion.js?v=${V}" defer></script>
-<script src="/customize.js?v=${V}" defer></script>`,
+<script src="/customize.js?v=${V}" defer></script>
+<script src="/wizard.js?v=${V}" defer></script>`,
   });
 }
 
-function customStatus({ cfg, user, csrf, job, p, position, fonts = cfg.fonts }) {
+// โหมดเบราว์เซอร์: กล่องสร้างไฟล์ในเครื่องลูกค้า (public/render-ui.js)
+function browserJobBox(job, csrf, { mode, auto, title, note }) {
+  return `<div class="job" data-browser-job data-base="/library/custom/${esc(job.id)}" data-mode="${mode}" data-csrf="${esc(csrf)}" ${auto ? 'data-auto' : ''}>
+  <h2>${title}</h2>
+  <div class="job-bar"><i data-bar style="width:0%"></i></div>
+  <p><b data-pct>0%</b> · <span data-stage>${auto ? 'กำลังเริ่ม' : 'พร้อมสร้าง'}</span></p>
+  <p class="error small" data-err role="alert" hidden></p>
+  <button type="button" class="btn primary lg block" data-go ${auto ? 'hidden' : ''}>${ICON.download} ${mode === 'download' ? 'สร้างไฟล์และดาวน์โหลด' : 'สร้างไฟล์'}</button>
+  <p class="muted small">${note}</p>
+  <p data-after hidden><a class="btn ghost" href="/library/custom/${esc(job.id)}">เสร็จแล้ว · กลับไปที่เวอร์ชันนี้</a></p>
+</div>`;
+}
+const BROWSER_NOTE = 'ไฟล์สร้างในเบราว์เซอร์ของคุณเอง (ไม่ต้องรอคิวร้าน) เปิดหน้านี้ค้างไว้จนเสร็จ · ใช้เวลาราว 20 วินาที – 3 นาที ตามความยาวและชนิดไฟล์ · ครั้งแรกต้องโหลดตัวเข้ารหัสราว 32 MB';
+const browserScripts = () => `<script src="/motion.js?v=${V}" defer></script><script src="/subplan.js?v=${V}" defer></script><script type="module" src="/render-ui.js?v=${V}"></script>`;
+
+function customStatus({ cfg, user, csrf, job, p, position, fonts = cfg.fonts, browserMode = false, save = false }) {
   const font = fonts.find((f) => f.id === job.font) || { label: 'ฟอนต์ที่ลบไปแล้ว', weight: 700, id: job.font };
   const ed = cfg.editorsConfig.editors[job.editor] || { label: job.editor };
   const one = JSON.parse(job.files_json || '[]').find((x) => x.format === 'single');
@@ -744,7 +1071,16 @@ function customStatus({ cfg, user, csrf, job, p, position, fonts = cfg.fonts }) 
     ? `<p class="muted small">ฟอนต์ "${esc(font.label)}" เป็นฟอนต์ที่คุณอัปโหลดเอง ร้านไม่ได้ให้สิทธิ์ใช้งานฟอนต์นี้ กรุณาตรวจว่ามีสิทธิ์ใช้เชิงพาณิชย์</p>`
     : `<p class="muted small">ฟอนต์ ${esc(font.label)} ใช้สัญญา SIL Open Font License ใช้เชิงพาณิชย์ได้ · <a href="/fonts/thai/${esc(font.id)}/OFL.txt">อ่านสัญญาฟอนต์</a></p>`;
   const outlineLabel = { none: 'ไม่มีขอบ', thin: 'ขอบบาง', medium: 'ขอบกลาง', thick: 'ขอบหนา' }[job.outline] || job.outline;
-  const body = job.status === 'done' ? (one ? `
+  const body = browserMode && job.status !== 'done'
+    ? browserJobBox(job, csrf, { mode: 'create', auto: job.status !== 'failed', title: job.status === 'failed' ? 'สร้างไฟล์ไม่สำเร็จ ลองอีกครั้งได้' : 'กำลังสร้างไฟล์ในเครื่องของคุณ', note: BROWSER_NOTE })
+    : browserMode && one && one.browser ? `
+<section class="ready-box">
+  <div class="ready-head">${ICON.check}<div><h2>${save ? 'กำลังสร้างไฟล์ให้อีกครั้ง' : 'สร้างเสร็จแล้ว'}</h2><p class="muted small">${esc(fileLabel(cfg, fmt))} · ${esc(SIZE_LABEL[job.size] || '')} · ${esc(job.seconds)} วินาที · ใช้กับ ${esc(ed.label)}</p></div></div>
+  ${browserJobBox(job, csrf, { mode: 'download', auto: save, title: 'ดาวน์โหลดอีกครั้ง', note: 'ร้านเก็บแค่ "สูตร" ของเวอร์ชันนี้ กดแล้วเบราว์เซอร์จะสร้างไฟล์เดิมให้ใหม่ทันที (นับเป็น 1 ครั้งในโควตาดาวน์โหลดต่อวัน)' })}
+</section>
+${ed.guide ? howToBlock(cfg, ed, fmt) : ''}
+${fontNote}`
+    : job.status === 'done' ? (one ? `
 <section class="ready-box">
   <div class="ready-head">${ICON.check}<div><h2>พร้อมดาวน์โหลด</h2><p class="muted small">${esc(fileLabel(cfg, fmt))} · ${esc(SIZE_LABEL[job.size] || '')} · ${esc(job.seconds)} วินาที · ใช้กับ ${esc(ed.label)}</p></div></div>
   <a class="btn primary lg block" href="/library/custom/${esc(job.id)}/download">${ICON.download} ดาวน์โหลด · ${fmtBytes(one.bytes)}</a>
@@ -778,10 +1114,11 @@ ${body}
   <a class="btn" href="/library/${esc(job.order_id)}/customize?from=${esc(job.id)}">${ICON.edit} ทำอีกแบบจากเวอร์ชันนี้</a>
   <a class="btn ghost" href="/library">กลับไปที่คลัง</a>
 </div>
-${job.status === 'done' || job.status === 'failed' ? `<form method="post" action="/library/custom/${esc(job.id)}/delete" class="danger-zone" data-confirm="ลบเวอร์ชันนี้ออกจากคลัง? ไฟล์จะถูกลบถาวร">
+${job.status === 'done' || job.status === 'failed' ? `<form method="post" action="/library/custom/${esc(job.id)}/delete" class="danger-zone" data-confirm-title="ลบเวอร์ชันนี้ออกจากคลัง?" data-confirm="ไฟล์จะถูกลบถาวร กู้คืนไม่ได้" data-confirm-ok="ลบเลย" data-confirm-danger>
   <input type="hidden" name="csrf" value="${esc(csrf)}">
   <button type="submit" class="linklike danger">ลบเวอร์ชันนี้</button>
-</form>` : ''}`,
+</form>` : ''}
+${browserMode ? browserScripts() : ''}`,
   });
 }
 
@@ -802,7 +1139,7 @@ function presetsPage({ cfg, user, csrf, presets, fonts, items }) {
       </div>
       <div class="preset-row-actions">
         ${items.length ? `<details class="menu use-menu"><summary class="btn small primary">ใช้กับ…</summary><div class="menu-pop">${items.map((o) => `<a href="/library/${esc(o.id)}/customize?style=${esc(x.id)}">${esc((cfg.products.find((pp) => pp.slug === o.product_slug) || {}).title || o.product_slug)}</a>`).join('')}</div></details>` : ''}
-        <form method="post" action="/library/styles/${esc(x.id)}/delete" data-confirm="ลบสไตล์ &quot;${esc(x.name)}&quot;?">
+        <form method="post" action="/library/styles/${esc(x.id)}/delete" data-confirm-title="ลบสไตล์ &quot;${esc(x.name)}&quot;?" data-confirm="ไฟล์ที่สร้างไว้แล้วยังอยู่ครบ" data-confirm-ok="ลบสไตล์" data-confirm-danger>
           <input type="hidden" name="csrf" value="${esc(csrf)}">
           <button class="linklike danger" type="submit">ลบ</button>
         </form>
@@ -824,7 +1161,7 @@ function fontsPage({ cfg, user, csrf, fonts, max }) {
     return `<li class="font-row">
       <span class="font-row-sample" style="font-family:'tt-u-${esc(f.id)}'">${f.thai === 'none' ? 'Hello Aa' : 'สวัสดี Aa'}</span>
       <div><b>${esc(f.name)}</b><small class="muted">${esc(f.format.toUpperCase())} · ${fmtBytes(f.bytes)} · <span class="badge ${cls}">${label}</span></small></div>
-      <form method="post" action="/library/fonts/${esc(f.id)}/delete" data-confirm="ลบฟอนต์ &quot;${esc(f.name)}&quot;? (เวอร์ชันที่สร้างไว้แล้วไม่หาย)">
+      <form method="post" action="/library/fonts/${esc(f.id)}/delete" data-confirm-title="ลบฟอนต์ &quot;${esc(f.name)}&quot;?" data-confirm="เวอร์ชันที่สร้างไว้แล้วไม่หาย" data-confirm-ok="ลบฟอนต์" data-confirm-danger>
         <input type="hidden" name="csrf" value="${esc(csrf)}">
         <button class="linklike danger" type="submit">ลบ</button>
       </form>
@@ -852,7 +1189,48 @@ ${fonts.length ? `<ul class="font-rows">${rows}</ul>` : '<p class="muted">ยั
   });
 }
 
-function authPage({ cfg, user, csrf, mode, form = {}, error, next }) {
+function account({ cfg, user, csrf, items = 0 }) {
+  const row = (href, icon, label, sub = '') => `<a class="acc-row" href="${href}">${icon}<span><b>${label}</b>${sub ? `<small>${sub}</small>` : ''}</span><i>›</i></a>`;
+  return layout({
+    title: 'บัญชี', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-account',
+    body: user ? `
+<div class="narrow">
+  <div class="acc-head">
+    <span class="acc-avatar">${esc((user.name || user.email).slice(0, 1).toUpperCase())}</span>
+    <div><h1>${esc(user.name || 'บัญชีของฉัน')}</h1><p class="muted small">${esc(user.email)}${user.email_verified_at ? ' · ยืนยันแล้ว' : ' · ยังไม่ยืนยันอีเมล'}</p></div>
+  </div>
+  <div class="acc-list">
+    ${row('/library', ICON.library, 'คลังของฉัน', `${items} รายการ · ใช้ได้ตลอด`)}
+    ${row('/library/styles', ICON.edit, 'สไตล์ของฉัน', 'ฟอนต์และสีที่บันทึกไว้')}
+    ${row('/library/fonts', ICON.film, 'ฟอนต์ของฉัน', 'อัปโหลดฟอนต์มาใช้เอง')}
+    ${user.role === 'admin' ? row('/admin', ICON.shield, 'หลังบ้าน', 'คำสั่งซื้อ ยอดขาย สถิติ') : ''}
+  </div>
+  <div class="acc-list">
+    ${row('/license', ICON.infinity, 'สิทธิ์การใช้งาน')}
+    ${row('/terms', ICON.check, 'เงื่อนไขการใช้งาน')}
+    ${row('/refund', ICON.check, 'นโยบายคืนเงิน')}
+    ${row('/privacy', ICON.shield, 'ความเป็นส่วนตัว (PDPA)')}
+    ${row('/contact', ICON.user, 'ติดต่อร้าน')}
+  </div>
+  <form method="post" action="/logout" class="acc-logout"><input type="hidden" name="csrf" value="${esc(csrf)}"><button class="btn block" type="submit">ออกจากระบบ</button></form>
+  <p class="muted small center" data-install-hint>เพิ่ม ${esc(cfg.shopName)} ลงหน้าจอโฮม: Safari กด แชร์ → "เพิ่มไปยังหน้าจอโฮม" · Chrome กด ⋮ → "ติดตั้งแอป"</p>
+</div>` : `
+<div class="narrow acc-guest">
+  ${logoMark(64)}
+  <h1>ยินดีต้อนรับสู่ ${esc(cfg.shopName)}</h1>
+  <p class="muted">เข้าสู่ระบบเพื่อดูคลังและปรับแต่งแอนิเมชันของคุณ</p>
+  <a class="btn primary block lg" href="/login?next=%2Faccount">เข้าสู่ระบบ</a>
+  <a class="btn block lg" href="/signup?next=%2Faccount">สมัครสมาชิกฟรี</a>
+  <div class="acc-list">
+    ${row('/terms', ICON.check, 'เงื่อนไขการใช้งาน')}
+    ${row('/privacy', ICON.shield, 'ความเป็นส่วนตัว (PDPA)')}
+    ${row('/contact', ICON.user, 'ติดต่อร้าน')}
+  </div>
+</div>`,
+  });
+}
+
+function authPage({ cfg, user, csrf, mode, form = {}, error, next, notice = '' }) {
   const signup = mode === 'signup';
   return layout({
     title: signup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-auth', intro: false,
@@ -863,6 +1241,7 @@ function authPage({ cfg, user, csrf, mode, form = {}, error, next }) {
     <h1>${signup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</h1>
     <p class="muted">${signup ? 'สร้างบัญชีเพื่อซื้อ และเก็บทุกอย่างไว้ในคลังของคุณ' : 'ยินดีต้อนรับกลับ เข้าสู่ระบบเพื่อซื้อหรือเปิดคลังของคุณ'}</p>
     ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ''}
+    ${notice ? `<p class="ok" role="status">${esc(notice)}</p>` : ''}
     <form method="post" action="/${signup ? 'signup' : 'login'}">
       <input type="hidden" name="csrf" value="${esc(csrf)}">
       <input type="hidden" name="next" value="${esc(next || '/library')}">
@@ -875,7 +1254,9 @@ function authPage({ cfg, user, csrf, mode, form = {}, error, next }) {
       <label class="field">รหัสผ่าน ${signup ? '<span class="muted small">(อย่างน้อย 8 ตัวอักษร)</span>' : ''}
         <span class="pw"><input type="password" name="password" required minlength="${signup ? 8 : 1}" maxlength="200" autocomplete="${signup ? 'new-password' : 'current-password'}" ${form.email ? 'autofocus' : ''}><button type="button" class="pw-toggle" data-pw-toggle aria-label="แสดงรหัสผ่าน">แสดง</button></span>
       </label>
+      ${signup ? '' : '<p class="small right"><a href="/forgot">ลืมรหัสผ่าน?</a></p>'}
       <button class="btn primary block" type="submit">${signup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</button>
+      ${signup ? '<p class="muted small center">การสมัครถือว่ายอมรับ <a href="/terms">เงื่อนไขการใช้งาน</a> และ <a href="/privacy">นโยบายความเป็นส่วนตัว</a></p>' : ''}
     </form>
     <p class="muted small center">${signup
     ? `มีบัญชีแล้ว? <a href="/login?next=${encodeURIComponent(next || '/library')}">เข้าสู่ระบบ</a>`
@@ -884,6 +1265,148 @@ function authPage({ cfg, user, csrf, mode, form = {}, error, next }) {
 </div>`,
   });
 }
+function forgot({ cfg, user, csrf, form = {}, error, sent }) {
+  return layout({
+    title: 'ลืมรหัสผ่าน', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-auth', intro: false,
+    body: `
+<div class="auth"><div class="auth-card">
+  ${logoMark(48)}
+  <h1>ลืมรหัสผ่าน</h1>
+  <p class="muted">กรอกอีเมลที่ใช้สมัคร เราจะส่งลิงก์ตั้งรหัสผ่านใหม่ให้ (ลิงก์ใช้ได้ 30 นาที ครั้งเดียว)</p>
+  ${sent ? '<p class="ok" role="status">ถ้าอีเมลนี้มีบัญชีอยู่ เราส่งลิงก์ตั้งรหัสผ่านใหม่ไปให้แล้ว อย่าลืมดูในโฟลเดอร์สแปม</p>' : ''}
+  ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ''}
+  <form method="post" action="/forgot">
+    <input type="hidden" name="csrf" value="${esc(csrf)}">
+    <label class="field">อีเมล
+      <input type="email" name="email" required maxlength="200" autocomplete="email" inputmode="email" value="${esc(form.email || '')}" placeholder="you@example.com" autofocus>
+    </label>
+    <button class="btn primary block" type="submit">ส่งลิงก์ตั้งรหัสผ่านใหม่</button>
+  </form>
+  <p class="muted small center"><a href="/login">กลับไปเข้าสู่ระบบ</a></p>
+</div></div>`,
+  });
+}
+
+function reset({ cfg, user, csrf, token, error }) {
+  return layout({
+    title: 'ตั้งรหัสผ่านใหม่', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-auth', intro: false,
+    body: `
+<div class="auth"><div class="auth-card">
+  ${logoMark(48)}
+  <h1>ตั้งรหัสผ่านใหม่</h1>
+  <p class="muted">ตั้งแล้วจะออกจากระบบทุกเครื่อง แล้วเข้าสู่ระบบใหม่ด้วยรหัสนี้</p>
+  ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ''}
+  <form method="post" action="/reset">
+    <input type="hidden" name="csrf" value="${esc(csrf)}">
+    <input type="hidden" name="t" value="${esc(token)}">
+    <label class="field">รหัสผ่านใหม่ <span class="muted small">(อย่างน้อย 8 ตัวอักษร)</span>
+      <span class="pw"><input type="password" name="password" required minlength="8" maxlength="200" autocomplete="new-password" autofocus><button type="button" class="pw-toggle" data-pw-toggle aria-label="แสดงรหัสผ่าน">แสดง</button></span>
+    </label>
+    <button class="btn primary block" type="submit">บันทึกรหัสผ่านใหม่</button>
+  </form>
+</div></div>`,
+  });
+}
+
+// ---------- หน้านโยบาย (ร่าง: ให้นักกฎหมายตรวจก่อนขายจริง) ----------
+function legalFill(v, label) {
+  return v ? esc(v) : `<mark class="fill-me">[กรอก ${esc(label)}]</mark>`;
+}
+function legalPage({ cfg, user, csrf, kind }) {
+  const L = cfg.legal;
+  const shop = esc(cfg.shopName);
+  const who = `${legalFill(L.name, 'ชื่อผู้ประกอบการ / บริษัท')}`;
+  const contact = `อีเมล ${legalFill(L.contactEmail, 'อีเมลติดต่อ')}${L.phone ? ` · โทร ${esc(L.phone)}` : ''} · ที่อยู่ ${legalFill(L.address, 'ที่อยู่สำหรับติดต่อ')}${L.taxId ? ` · เลขประจำตัวผู้เสียภาษี ${esc(L.taxId)}` : ''}`;
+  const updated = 'ปรับปรุงล่าสุด: 23 พฤศจิกายน 2569';
+  const manual = cfg.paymentProvider === 'manual';
+  const pages = {
+    terms: { title: 'เงื่อนไขการใช้งาน', body: `
+<p>เว็บไซต์ ${shop} ดำเนินการโดย ${who} (เรียกว่า "ร้าน") การสมัครสมาชิก ซื้อ หรือใช้ไฟล์จากร้าน ถือว่าคุณยอมรับเงื่อนไขนี้</p>
+<h2>1. บัญชีผู้ใช้</h2>
+<ul><li>คุณต้องให้อีเมลที่ใช้งานได้จริง และเก็บรหัสผ่านเป็นความลับ</li><li>ห้ามแชร์บัญชีให้ผู้อื่นใช้ ร้านจำกัดจำนวนการดาวน์โหลดต่อวันเพื่อป้องกันการแชร์บัญชี</li><li>ร้านอาจระงับบัญชีที่ใช้งานผิดเงื่อนไข เช่น แจกจ่ายไฟล์ต่อ หรือพยายามเจาะระบบ</li></ul>
+<h2>2. สิทธิ์การใช้ไฟล์</h2>
+<ul><li>ซื้อครั้งเดียว ใช้ได้ตลอด ใช้ในวิดีโอได้ไม่จำกัดจำนวนชิ้น ทั้งงานส่วนตัว งานลูกค้า และโฆษณา</li><li>ห้ามขายต่อ แจกต่อ หรือนำไฟล์ต้นฉบับไปรวมในชุดเทมเพลตหรือคลังสื่อ</li><li>รายละเอียดเต็มอยู่ที่หน้า <a href="/license">สิทธิ์การใช้งาน</a></li></ul>
+<h2>3. เนื้อหาที่คุณปรับแต่งเอง</h2>
+<ul><li>คุณรับผิดชอบข้อความที่พิมพ์ และฟอนต์ที่อัปโหลดเอง ต้องไม่ละเมิดสิทธิ์ผู้อื่น ไม่ผิดกฎหมาย และไม่หมิ่นประมาท</li><li>ร้านให้สิทธิ์เฉพาะฟอนต์ที่ร้านจัดไว้ (SIL OFL) ฟอนต์ที่คุณอัปโหลด คุณต้องมีสิทธิ์ใช้เชิงพาณิชย์เอง</li></ul>
+<h2>4. ราคาและการชำระเงิน</h2>
+${manual
+  ? `<ul><li>ราคาที่แสดงเป็นเงินบาท ชำระโดยโอนเงินผ่าน PromptPay ตามยอดและ QR ที่แสดงในหน้าชำระเงิน</li><li>หลังโอนแล้วกด "ยืนยันการโอนเงิน" ร้านจะตรวจรายการในบัญชีแล้วอนุมัติ สินค้าเข้าคลังของบัญชีเมื่อร้านอนุมัติ และแจ้งทางอีเมล</li><li>ออเดอร์ที่ยังไม่โอนจะหมดอายุใน ${esc(cfg.transfer.expireHours)} ชั่วโมง</li></ul>`
+  : `<ul><li>ราคาที่แสดงเป็นเงินบาท ชำระผ่านผู้ให้บริการชำระเงินที่ร้านเลือก ร้านไม่เก็บเลขบัตรของคุณ</li><li>เมื่อชำระสำเร็จ สินค้าจะเข้าคลังของบัญชีทันที</li></ul>`}
+<h2>5. การรับประกันและความรับผิด</h2>
+<ul><li>ร้านพยายามให้ไฟล์ใช้งานได้กับโปรแกรมที่ระบุ ถ้าใช้ไม่ได้ ดู <a href="/refund">นโยบายคืนเงิน</a></li><li>ความรับผิดของร้านไม่เกินราคาที่คุณจ่ายสำหรับสินค้านั้น</li></ul>
+<h2>6. การเปลี่ยนแปลงเงื่อนไข</h2>
+<p>ร้านอาจปรับเงื่อนไขนี้ และจะแสดงวันที่ปรับปรุงไว้ในหน้านี้ การใช้งานต่อหลังปรับปรุงถือว่ายอมรับเงื่อนไขใหม่ เงื่อนไขนี้อยู่ภายใต้กฎหมายไทย</p>` },
+    refund: { title: 'นโยบายคืนเงิน', body: `
+<p>สินค้าของ ${shop} เป็นไฟล์ดิจิทัลที่ส่งมอบทันทีหลังชำระเงิน จึงมีเงื่อนไขการคืนเงินดังนี้</p>
+<h2>คืนเงินได้เมื่อ</h2>
+<ul><li>ไฟล์เสียหรือเปิดไม่ได้ และร้านแก้ไขหรือส่งไฟล์ใหม่ให้ไม่ได้ภายใน 3 วันทำการ</li><li>ถูกเรียกเก็บเงินซ้ำสำหรับคำสั่งซื้อเดียวกัน</li><li>ได้รับสินค้าไม่ตรงกับที่ระบุในหน้าสินค้าอย่างมีนัยสำคัญ</li></ul>
+<h2>ไม่คืนเงินเมื่อ</h2>
+<ul><li>เปลี่ยนใจหลังดาวน์โหลดหรือปรับแต่งไฟล์แล้ว</li><li>ใช้ไม่ได้เพราะโปรแกรมของคุณไม่รองรับฟอร์แมต ทั้งที่ร้านมีฟอร์แมตอื่นให้เลือก (ร้านจะช่วยแนะนำวิธีใช้ก่อน)</li><li>ปัญหาจากฟอนต์ที่คุณอัปโหลดเอง</li></ul>
+<h2>วิธีขอคืนเงิน</h2>
+<ol><li>ติดต่อภายใน ${esc(L.refundDays)} วันหลังซื้อ ทาง ${legalFill(L.contactEmail, 'อีเมลติดต่อ')}</li><li>แจ้งรหัสคำสั่งซื้อ (8 ตัวในอีเมลยืนยัน) อีเมลบัญชี และอธิบายปัญหาพร้อมภาพหน้าจอ</li><li>ร้านตอบกลับภายใน 3 วันทำการ หากอนุมัติ จะคืนเงิน${manual ? 'โดยโอนกลับเข้าบัญชีที่คุณแจ้ง' : 'ผ่านช่องทางเดิม'}ภายใน 7–14 วันทำการ และนำสินค้าออกจากคลังของบัญชี</li></ol>` },
+    privacy: { title: 'นโยบายความเป็นส่วนตัว (PDPA)', body: `
+<p>${who} ("ร้าน") เป็นผู้ควบคุมข้อมูลส่วนบุคคลตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 นโยบายนี้อธิบายว่าเราเก็บและใช้ข้อมูลของคุณอย่างไร</p>
+<h2>ข้อมูลที่เก็บ</h2>
+<ul><li>ข้อมูลบัญชี: อีเมล ชื่อที่ใช้แสดง (ถ้ากรอก) และรหัสผ่านที่เข้ารหัสแบบทางเดียว (ร้านอ่านรหัสผ่านของคุณไม่ได้)</li><li>ข้อมูลการซื้อ: สินค้า ราคา เวลา และรหัสอ้างอิงการชำระเงิน (ร้านไม่เก็บเลขบัตร)</li><li>ข้อมูลการใช้งาน: ประวัติดาวน์โหลด ข้อความและสไตล์ที่ปรับแต่ง ฟอนต์ที่อัปโหลด และ IP สำหรับป้องกันการใช้งานผิดปกติ</li><li>คุกกี้ที่จำเป็นเท่านั้น: คุกกี้เข้าสู่ระบบ และคุกกี้ป้องกันการปลอมแบบฟอร์ม ไม่มีคุกกี้โฆษณาหรือติดตาม</li></ul>
+<h2>ใช้ข้อมูลเพื่อ</h2>
+<ul><li>ส่งมอบสินค้าและให้คุณดาวน์โหลดจากคลังได้ตลอด (ฐานสัญญา)</li><li>ส่งอีเมลยืนยันการสั่งซื้อ ยืนยันอีเมล และตั้งรหัสผ่านใหม่ (ฐานสัญญา)</li><li>ป้องกันการโกงและการแชร์บัญชี และทำตามกฎหมายภาษี/บัญชี (ฐานประโยชน์โดยชอบด้วยกฎหมาย และหน้าที่ตามกฎหมาย)</li></ul>
+<h2>การเปิดเผยข้อมูล</h2>
+<p>ร้านไม่ขายข้อมูลของคุณ เปิดเผยเฉพาะผู้ให้บริการที่จำเป็น เช่น ผู้ให้บริการชำระเงิน ผู้ให้บริการส่งอีเมล และผู้ให้บริการเซิร์ฟเวอร์ ตามขอบเขตที่จำเป็นเท่านั้น</p>
+<h2>ระยะเวลาเก็บ</h2>
+<ul><li>ข้อมูลบัญชีและคลัง: ตลอดที่บัญชียังใช้งาน (เพื่อให้ "ซื้อครั้งเดียว ใช้ได้ตลอด")</li><li>หลักฐานการซื้อ: ตามที่กฎหมายบัญชี/ภาษีกำหนด</li><li>บันทึกเพื่อความปลอดภัย: ไม่เกิน 90 วัน</li></ul>
+<h2>สิทธิ์ของคุณ</h2>
+<p>คุณขอเข้าถึง ขอสำเนา แก้ไข ลบ ระงับ คัดค้าน หรือขอโอนย้ายข้อมูลได้ และร้องเรียนต่อสำนักงานคณะกรรมการคุ้มครองข้อมูลส่วนบุคคลได้ ติดต่อร้านเพื่อใช้สิทธิ์: ${contact}</p>
+<h2>ความปลอดภัย</h2>
+<p>รหัสผ่านเข้ารหัสแบบ scrypt ลิงก์ดาวน์โหลดเซ็นลายเซ็นและหมดอายุใน 10 นาที ไฟล์ของคุณเข้าถึงได้เฉพาะบัญชีของคุณ</p>` },
+  };
+  const p = pages[kind];
+  return layout({
+    title: p.title, shopName: cfg.shopName, user, csrf, page: 'page-legal',
+    body: `<article class="narrow legal"><p class="eyebrow">${shop}</p><h1>${p.title}</h1><p class="muted small">${updated}</p>${p.body}
+<h2>ติดต่อร้าน</h2><p>${who} · ${contact}</p></article>`,
+  });
+}
+
+// หน้าติดต่อร้าน (ข้อมูลจาก .env: CONTACT_EMAIL, CONTACT_LINE, CONTACT_PHONE)
+function contactPage({ cfg, user, csrf }) {
+  const L = cfg.legal;
+  const rows = [
+    ['อีเมล', L.contactEmail ? `<a href="mailto:${esc(L.contactEmail)}">${esc(L.contactEmail)}</a>` : legalFill('', 'อีเมลติดต่อ')],
+    L.line ? ['LINE', /^https:\/\//.test(L.line) ? `<a href="${esc(L.line)}" rel="noopener">${esc(L.line)}</a>` : esc(L.line)] : null,
+    L.phone ? ['โทร', esc(L.phone)] : null,
+  ].filter(Boolean);
+  return layout({
+    title: 'ติดต่อร้าน', shopName: cfg.shopName, user, csrf, page: 'page-legal',
+    body: `<article class="narrow legal"><p class="eyebrow">${esc(cfg.shopName)}</p><h1>ติดต่อร้าน</h1>
+<p class="lead">มีปัญหาเรื่องการโอนเงิน ดาวน์โหลด หรือใช้ไฟล์ในโปรแกรมตัดต่อ ทักมาได้เลย</p>
+<section class="box"><dl class="contact-list">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></section>
+<h2>ช่วยให้ร้านตอบได้เร็วขึ้น</h2>
+<ul><li>แจ้งอีเมลที่ใช้สมัคร</li><li>ถ้าเป็นเรื่องการโอน แจ้งรหัสอ้างอิง (ขึ้นต้นด้วย AW-) ยอด และเวลาที่โอน</li><li>ถ้าไฟล์ใช้ไม่ได้ บอกชื่อโปรแกรมตัดต่อ และแนบภาพหน้าจอ</li></ul>
+<p class="muted small">ร้านตอบภายใน 1–3 วันทำการ · ดูเพิ่มเติม: <a href="/refund">นโยบายคืนเงิน</a> · <a href="/license">สิทธิ์การใช้งาน</a></p></article>`,
+  });
+}
+
+function verifyEmailBody({ cfg, user, url }) {
+  return `สวัสดีค่ะ${user.name ? ` คุณ${user.name}` : ''}
+
+กดลิงก์นี้เพื่อยืนยันอีเมลของบัญชี ${cfg.shopName}:
+${url}
+
+ลิงก์ใช้ได้ 48 ชั่วโมง ถ้าคุณไม่ได้สมัครสมาชิก เพิกเฉยอีเมลนี้ได้เลย
+— ${cfg.shopName}`;
+}
+
+function resetEmailBody({ cfg, user, url }) {
+  return `สวัสดีค่ะ${user.name ? ` คุณ${user.name}` : ''}
+
+มีคำขอตั้งรหัสผ่านใหม่สำหรับบัญชี ${user.email} ที่ ${cfg.shopName}
+กดลิงก์นี้เพื่อตั้งรหัสผ่านใหม่ (ใช้ได้ครั้งเดียว ภายใน 30 นาที):
+${url}
+
+ถ้าคุณไม่ได้ขอ เพิกเฉยอีเมลนี้ได้เลย รหัสผ่านเดิมยังใช้ได้ตามปกติ
+— ${cfg.shopName}`;
+}
+
 const login = (a) => authPage({ ...a, mode: 'login' });
 const signup = (a) => authPage({ ...a, mode: 'signup' });
 
@@ -903,8 +1426,12 @@ function licensePage({ cfg, user, csrf }) {
     <h2>ห้าม</h2>
     <ul class="ticks no">${LICENSE.not.map((t) => `<li>${ICON.x}<span>${esc(t)}</span></li>`).join('')}</ul>
   </section>
-  <p class="muted small">${esc(LICENSE.font)}</p>
-  <p><a class="btn" href="/library">${ICON.library} เปิดคลังของฉัน</a> <a class="btn ghost" href="/license/kanit-ofl.txt">สัญญาฟอนต์ Kanit</a></p>
+  <section class="box" id="fonts">
+    <h2>ฟอนต์ที่ใช้</h2>
+    <p class="muted small">${esc(LICENSE.font)} กดชื่อฟอนต์เพื่ออ่านสัญญาฉบับเต็ม</p>
+    <ul class="font-licenses">${(cfg.fonts || []).map((f) => `<li><a href="/fonts/thai/${esc(f.id)}/OFL.txt">${esc(f.label)}</a></li>`).join('')}</ul>
+  </section>
+  <p><a class="btn" href="/library">${ICON.library} เปิดคลังของฉัน</a></p>
 </div>`,
   });
 }
@@ -917,7 +1444,7 @@ function message({ cfg, user, csrf, title, text, action }) {
   });
 }
 
-function admin({ cfg, user, csrf, orders, stats, tools, installHelp = [] }) {
+function admin({ cfg, user, csrf, orders, stats, tools, installHelp = [], reviewCount = 0 }) {
   const { editors } = cfg.editorsConfig;
   const productTitle = (slug) => (cfg.products.find((p) => p.slug === slug) || {}).title || slug;
   const max = Math.max(1, ...stats.byEditor.map((r) => r.n));
@@ -932,7 +1459,7 @@ function admin({ cfg, user, csrf, orders, stats, tools, installHelp = [] }) {
     <td>${esc((editors[o.editor] || {}).label || o.editor || '-')}</td>
     <td>${esc(o.email)}</td>
     <td>${baht(o.amount)}</td>
-    <td><span class="tag ${o.status}">${o.status === 'paid' ? 'จ่ายแล้ว' : 'รอจ่าย'}</span></td>
+    <td><span class="tag ${o.status}">${({ paid: 'จ่ายแล้ว', pending: 'รอจ่าย', review: 'รอตรวจสอบ', rejected: 'ปฏิเสธ', failed: 'ไม่สำเร็จ', expired: 'หมดอายุ', refunded: 'คืนเงินแล้ว' })[o.status] || o.status}</span></td>
     <td>${o.downloads ?? 0}</td>
   </tr>`).join('');
   return layout({
@@ -940,6 +1467,7 @@ function admin({ cfg, user, csrf, orders, stats, tools, installHelp = [] }) {
     body: `
 <h1>หลังบ้าน</h1>
 ${cfg.paymentProvider === 'mock' ? '<div class="banner test">โหมดทดสอบการชำระเงิน (mock)</div>' : ''}
+${cfg.paymentProvider === 'manual' ? `<a class="cz-cta review-cta${reviewCount ? ' has' : ''}" href="/admin/transfers"><span class="cz-cta-icon">${ICON.shield}</span><span><b>ตรวจสอบการโอนเงิน</b><small>${reviewCount ? `มี ${reviewCount} รายการรอตรวจสอบ` : 'ไม่มีรายการรอตรวจสอบ'}</small></span><span class="cz-cta-go">›</span></a>` : ''}
 <div class="stats">
   <div class="stat"><span>คำสั่งซื้อที่จ่ายแล้ว</span><b>${stats.paid}</b></div>
   <div class="stat"><span>รอจ่าย</span><b>${stats.pending}</b></div>
@@ -977,4 +1505,7 @@ ${cfg.baseUrl}/library/${order.id}
 — ${cfg.shopName} · แอนิเมชันข้อความไทย`;
 }
 
-module.exports = { home, product, mockPay, orderStatus, library, libraryItem, customize, customStatus, presetsPage, fontsPage, login, signup, licensePage, message, admin, emailBody, esc, baht, LICENSE };
+module.exports = { browserScripts, contactPage, transferPay, adminTransfers, transferReceivedEmail, transferRejectedEmail, adminTransferEmail, bahtExact, omisePay, account, forgot, reset, legalPage, verifyEmailBody, resetEmailBody, home, product, mockPay, orderStatus, library, libraryItem, customize, customStatus, presetsPage, fontsPage, login, signup, licensePage, message, admin, emailBody, esc, baht, LICENSE };
+// ตัวช่วยสำหรับหน้าซับอัตโนมัติ (src/views-subtitles.js)
+module.exports._h = { browserScripts, layout, esc, ICON, V, fontFaces, fmtBytes, thDate, FILL_SWATCHES, STROKE_SWATCHES };
+Object.assign(module.exports, require('./views-subtitles'));

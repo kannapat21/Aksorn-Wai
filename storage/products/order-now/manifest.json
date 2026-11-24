@@ -3,20 +3,21 @@
   "text": "สั่งซื้อเลย",
   "fill": "#FFD400",
   "stroke": "#111111",
-  "fps": 30,
+  "motion": "pop",
+  "fps": 60,
   "duration": 3,
   "timing": {
     "popUp": 0.3,
     "settle": 0.5,
     "fadeStart": 2.5,
-    "fadeEnd": 2.966666666666667
+    "fadeEnd": 2.9833333333333334
   },
   "parts": {
     "introSeconds": 0.8,
     "outroSeconds": 0.5,
-    "holdFrame": 30
+    "holdFrame": 60
   },
-  "renderedAt": "2026-11-22T08:08:55.012Z",
+  "renderedAt": "2026-11-22T13:20:51.052Z",
   "formats": {
     "mp4_green": {
       "ext": "mp4",
@@ -55,7 +56,7 @@
       "width": 1080,
       "height": 1920,
       "file": "order-now_mp4_green_1080x1920.mp4",
-      "bytes": 138705
+      "bytes": 183105
     },
     {
       "format": "mp4_black",
@@ -64,7 +65,7 @@
       "width": 1080,
       "height": 1920,
       "file": "order-now_mp4_black_1080x1920.mp4",
-      "bytes": 100017
+      "bytes": 133018
     },
     {
       "format": "prores4444",
@@ -73,7 +74,7 @@
       "width": 1080,
       "height": 1920,
       "file": "order-now_prores4444_1080x1920.mov",
-      "bytes": 14080058
+      "bytes": 29294999
     },
     {
       "format": "webm_alpha",
@@ -82,7 +83,7 @@
       "width": 1080,
       "height": 1920,
       "file": "order-now_webm_alpha_1080x1920.webm",
-      "bytes": 149405
+      "bytes": 262142
     },
     {
       "format": "parts_green",
@@ -91,7 +92,7 @@
       "width": 1080,
       "height": 1920,
       "file": "order-now_parts_green_intro_1080x1920.mp4",
-      "bytes": 118483
+      "bytes": 158910
     },
     {
       "format": "parts_prores",
@@ -100,7 +101,7 @@
       "width": 1080,
       "height": 1920,
       "file": "order-now_parts_prores_intro_1080x1920.mov",
-      "bytes": 3621477
+      "bytes": 7506574
     },
     {
       "format": "parts_green",
@@ -109,7 +110,7 @@
       "width": 1080,
       "height": 1920,
       "file": "order-now_parts_green_outro_1080x1920.mp4",
-      "bytes": 27724
+      "bytes": 29918
     },
     {
       "format": "parts_prores",
@@ -118,7 +119,7 @@
       "width": 1080,
       "height": 1920,
       "file": "order-now_parts_prores_outro_1080x1920.mov",
-      "bytes": 2288387
+      "bytes": 4883412
     },
     {
       "format": "still_png",
@@ -127,7 +128,7 @@
       "width": 1080,
       "height": 1920,
       "file": "order-now_still_1080x1920.png",
-      "bytes": 33880
+      "bytes": 38422
     },
     {
       "format": "mp4_green",
@@ -136,7 +137,7 @@
       "width": 1920,
       "height": 1080,
       "file": "order-now_mp4_green_1920x1080.mp4",
-      "bytes": 142999
+      "bytes": 192943
     },
     {
       "format": "mp4_black",
@@ -145,7 +146,7 @@
       "width": 1920,
       "height": 1080,
       "file": "order-now_mp4_black_1920x1080.mp4",
-      "bytes": 103453
+      "bytes": 133282
     },
     {
       "format": "prores4444",
@@ -154,7 +155,7 @@
       "width": 1920,
       "height": 1080,
       "file": "order-now_prores4444_1920x1080.mov",
-      "bytes": 14086083
+      "bytes": 29402317
     },
     {
       "format": "webm_alpha",
@@ -163,7 +164,7 @@
       "width": 1920,
       "height": 1080,
       "file": "order-now_webm_alpha_1920x1080.webm",
-      "bytes": 151566
+      "bytes": 264762
     },
     {
       "format": "parts_green",
@@ -172,7 +173,7 @@
       "width": 1920,
       "height": 1080,
       "file": "order-now_parts_green_intro_1920x1080.mp4",
-      "bytes": 122184
+      "bytes": 166790
     },
     {
       "format": "parts_prores",
@@ -181,7 +182,7 @@
       "width": 1920,
       "height": 1080,
       "file": "order-now_parts_prores_intro_1920x1080.mov",
-      "bytes": 3637390
+      "bytes": 7584270
     },
     {
       "format": "parts_green",
@@ -190,7 +191,7 @@
       "width": 1920,
       "height": 1080,
       "file": "order-now_parts_green_outro_1920x1080.mp4",
-      "bytes": 27882
+      "bytes": 30898
     },
     {
       "format": "parts_prores",
@@ -199,7 +200,7 @@
       "width": 1920,
       "height": 1080,
       "file": "order-now_parts_prores_outro_1920x1080.mov",
-      "bytes": 2286098
+      "bytes": 4892736
     },
     {
       "format": "still_png",
@@ -208,7 +209,7 @@
       "width": 1920,
       "height": 1080,
       "file": "order-now_still_1920x1080.png",
-      "bytes": 32631
+      "bytes": 37537
     }
   ]
 }

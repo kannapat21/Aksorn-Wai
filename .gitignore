@@ -12,3 +12,10 @@ storage/packages/
 logs/
 .DS_Store
 storage/**/*.part
+storage/subtitles/
+.venv-stt/
+sample-clips/
+__pycache__/
+public/vendor/
+bench/
+models/

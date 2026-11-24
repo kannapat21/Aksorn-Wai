@@ -1,0 +1,43 @@
+# ตั้งค่า Netlify (โฮสต์ฟรี ไม่ต้องใช้บัตร) ดูวิธีตั้งค่าทั้งหมดใน docs/ย้ายขึ้น-Netlify.md
+[build]
+  command = "npm run build:netlify"
+  publish = "public"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # ไม่ต้องดาวน์โหลด Chromium ของ Playwright ตอน build (ใช้แค่ตอนเรนเดอร์บนเครื่องร้าน)
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
+
+[functions]
+  # libsql เป็นโมดูล native: ใส่ทั้งแพ็กเกจ (รวมไฟล์ของ Linux x64) แทนการรวมไฟล์
+  external_node_modules = ["libsql", "@libsql/linux-x64-gnu", "@neon-rs/load", "detect-libc"]
+  # ไฟล์ที่ร้านอ่านตอนทำงาน (ตั้งค่า, ฟอนต์, manifest ของสินค้า) · ไม่รวมวิดีโอสินค้า (อยู่บน Supabase)
+  included_files = [
+    "config/**",
+    "fonts/**",
+    "public/**",
+    "!public/vendor/**",
+    "!public/previews/**",
+    "storage/products/*/manifest.json",
+    ".env.example",
+  ]
+
+# ทุกหน้าที่ไม่ใช่ไฟล์ใน public/ → ร้าน (ฟังก์ชัน)
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/server/:splat"
+  status = 200
+
+# ไฟล์ static: ส่วนหัวความปลอดภัยแบบเดียวกับที่ร้านใส่เอง
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "same-origin"
+    X-Frame-Options = "DENY"
+
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"

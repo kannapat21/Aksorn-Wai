@@ -107,9 +107,10 @@
   });
   // ส่งฟอร์มสั่งซื้อ: ปุ่มแสดงสถานะกำลังโหลด กันกดซ้ำ
   document.querySelectorAll('form').forEach(function (f) {
-    f.addEventListener('submit', function () {
+    f.addEventListener('submit', function (e) {
       var b = f.querySelector('button[type=submit]');
-      if (b && f.method.toLowerCase() === 'post') setTimeout(function () { b.classList.add('loading'); }, 0);
+      // รอให้ตัวจัดการอื่น (เช่น กล่องถามยืนยัน) ทำงานก่อน ถ้ากด "ยกเลิก" ไม่ต้องหมุนค้าง
+      if (b && f.method.toLowerCase() === 'post') setTimeout(function () { if (!e.defaultPrevented) b.classList.add('loading'); }, 0);
     });
   });
   // เมื่อกดย้อนกลับมา (bfcache) ให้ปุ่มกลับมาใช้ได้
@@ -127,6 +128,28 @@
     });
     tilt.addEventListener('mouseleave', function () { win.style.removeProperty('--ry'); win.style.removeProperty('--rx'); });
   }
+
+  // ---------- แอป (PWA): ลงทะเบียน service worker (ต้องเป็น https หรือ localhost) ----------
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+    addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
+  }
+  if (window.matchMedia && matchMedia('(display-mode: standalone)').matches) root.classList.add('standalone');
+
+  // ---------- แถบเมนูล่าง: ไฮไลต์แท็บของหน้าปัจจุบัน ----------
+  var tabbar = document.querySelector('[data-tabbar]');
+  if (tabbar) {
+    var p = location.pathname;
+    var tab = p === '/' ? (location.hash === '#catalog' ? 'shop' : 'home') : /^\/p\//.test(p) ? 'shop' : /^\/library/.test(p) ? 'library' : /^\/(account|login|signup|forgot|reset|admin)/.test(p) ? 'account' : '';
+    var setTab = function (t) { tabbar.querySelectorAll('[data-tab]').forEach(function (a) { var on = a.getAttribute('data-tab') === t; a.classList.toggle('active', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }); };
+    setTab(tab);
+    addEventListener('hashchange', function () { if (location.pathname === '/') setTab(location.hash === '#catalog' ? 'shop' : 'home'); });
+  }
+
+  // ---------- รูปค่อยๆ ขึ้นแทนโครงร่าง (skeleton) ----------
+  document.querySelectorAll('img[loading="lazy"], .lib-thumb img, .lib-item-head img').forEach(function (img) {
+    var done = function () { img.classList.add('loaded'); };
+    if (img.complete && img.naturalWidth) done(); else img.addEventListener('load', done);
+  });
 
   // ---------- แสดง/ซ่อนรหัสผ่าน ----------
   document.querySelectorAll('[data-pw-toggle]').forEach(function (b) {
@@ -328,9 +351,6 @@
     };
     setTimeout(jtick, 1200);
   }
-  document.querySelectorAll('form[data-confirm]').forEach(function (f) {
-    f.addEventListener('submit', function (e) { if (!confirm(f.getAttribute('data-confirm'))) e.preventDefault(); });
-  });
 
   // ---------- อัปโหลดฟอนต์ของฉัน ----------
   var up = document.querySelector('[data-font-upload]');
@@ -380,11 +400,108 @@
     var url = poll.getAttribute('data-poll');
     var tick = function () {
       fetch(url, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
-        if (j.status === 'paid') location.reload();
+        if (j.status && j.status !== (poll.getAttribute('data-poll-status') || 'pending')) { try { sessionStorage.setItem('noIntroOnce', '1'); } catch (e) { /* ข้าม */ } location.reload(); } // จ่ายแล้ว / ไม่สำเร็จ / หมดอายุ / ร้านตัดสินแล้ว
         else setTimeout(tick, 2000);
       }).catch(function () { setTimeout(tick, 4000); });
     };
     setTimeout(tick, 1500);
+  }
+
+  // ---------- กล่องถามยืนยันของร้านเอง (แทนป๊อปอัปยืนยันของเบราว์เซอร์) ----------
+  // AW.confirm({ title, text, ok, cancel, danger }) → Promise<boolean>
+  var AW = window.AW = window.AW || {};
+  AW.confirm = function (o) {
+    o = o || {};
+    return new Promise(function (resolve) {
+      var prevFocus = document.activeElement;
+      var wrap = document.createElement('div');
+      wrap.className = 'aw-modal';
+      wrap.innerHTML = '<div class="aw-modal-bg" data-close></div>' +
+        '<div class="aw-modal-card" role="alertdialog" aria-modal="true" aria-labelledby="aw-m-t" aria-describedby="aw-m-d">' +
+        '<div class="aw-modal-icon' + (o.danger ? ' danger' : '') + '" aria-hidden="true">' + (o.danger
+          ? '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>'
+          : '<svg viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></svg>') + '</div>' +
+        '<h2 id="aw-m-t"></h2><p id="aw-m-d"></p>' +
+        '<div class="aw-modal-actions"><button type="button" class="btn lg" data-close></button>' +
+        '<button type="button" class="btn lg ' + (o.danger ? 'danger' : 'primary') + '" data-ok></button></div></div>';
+      wrap.querySelector('h2').textContent = o.title || 'ยืนยันใช่ไหม?';
+      var d = wrap.querySelector('#aw-m-d');
+      if (o.text) d.textContent = o.text; else d.remove();
+      var okBtn = wrap.querySelector('[data-ok]');
+      okBtn.textContent = o.ok || 'ยืนยัน';
+      wrap.querySelector('button[data-close]').textContent = o.cancel || 'ยกเลิก';
+      document.body.appendChild(wrap);
+      root.classList.add('aw-modal-open');
+      requestAnimationFrame(function () { wrap.classList.add('show'); });
+      okBtn.focus();
+      var done = function (val) {
+        document.removeEventListener('keydown', onKey, true);
+        wrap.classList.remove('show'); wrap.classList.add('hide');
+        root.classList.remove('aw-modal-open');
+        setTimeout(function () { wrap.remove(); }, reduceMotion ? 0 : 220);
+        if (prevFocus && prevFocus.focus) { try { prevFocus.focus({ preventScroll: true }); } catch (e) { /* ข้าม */ } }
+        resolve(val);
+      };
+      var onKey = function (e) {
+        if (e.key === 'Escape') { e.preventDefault(); done(false); }
+        else if (e.key === 'Tab') { // วนโฟกัสอยู่ในกล่อง
+          var f = wrap.querySelectorAll('button'), first = f[0], last = f[f.length - 1];
+          if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+          else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+      };
+      document.addEventListener('keydown', onKey, true);
+      wrap.addEventListener('click', function (e) {
+        if (e.target.closest('[data-ok]')) done(true);
+        else if (e.target.closest('[data-close]')) done(false);
+      });
+    });
+  };
+
+  // ---------- ฟอร์มที่ต้องถามก่อนส่ง (เช่น แจ้งโอน อนุมัติการโอน ลบ) ----------
+  document.querySelectorAll('form[data-confirm]').forEach(function (f) {
+    f.addEventListener('submit', function (e) {
+      if (f.getAttribute('data-confirmed') === '1') { f.removeAttribute('data-confirmed'); return; }
+      e.preventDefault();
+      var btn = e.submitter || f.querySelector('button[type=submit]');
+      AW.confirm({
+        title: f.getAttribute('data-confirm-title') || f.getAttribute('data-confirm'),
+        text: f.getAttribute('data-confirm-title') ? f.getAttribute('data-confirm') : '',
+        ok: f.getAttribute('data-confirm-ok'), cancel: f.getAttribute('data-confirm-cancel'),
+        danger: f.hasAttribute('data-confirm-danger'),
+      }).then(function (yes) {
+        if (!yes) return;
+        f.setAttribute('data-confirmed', '1');
+        if (f.requestSubmit) f.requestSubmit(btn && btn.form === f ? btn : undefined); else f.submit();
+      });
+    });
+  });
+
+  // ---------- ฉลองสำเร็จ: กระดาษสีเบาๆ (แจ้งโอนเสร็จ / ชำระเงินสำเร็จ) ----------
+  var cel = document.querySelector('[data-celebrate]');
+  if (cel) {
+    var go = cel.getAttribute('data-celebrate') === 'always';
+    if (!go) { // "once": เล่นเฉพาะตอนเพิ่งกดยืนยันมา ไม่เล่นซ้ำตอนรีเฟรช
+      try { go = sessionStorage.getItem('justConfirmed') === cel.getAttribute('data-order'); sessionStorage.removeItem('justConfirmed'); } catch (e) { go = false; }
+    }
+    if (go) {
+      cel.classList.add('celebrate');
+      if (!root.classList.contains('calm')) {
+        var box = document.createElement('div');
+        box.className = 'confetti'; box.setAttribute('aria-hidden', 'true');
+        var colors = ['var(--brand)', 'var(--accent)', 'var(--ok)', '#ff8fab', '#7cc4ff'];
+        for (var ci = 0; ci < 26; ci++) {
+          var piece = document.createElement('i');
+          var ang = (Math.PI * 2 * ci) / 26 + Math.random() * 0.4;
+          var dist = 90 + Math.random() * 110;
+          piece.style.cssText = '--x:' + (Math.cos(ang) * dist).toFixed(0) + 'px;--y:' + (Math.sin(ang) * dist * 0.8 - 40).toFixed(0) + 'px;--r:' + (Math.random() * 540 - 270).toFixed(0) + 'deg;--d:' + (Math.random() * 0.15).toFixed(2) + 's;background:' + colors[ci % colors.length];
+          box.appendChild(piece);
+        }
+        cel.appendChild(box);
+        setTimeout(function () { box.remove(); }, 2200);
+        if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) { /* ข้าม */ } }
+      }
+    }
   }
 
   // ---------- หน้าดาวน์โหลด: เปลี่ยนโปรแกรมแล้วโหลดหน้าใหม่ ----------
