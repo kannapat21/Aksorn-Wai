@@ -69,6 +69,7 @@ function checkRenderTools() {
 // ข้อความบอกวิธีติดตั้งสิ่งที่ขาด (ภาษาไทย)
 function installHelp(t) {
   const lines = [];
+  if (!t || t.ok) return lines; // โหมดเบราว์เซอร์ (ไม่มี ffmpeg/Chrome ในเซิร์ฟเวอร์) ถือว่าพร้อมอยู่แล้ว
   if (!t.ffmpeg.ok) {
     lines.push(t.ffmpeg.missing.includes('ffmpeg')
       ? 'ยังไม่มี ffmpeg: เปิด Terminal ในโฟลเดอร์ร้าน แล้วพิมพ์  npm install --save-dev ffmpeg-static ffprobe-static'
