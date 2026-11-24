@@ -187,25 +187,47 @@ if (local) {
   loadClip(id).then((f) => { if (f) use(f); else if (ask) ask.hidden = false; });
 }
 
+// ข้อผิดพลาดต้องเห็นชัด: ขึ้นทั้งในกล่องความคืบหน้าและใต้ปุ่มสร้างคลิป
+function burnError(box, ui, msg) {
+  ui.error(msg);
+  const top = document.querySelector('.sub-go > [data-err]');
+  if (top) { top.textContent = msg; top.hidden = false; }
+  const retry = $('[data-burn-retry]', box);
+  if (retry) retry.hidden = false;
+  console.error('[ใส่ซับ] สร้างคลิปไม่สำเร็จ:', msg);
+}
+let lastUrl = null;
 async function burnAndSave(spec, box, csrf, { report }) {
   const ui = progressUi(box);
   box.hidden = false; ui.reset(); ui.error('');
+  const dl = $('[data-dl]', box), retry = $('[data-burn-retry]', box), top = document.querySelector('.sub-go > [data-err]');
+  if (dl) dl.hidden = true;
+  if (retry) retry.hidden = true;
+  if (top) top.hidden = true;
   ui.set(1, 'กำลังเตรียมคลิปและฟอนต์…');
   if (!clipFile) clipFile = await loadClip(spec.id);
-  if (!clipFile) { ui.error('ต้องเลือกคลิปต้นฉบับ (ไฟล์เดิม) ก่อน ร้านไม่ได้เก็บคลิปของคุณไว้'); const ask = $('[data-clip-ask]'); if (ask) ask.hidden = false; return false; }
+  if (!clipFile) { burnError(box, ui, 'ต้องเลือกคลิปต้นฉบับ (ไฟล์เดิม) ก่อน ร้านไม่ได้เก็บคลิปของคุณไว้ กดเลือกคลิปด้านบน แล้วกดสร้างอีกครั้ง'); const ask = $('[data-clip-ask]'); if (ask) { ask.hidden = false; ask.scrollIntoView({ behavior: 'smooth', block: 'center' }); } return false; }
   const bad = unsupported() || (supportInfo().webcodecs ? '' : 'เบราว์เซอร์นี้สร้างคลิปไม่ได้ ลองเปิดด้วย Chrome / Edge / Safari รุ่นใหม่');
-  if (bad) { ui.error(bad); return false; }
+  if (bad) { burnError(box, ui, bad); return false; }
   const release = guardLeave(true);
   try {
     const r = await burnSubtitles(clipFile, spec, (p, s) => ui.set(p, s));
-    saveBlob(r.blob, spec.fileName);
-    if (report) await postJson(`/subtitles/${spec.id}/rendered`, csrf, { bytes: r.blob.size, ms: r.ms });
-    ui.set(100, `บันทึกคลิปลงเครื่องแล้ว · ${fmtMB(r.blob.size)} (ถ้าไม่เห็นไฟล์ ดูในโฟลเดอร์ดาวน์โหลด)`);
+    if (!r || !r.blob || !r.blob.size) throw new Error('ได้ไฟล์เปล่า ลองอีกครั้ง หรือลองเปิดด้วย Chrome รุ่นใหม่');
+    // ปุ่มดาวน์โหลดค้างไว้เสมอ (บางเบราว์เซอร์ เช่น Safari บนมือถือ ไม่ยอมโหลดเองอัตโนมัติ)
+    if (lastUrl) URL.revokeObjectURL(lastUrl);
+    lastUrl = URL.createObjectURL(r.blob);
+    if (dl) { dl.href = lastUrl; dl.download = spec.fileName || 'คลิปพร้อมซับ.mp4'; dl.hidden = false; }
     const v = $('[data-out-video]', box);
-    if (v) { v.src = URL.createObjectURL(r.blob); v.hidden = false; }
+    if (v) { v.src = lastUrl; v.hidden = false; }
+    ui.set(100, `คลิปพร้อมซับเสร็จแล้ว · ${fmtMB(r.blob.size)} · กำลังดาวน์โหลด ถ้าไฟล์ไม่ขึ้น กดปุ่ม "ดาวน์โหลดคลิป MP4"`);
+    try { saveBlob(r.blob, spec.fileName); } catch (e) { /* ใช้ปุ่มแทน */ }
+    if (dl) dl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // แจ้งร้านว่าเสร็จ (ไม่สำเร็จก็ไม่เป็นไร ลูกค้าได้ไฟล์แล้ว)
+    if (report) postJson(`/subtitles/${spec.id}/rendered`, csrf, { bytes: r.blob.size, ms: r.ms }).catch((e) => console.warn('[ใส่ซับ] แจ้งร้านไม่สำเร็จ', e));
     return true;
   } catch (e) {
-    ui.error(e.message || 'สร้างคลิปไม่สำเร็จ');
+    console.error(e);
+    burnError(box, ui, (e && e.message) || 'สร้างคลิปไม่สำเร็จ ลองอีกครั้ง');
     return false;
   } finally {
     release();
@@ -217,8 +239,14 @@ window.AWRenderReady = true; // subtitles.js เช็กก่อนกดส�
 document.addEventListener('aw:render-subtitles', async (e) => {
   const box = $('[data-burn]');
   if (box) { box.hidden = false; box.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-  const ok = await burnAndSave(e.detail.spec, box, e.detail.csrf, { report: true });
+  let ok = false;
+  try { ok = await burnAndSave(e.detail.spec, box, e.detail.csrf, { report: true }); } catch (err) { burnError(box, progressUi(box), (err && err.message) || 'สร้างคลิปไม่สำเร็จ'); }
   e.detail.done(ok);
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-burn-retry]')) return;
+  const b = document.querySelector('[data-render]');
+  if (b) b.click();
 });
 
 // หน้า "เสร็จแล้ว": ปุ่มดาวน์โหลด = สร้างคลิปอีกครั้งจากคลิปในเครื่อง

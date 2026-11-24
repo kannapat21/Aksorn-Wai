@@ -636,9 +636,10 @@
       if (render && res.j.spec) {
         // โหมดเบราว์เซอร์: เครื่องนี้สร้างคลิปเอง (public/render-ui.js)
         return new Promise(function (ok) {
-          document.dispatchEvent(new CustomEvent('aw:render-subtitles', { detail: { spec: res.j.spec, csrf: D.csrf, done: function (r) { saveState.textContent = r ? 'สร้างคลิปเสร็จแล้ว' : 'บันทึกแล้ว'; ok(r ? 'browser' : false); } } }));
+          document.dispatchEvent(new CustomEvent('aw:render-subtitles', { detail: { spec: res.j.spec, csrf: D.csrf, done: function (r) { saveState.textContent = r ? 'สร้างคลิปเสร็จแล้ว ดาวน์โหลดได้ด้านล่าง' : 'บันทึกซับแล้ว แต่ยังสร้างคลิปไม่สำเร็จ (ดูข้อความด้านล่าง)'; ok(r ? 'browser' : 'browser-failed'); } } }));
         });
       }
+      if (render && D.browser) { setErr('ร้านไม่ได้ส่งข้อมูลสำหรับสร้างคลิปกลับมา รีเฟรชหน้าแล้วกดอีกครั้ง'); return false; }
       if (render) return true;
       // รับเวลาคำที่ร้านคำนวณ (ถ้าระหว่างนั้นไม่ได้แก้เพิ่ม)
       if (!pending && sentFor.length === cues.length && res.j.cues) {
@@ -656,6 +657,12 @@
     });
     return saving;
   }
+  // ข้อผิดพลาดที่ไม่ได้ดักไว้ระหว่างสร้างคลิป: บอกลูกค้าแทนการเงียบ
+  addEventListener('unhandledrejection', function (e) {
+    if (!renderBtn.classList.contains('loading')) return;
+    var m = e.reason && e.reason.message ? e.reason.message : String(e.reason || '');
+    setErr('สร้างคลิปไม่สำเร็จ: ' + (m || 'ไม่ทราบสาเหตุ') + ' ลองกดอีกครั้ง หรือเปิดด้วย Chrome รุ่นใหม่');
+  });
   renderBtn.addEventListener('click', function () {
     closeEdit();
     if (!cues.length) { setErr('ยังไม่มีซับ เลื่อนเส้นเวลาไปจุดที่มีคนพูด แล้วกด "+ เพิ่ม" เพื่อพิมพ์ซับก่อน'); return; }
@@ -664,7 +671,7 @@
     setErr('');
     renderBtn.classList.add('loading'); renderBtn.disabled = true;
     save(true).then(function (ok) {
-      if (ok === 'browser' || (ok === false && D.browser)) { renderBtn.classList.remove('loading'); renderBtn.disabled = false; return; }
+      if (D.browser) { renderBtn.classList.remove('loading'); renderBtn.disabled = false; return; } // โหมดเบราว์เซอร์: ไม่รีโหลดหน้า ผลอยู่ในกล่องด้านล่าง
       if (ok) { try { sessionStorage.setItem('noIntroOnce', '1'); } catch (e) { /* ข้าม */ } location.reload(); return; }
       renderBtn.classList.remove('loading'); renderBtn.disabled = false;
     });
