@@ -132,16 +132,17 @@ SUPABASE_URL=https://xxxx.supabase.co SUPABASE_SERVICE_KEY=วางคีย์
 
 ---
 
-## ถ้า Netlify ใช้ไม่ได้ (เช่น ขึ้นว่าบัญชีถูกระงับ) · ทางสำรอง Render
+## ทางที่ใช้จริง: Render ฟรี (ไม่ต้องมี Supabase)
 
-ขั้นที่ 1–6 (Turso, Supabase, Groq, Gmail) ใช้ของเดิมทั้งหมด เปลี่ยนแค่ขั้นที่ 7
+ไฟล์สินค้าอยู่ในโค้ดของร้านอยู่แล้ว Render จึงส่งไฟล์ให้ลูกค้าเองได้ ไม่ต้องสมัคร Supabase และไม่ต้องอัปไฟล์ ใช้แค่ 3 บริการ: Turso (ฐานข้อมูล), Groq (ถอดเสียง), Render (เว็บ)
 
-1. เข้า https://render.com → **Get Started** → สมัครด้วย GitHub
-2. **New → Blueprint** → เลือกรีโพ `Aksorn-Wai` (ไฟล์ `render.yaml` ตั้งไว้ให้แล้ว เลือกเซิร์ฟเวอร์สิงคโปร์และแพ็กฟรี)
-3. Render จะถามค่าที่ต้องกรอกเอง ใส่ตามตารางขั้นที่ 7 (ค่าสุ่มสองตัวกับ SMTP_HOST/PORT Render ใส่ให้แล้ว)
-4. ได้ชื่อเว็บ `https://aksornwai-xxxx.onrender.com` แล้ว กลับไปใส่ `BASE_URL` ให้ตรง แล้วกด **Manual Deploy**
+1. Turso: สมัครที่ https://turso.tech ด้วย Google/GitHub → Create Database ชื่อ `aksornwai` → จด **URL** (`libsql://...`) และกด **Create Token** จด token
+2. Groq: https://console.groq.com → API Keys → Create API Key
+3. Render: https://render.com → สมัครด้วย GitHub → **New → Blueprint** → เลือกรีโพ `Aksorn-Wai` (ไฟล์ `render.yaml` ตั้งค่าส่วนใหญ่ให้แล้ว) แล้วกรอกค่าที่ Render ถาม: `BASE_URL` (ใส่ชั่วคราวเป็น `https://aksornwai.onrender.com` แล้วแก้ให้ตรงชื่อจริงหลังสร้าง), `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `DATABASE_URL`, `DATABASE_AUTH_TOKEN`, `GROQ_API_KEY`, `PROMPTPAY_ID`, `PROMPTPAY_NAME`, ส่วนอีเมล (`MAIL_FROM`, `SMTP_USER`, `SMTP_PASS`) และ `LEGAL_NAME`, `CONTACT_EMAIL`
+4. กด **Apply** รอ build ราว 3–5 นาที
 
 ข้อจำกัดของ Render ฟรี
 - ถ้าไม่มีคนเข้า 15 นาที เว็บจะหลับ คนแรกที่เข้ามาต้องรอราว 1 นาทีให้เว็บตื่น
-- ให้ใช้ 750 ชั่วโมงต่อเดือน (พอเปิดทั้งเดือน) และมีโควตาเน็ตขาออกต่อเดือน แต่ไฟล์สินค้าโหลดตรงจาก Supabase จึงไม่กินโควตานี้
-- Render เขียนไว้ว่าแพ็กฟรี "ไม่แนะนำสำหรับใช้งานจริง" และบางบัญชีอาจถูกขอยืนยันบัตรตอนสมัคร
+- ดิสก์ของ Render ฟรีไม่ถาวร **ฟอนต์ที่ลูกค้าอัปโหลดจะหายเมื่อเว็บหลับหรือรีสตาร์ท** (ข้อมูลอื่นเก็บบน Turso ไม่หาย) ถ้าต้องการให้ฟอนต์ค้างถาวร ให้เพิ่ม Supabase ตามขั้นที่ 3 ด้านบนทีหลังได้
+- ไฟล์สินค้าที่ลูกค้าโหลดผ่าน Render นับในโควตาเน็ตต่อเดือนของ Render
+- Render เขียนไว้ว่าแพ็กฟรี "ไม่แนะนำสำหรับใช้งานจริง"

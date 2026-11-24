@@ -1,4 +1,4 @@
-# ทางสำรองถ้าใช้ Netlify ไม่ได้: Render (เว็บเซอร์วิสฟรี) ใช้ Turso + Supabase + Groq ชุดเดียวกับ Netlify
+# โฮสต์ฟรีบน Render: ใช้ Turso (ฐานข้อมูล) + Groq (ถอดเสียง) ไฟล์สินค้าอยู่ในโค้ดเลย (ไม่ต้องใช้ Supabase)
 # Render → New → Blueprint → เลือกรีโพนี้ แล้วกรอกค่าที่ขึ้นว่า sync: false (ดู docs/ย้ายขึ้น-Netlify.md ขั้นที่ 7)
 services:
   - type: web
@@ -27,8 +27,6 @@ services:
       - { key: ADMIN_PASSWORD, sync: false }
       - { key: DATABASE_URL, sync: false }
       - { key: DATABASE_AUTH_TOKEN, sync: false }
-      - { key: SUPABASE_URL, sync: false }
-      - { key: SUPABASE_SERVICE_KEY, sync: false }
       - { key: GROQ_API_KEY, sync: false }
       - { key: PAYMENT_PROVIDER, value: manual }
       - { key: PROMPTPAY_ID, sync: false }
