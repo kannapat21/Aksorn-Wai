@@ -154,6 +154,7 @@ ${h().browserScripts()}`,
   <p class="small"><b data-pct>0%</b> · <span data-stage>กดปุ่มด้านล่างเพื่อสร้างไฟล์อีกครั้ง</span></p>
   <p class="error small" data-err role="alert" hidden></p>
   <video class="sub-out ${job.height > job.width ? 'v' : 'h'}" data-out-video controls playsinline hidden></video>
+  <a class="btn primary lg block" data-dl hidden>${ICON.download} ดาวน์โหลดคลิป MP4</a>
   <div class="dl-pair">
     <button type="button" class="btn primary lg block" data-go>${ICON.download} สร้างและดาวน์โหลด MP4 อีกครั้ง</button>
     <a class="btn block" href="/subtitles/${esc(job.id)}/srt">${ICON.download} ไฟล์ซับ .srt</a>
@@ -264,6 +265,8 @@ ${bm ? `    <section class="ready-box sub-result" data-burn hidden>
       <p class="small"><b data-pct>0%</b> · <span data-stage>กำลังเริ่ม</span></p>
       <p class="error small" data-err role="alert" hidden></p>
       <p class="muted small">สร้างในเบราว์เซอร์ของคุณ เปิดหน้านี้ค้างไว้จนเสร็จ (คลิป 1 นาทีใช้ราว 1–3 นาที)</p>
+      <a class="btn primary lg block" data-dl hidden>${ICON.download} ดาวน์โหลดคลิป MP4</a>
+      <button type="button" class="btn block" data-burn-retry hidden>ลองสร้างอีกครั้ง</button>
       <video class="sub-out ${job.height > job.width ? 'v' : 'h'}" data-out-video controls playsinline hidden></video>
     </section>
 ` : ''}  </div>
