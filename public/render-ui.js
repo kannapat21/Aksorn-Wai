@@ -1,5 +1,5 @@
 // โหมด serverless: ปุ่มและแถบความคืบหน้าของงานที่เบราว์เซอร์ลูกค้าทำเอง (แอนิเมชันปรับแต่ง · ฟังเสียง · เบิร์นซับ)
-import { renderAnimation, burnSubtitles, extractSpeech, wavePeaks, probeClip, saveBlob, keepClip, loadClip, dropOldClips, supportInfo } from './render-engine.js';
+import { renderAnimation, burnSubtitles, extractSpeech, wavePeaks, probeClip, playableClip, saveBlob, keepClip, loadClip, dropOldClips, supportInfo } from './render-engine.js';
 
 const $ = (sel, el) => (el || document).querySelector(sel);
 const csrfOf = (el) => el.getAttribute('data-csrf') || (document.querySelector('meta[name="csrf"]') || {}).content || '';
@@ -146,11 +146,13 @@ if (subForm) {
     const release = guardLeave(true);
     try {
       mapUi.set(1, 'กำลังอ่านคลิป');
-      const info = await probeClip(file);
-      if (!info.ok) throw new Error('เปิดไฟล์นี้ไม่ได้ ไฟล์อาจเสียหรือไม่ใช่วิดีโอ ลองส่งออกจากแอปตัดต่อเป็น MP4 แล้วเลือกใหม่');
+      // ไฟล์ที่เบราว์เซอร์เปิดภาพไม่ได้ (HEVC จากมือถือ ฯลฯ) แปลงเป็น H.264 ก่อน ไม่งั้นได้ภาพดำ
+      const pc = await playableClip(file, (p, s) => mapUi.set(p, s));
+      const info = pc.info, clip = pc.file;
+      if (pc.converted) mapUi.set(1, 'แปลงคลิปเสร็จแล้ว กำลังเริ่มฟังเสียง');
       const r = await postJson('/subtitles/new', csrfOf(subForm), { order: style.value, name: file.name, bytes: file.size, width: info.width, height: info.height, duration: info.duration, audio: info.audio });
-      await keepClip(r.id, file);
-      await transcribeClip(r.id, file, csrfOf(subForm), mapUi);
+      await keepClip(r.id, clip);
+      await transcribeClip(r.id, clip, csrfOf(subForm), mapUi);
       release();
       location.href = r.url;
     } catch (err) {
@@ -199,7 +201,17 @@ if (local) {
     // คลื่นเสียงของไทม์ไลน์ คำนวณจากคลิปในเครื่อง (ร้านไม่มีคลิป)
     if ($('[data-tl-wave]')) wavePeaks(f).then((peaks) => document.dispatchEvent(new CustomEvent('aw:peaks', { detail: peaks }))).catch(() => {});
   };
-  if (ask) $('input[type=file]', ask).addEventListener('change', async (e) => { const f = e.target.files[0]; if (f) { await keepClip(id, f); use(f); } });
+  if (ask) $('input[type=file]', ask).addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const note = $('[data-clip-note]', ask) || ask.appendChild(Object.assign(document.createElement('p'), { className: 'small muted' }));
+    note.setAttribute('data-clip-note', '');
+    try {
+      const pc = await playableClip(f, (p, s) => { note.textContent = `${s || 'กำลังเตรียมคลิป'} ${p}%`; });
+      note.textContent = '';
+      await keepClip(id, pc.file); use(pc.file);
+    } catch (err) { note.textContent = err.message || 'เปิดคลิปนี้ไม่ได้'; note.className = 'small error'; }
+  });
   loadClip(id).then((f) => { if (f) use(f); else if (ask) ask.hidden = false; });
 }
 

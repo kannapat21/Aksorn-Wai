@@ -551,3 +551,10 @@ test('transcribe.py: บรรทัด PROGRESS ส่งออกได้ร�
   assert.match(r.stderr, /PROGRESS 43\n/);
   assert.match(r.stderr, /PROGRESS 50\n/);
 });
+
+test('ขนาดผลลัพธ์: เบราว์เซอร์คงความละเอียดเดิมถึง 4K · เครื่องร้านย่อเหลือ 1920', () => {
+  const P = require('../public/subplan');
+  assert.deepEqual(P.outSize(2160, 3840, P.MAX_SIDE_BROWSER), { w: 2160, h: 3840 });
+  assert.deepEqual(P.outSize(2160, 3840), { w: 1080, h: 1920 });
+  assert.deepEqual(P.outSize(1080, 1920, P.MAX_SIDE_BROWSER), { w: 1080, h: 1920 });
+});

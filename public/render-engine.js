@@ -381,6 +381,42 @@ export async function renderAnimation(spec, onProgress = () => {}, opts = {}) {
 }
 
 // ---------- คลิป: อ่านข้อมูล / แยกเสียง ----------
+// คลิปที่เบราว์เซอร์นี้เปิดภาพไม่ได้ (เช่น HEVC/H.265 จาก iPhone หรือ Android, HDR 10-bit)
+// → แปลงเป็น MP4 H.264 ในเครื่องลูกค้าด้วย ffmpeg.wasm ครั้งเดียว แล้วใช้ไฟล์ที่แปลงทั้งตัวอย่างและตอนสร้างคลิป
+export async function playableClip(file, onProgress = () => {}) {
+  const info = await probeClip(file);
+  if (!info.ok) throw new Error('เปิดไฟล์นี้ไม่ได้ ไฟล์อาจเสียหรือไม่ใช่วิดีโอ ลองส่งออกจากแอปตัดต่อเป็น MP4 แล้วเลือกใหม่');
+  if (info.canDecode) return { file, info, converted: false };
+  const ff = await getFFmpeg((stage, k) => onProgress(Math.round(2 + 13 * k), stage));
+  const dir = `/in${++uid}`;
+  const out = `conv${uid}.mp4`;
+  const tail = [];
+  const onLog = ({ message }) => { tail.push(message); if (tail.length > 12) tail.shift(); };
+  const label = 'กำลังแปลงคลิปให้เบราว์เซอร์นี้เปิดได้ (ทำครั้งเดียว ใช้เวลาราว 1–3 เท่าของความยาวคลิป)';
+  const onProg = ({ progress }) => { if (progress >= 0 && progress <= 1) onProgress(Math.round(15 + 84 * progress), label); };
+  ff.on('log', onLog); ff.on('progress', onProg);
+  onProgress(15, label);
+  try {
+    await ff.createDir(dir);
+    await ff.mount('WORKERFS', { files: [file] }, dir);
+    const code = await ff.exec(['-i', `${dir}/${file.name}`, '-map', '0:v:0', '-map', '0:a:0?',
+      '-vf', "scale='min(iw,1920)':'min(ih,1920)':force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuv420p",
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '17', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', out]);
+    if (code !== 0) throw new Error('แปลงคลิปไม่สำเร็จ: ' + (tail.filter((l) => /error|invalid|not/i.test(l)).pop() || `รหัส ${code}`));
+    const data = await ff.readFile(out);
+    const conv = new File([data], file.name.replace(/\.[^.]+$/, '') + '.mp4', { type: 'video/mp4' });
+    const info2 = await probeClip(conv);
+    if (!info2.ok || !info2.canDecode) throw new Error('แปลงคลิปแล้วแต่ยังเปิดไม่ได้ ลองส่งออกคลิปเป็น MP4 (H.264) จากแอปกล้องหรือแอปตัดต่อ แล้วเลือกใหม่');
+    onProgress(100, 'แปลงคลิปเสร็จแล้ว');
+    return { file: conv, info: info2, converted: true };
+  } finally {
+    ff.off('log', onLog); ff.off('progress', onProg);
+    try { await ff.unmount(dir); } catch (e) { /* ข้าม */ }
+    try { await ff.deleteDir(dir); } catch (e) { /* ข้าม */ }
+    try { await ff.deleteFile(out); } catch (e) { /* ข้าม */ }
+  }
+}
+
 export async function probeClip(file) {
   const M = await mediabunny();
   const input = new M.Input({ source: new M.BlobSource(file), formats: M.ALL_FORMATS });
@@ -456,14 +492,40 @@ export function splitWav(bytes, maxBytes = 3.5 * 1024 * 1024) {
 }
 
 // ---------- เบิร์นซับลงคลิป ----------
+// บิตเรตผลลัพธ์: ไม่ต่ำกว่าต้นฉบับ (ภาพไม่แตก) และพอสำหรับเฟรมเรตจริง (คลิป 60 fps ต้องใช้มากกว่า 30 fps)
+async function videoPlan(file, w, h) {
+  const M = await mediabunny();
+  const input = new M.Input({ source: new M.BlobSource(file), formats: M.ALL_FORMATS });
+  try {
+    const v = await input.getPrimaryVideoTrack();
+    if (!v) throw new Error('ไม่พบภาพในคลิปนี้');
+    if (!(await v.canDecode())) throw new Error('เบราว์เซอร์นี้เปิดภาพในคลิปนี้ไม่ได้ (มักเป็นไฟล์ HEVC/H.265 จากมือถือ) เลือกคลิปเดิมอีกครั้ง ระบบจะแปลงไฟล์ให้ก่อน');
+    let fps = 30, srcBps = 0;
+    try { const st = await v.computePacketStats(240); fps = st.averagePacketRate || 30; srcBps = st.averageBitrate || 0; } catch (e) { /* ใช้ค่าเริ่มต้น */ }
+    fps = Math.min(120, Math.max(15, fps));
+    const need = w * h * fps * 0.11; // ราว 6.8 Mbps ที่ 1080p30 · 13.7 Mbps ที่ 1080p60
+    const bitrate = Math.round(Math.min(40e6, Math.max(need, srcBps * 1.1, 4e6)));
+    return { fps, bitrate };
+  } finally {
+    if (input.dispose) input.dispose();
+  }
+}
+
 export async function burnSubtitles(file, spec, onProgress = () => {}, opts = {}) {
   const t0 = performance.now();
   const { signal } = opts;
   const eta = etaTracker();
   const M = await mediabunny();
-  const { w, h } = spec.out;
-  const L = spec.layout;
-  if (!(await M.canEncodeVideo('avc', { width: w, height: h }))) throw new Error('เบราว์เซอร์นี้สร้างวิดีโอ MP4 ไม่ได้ ลองเปิดด้วย Chrome หรือ Safari รุ่นใหม่');
+  let { w, h } = spec.out;
+  let L = spec.layout;
+  let vp = await videoPlan(file, w, h);
+  // 4K ที่เครื่องนี้เข้ารหัสไม่ไหว → ย่อเหลือด้านยาว 1920 (คำนวณตำแหน่งซับใหม่ให้ตรง)
+  if (!(await M.canEncodeVideo('avc', { width: w, height: h, bitrate: vp.bitrate })) && Math.max(w, h) > PLAN.MAX_SIDE) {
+    ({ w, h } = PLAN.outSize(w, h, PLAN.MAX_SIDE));
+    L = PLAN.layoutFor(w, h, { size: spec.size, position: spec.position });
+    vp = await videoPlan(file, w, h);
+  }
+  if (!(await M.canEncodeVideo('avc', { width: w, height: h, bitrate: vp.bitrate }))) throw new Error('เบราว์เซอร์นี้สร้างวิดีโอ MP4 ไม่ได้ ลองเปิดด้วย Chrome หรือ Safari รุ่นใหม่');
   const plan = PLAN.planFrames(spec.cues, { duration: spec.duration, motion: spec.motion, TT });
   const painter = plan.shots.length ? await Painter.create(w, L.band, spec.font) : null;
   const canvas = new OffscreenCanvas(w, h);
@@ -496,7 +558,7 @@ export async function burnSubtitles(file, spec, onProgress = () => {}, opts = {}
     const conv = await M.Conversion.init({
       input, output,
       video: {
-        width: w, height: h, fit: 'fill', allowTransformationMetadata: false, codec: 'avc', quality: M.QUALITY_HIGH, forceTranscode: true,
+        width: w, height: h, fit: 'fill', allowTransformationMetadata: false, codec: 'avc', bitrate: vp.bitrate, forceTranscode: true,
         processedWidth: w, processedHeight: h,
         process: async (sample) => {
           ctx.drawImage(sample.toCanvasImageSource(), 0, 0, w, h);
