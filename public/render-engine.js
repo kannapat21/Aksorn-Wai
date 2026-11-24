@@ -3,7 +3,8 @@
  *
  *  วาดเฟรม : เอา DOM ชุดเดียวกับ render/template.html + public/motion.js มาวาดลงภาพผ่าน SVG foreignObject
  *            (ทดสอบแล้วได้พิกเซลตรงกับภาพที่ Chrome ของเครื่องร้านแคปทุกท่า)
- *  แอนิเมชัน: ffmpeg.wasm เข้ารหัสด้วยคำสั่งเดียวกับเครื่องร้าน (H.264 / ProRes 4444 / WebM โปร่งใส)
+ *  แอนิเมชัน: MP4 / WebM โปร่งใส ใช้ WebCodecs + Mediabunny (เร็ว ไม่ต้องโหลดอะไรเพิ่ม) · ProRes หรือเบราว์เซอร์ที่ไม่รองรับ ใช้ ffmpeg.wasm สำรอง
+ *            ffmpeg.wasm เข้ารหัสด้วยคำสั่งเดียวกับเครื่องร้าน (H.264 / ProRes 4444 / WebM โปร่งใส)
  *            ตัวเข้ารหัส (~32 MB) โหลดจาก cdn.jsdelivr.net ครั้งแรกครั้งเดียว แล้วเก็บไว้ในเครื่อง
  *  ซับ     : Mediabunny + WebCodecs (ฮาร์ดแวร์ของเครื่องลูกค้า) อ่านคลิป → วางแถบซับทีละเฟรม → MP4 H.264 + เสียงเดิม
  *  เสียง   : แยกเสียงเป็น WAV 16 kHz โมโน ส่งให้ร้านทีละท่อน (ร้านส่งต่อให้ Groq ถอดเสียง) คลิปไม่ถูกอัปโหลด
@@ -14,6 +15,19 @@ const CORE_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm/';
 const CACHE = 'aw-encoder-v1';
 
 let uid = 0;
+
+// ยกเลิกกลางคัน / เวลาที่เหลือจากความเร็วจริงที่วัดได้ (ไม่เดา) ----------
+function abortError() { const e = new Error('ยกเลิกแล้ว'); e.name = 'AbortError'; return e; }
+function checkAbort(signal) { if (signal && signal.aborted) throw abortError(); }
+// frac = สัดส่วนงานที่เสร็จจริง (0..1) → เวลาที่เหลือ (วินาที) หรือ null ถ้ายังวัดไม่ได้
+function etaTracker() {
+  const t0 = performance.now();
+  return (frac) => {
+    const el = (performance.now() - t0) / 1000;
+    if (frac < 0.04 || el < 1.5) return null;
+    return Math.max(0, Math.round((el / frac) - el));
+  };
+}
 
 // ---------- ตัวช่วย ----------
 function toDataUrl(blob) {
@@ -175,7 +189,7 @@ function encodeArgs(format, { w, h, fps, total, out }) {
     '-c:v', 'libvpx', '-pix_fmt', 'yuva420p', '-b:v', '6M', '-crf', '10', '-deadline', 'realtime', '-cpu-used', '8', '-auto-alt-ref', '0', ...BT709, out]];
 }
 
-export async function renderAnimation(spec, onProgress = () => {}) {
+async function renderWithFFmpeg(spec, onProgress, signal) {
   const t0 = performance.now();
   const { w, h } = spec.size;
   const FPS = spec.fps || 60;
@@ -187,7 +201,11 @@ export async function renderAnimation(spec, onProgress = () => {}) {
   const loopN = mm.loop ? Math.max(1, Math.min(Math.round(mm.loop * FPS), total - inN - outN)) : 1;
   const timing = TT.timingFor(spec.motion, seconds, FPS);
 
+  const eta = etaTracker();
   const ff = await getFFmpeg((stage, k) => onProgress(Math.round(2 + 18 * k), stage));
+  checkAbort(signal);
+  const onAbort = () => { try { ffmpegP = null; ff.terminate(); } catch (e) { /* ข้าม */ } };
+  if (signal) signal.addEventListener('abort', onAbort);
   const painter = await Painter.create(w, h, spec.font);
   const written = [];
   try {
@@ -199,10 +217,11 @@ export async function renderAnimation(spec, onProgress = () => {}) {
     for (let k = 0; k < loopN; k++) unique.push({ name: `hold${k}.png`, t: timing.settle + k / FPS });
     for (let k = 0; k < outN; k++) unique.push({ name: `out${k}.png`, t: timing.fadeStart + k / FPS });
     for (let i = 0; i < unique.length; i++) {
+      checkAbort(signal);
       painter.setTime(unique[i].t, timing, spec.motion);
       await ff.writeFile(unique[i].name, await painter.png());
       written.push(unique[i].name);
-      if (i % 3 === 0 || i === unique.length - 1) onProgress(Math.round(20 + 40 * ((i + 1) / unique.length)), 'กำลังวาดตัวอักษร');
+      if (i % 3 === 0 || i === unique.length - 1) onProgress(Math.round(20 + 40 * ((i + 1) / unique.length)), 'กำลังวาดตัวอักษร', { eta: null });
     }
     // 2) ลำดับเฟรมเต็มความยาว (อ้างไฟล์เดิมซ้ำ ไม่คัดลอก)
     const seq = [];
@@ -213,7 +232,7 @@ export async function renderAnimation(spec, onProgress = () => {}) {
     written.push('list.txt');
     // 3) เข้ารหัส
     const out = `out.${spec.ext}`;
-    const onFF = ({ progress }) => onProgress(Math.round(60 + 38 * Math.max(0, Math.min(1, progress))), 'กำลังเข้ารหัสวิดีโอ');
+    const onFF = ({ progress }) => { const k = Math.max(0, Math.min(1, progress)); onProgress(Math.round(60 + 38 * k), 'กำลังเข้ารหัสวิดีโอ (โหมดสำรอง ช้ากว่าปกติ)', { eta: eta(k) }); };
     const logs = [];
     const onLog = ({ message }) => { logs.push(message); if (logs.length > 20) logs.shift(); };
     ff.on('progress', onFF);
@@ -222,19 +241,143 @@ export async function renderAnimation(spec, onProgress = () => {}) {
     try {
       const [extraIn, outArgs] = encodeArgs(spec.format, { w, h, fps: FPS, total, out });
       rc = await ff.exec(['-hide_banner', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', 'list.txt', ...extraIn, ...outArgs]);
+    } catch (e) {
+      if (signal && signal.aborted) throw abortError(); // ffmpeg ถูกปิดตอนยกเลิก
+      throw e;
     } finally {
       ff.off('progress', onFF);
       ff.off('log', onLog);
     }
+    checkAbort(signal);
     if (rc !== 0) throw new Error(`เข้ารหัสไม่สำเร็จ (${rc}) ${logs.slice(-3).join(' | ')}`.trim());
     const data = await ff.readFile(out);
     written.push(out);
     onProgress(100, 'เสร็จแล้ว');
     return { blob: new Blob([data.buffer], { type: spec.mime }), ms: Math.round(performance.now() - t0), frames: total };
   } finally {
+    if (signal) signal.removeEventListener('abort', onAbort);
     painter.dispose();
-    for (const f of written) { try { await ff.deleteFile(f); } catch (e) { /* ข้าม */ } }
+    for (const f of written) { try { await ff.deleteFile(f); } catch (e) { /* ข้าม (ffmpeg ถูกปิดตอนยกเลิก) */ } }
   }
+}
+
+// ---------- ทางด่วน: WebCodecs (ฮาร์ดแวร์/ตัวเข้ารหัสของเบราว์เซอร์) + Mediabunny · ไม่ต้องโหลด ffmpeg 32 MB ----------
+// MP4 H.264 และ WebM โปร่งใส (VP9 + alpha) · ProRes ต้องใช้ ffmpeg เท่านั้น
+const FAST_FORMATS = {
+  mp4_green: { codec: 'avc', bg: '#00FF00', bitrate: 16e6 },
+  mp4_black: { codec: 'avc', bg: '#000000', bitrate: 16e6 },
+  webm_alpha: { codec: 'vp9', bg: null, bitrate: 12e6, alpha: true },
+};
+
+async function fastPlan(format, w, h) {
+  const f = FAST_FORMATS[format];
+  if (!f || !supportInfo().webcodecs) return null;
+  try {
+    const M = await mediabunny();
+    const opts = { width: w, height: h, bitrate: f.bitrate };
+    if (f.alpha) opts.alpha = 'keep';
+    return (await M.canEncodeVideo(f.codec, opts)) ? f : null;
+  } catch (e) { return null; }
+}
+
+async function renderFast(spec, plan, onProgress, signal) {
+  const t0 = performance.now();
+  const M = await mediabunny();
+  const { w, h } = spec.size;
+  const FPS = spec.fps || 60;
+  const mm = TT.meta(spec.motion);
+  const seconds = Math.max(1.5, mm.intro + mm.outro + 0.2, Math.min(60, Number(spec.seconds) || 3));
+  const total = Math.round(seconds * FPS);
+  const inN = Math.round(mm.intro * FPS);
+  const outN = Math.round(mm.outro * FPS);
+  const loopN = mm.loop ? Math.max(1, Math.min(Math.round(mm.loop * FPS), total - inN - outN)) : 1;
+  const timing = TT.timingFor(spec.motion, seconds, FPS);
+  const eta = etaTracker();
+
+  onProgress(1, 'กำลังเตรียมฟอนต์', { eta: null });
+  const painter = await Painter.create(w, h, spec.font);
+  const out = new OffscreenCanvas(w, h);
+  const ctx = out.getContext('2d', { alpha: Boolean(plan.alpha) });
+  const isWebm = spec.ext === 'webm';
+  const output = new M.Output({ format: isWebm ? new M.WebMOutputFormat() : new M.Mp4OutputFormat({ fastStart: 'in-memory' }), target: new M.BufferTarget() });
+  const cfg = { codec: plan.codec, bitrate: plan.bitrate, keyFrameInterval: 2 };
+  if (plan.alpha) cfg.alpha = 'keep';
+  const source = new M.CanvasSource(out, cfg);
+  output.addVideoTrack(source, { frameRate: FPS });
+  try {
+    await painter.ready(spec.text);
+    painter.setup({ text: spec.text, fill: spec.fill, stroke: spec.stroke, strokeRatio: spec.strokeRatio, shadow: spec.shadow, motion: spec.motion });
+    await output.start();
+    // เฟรมที่ i เป็นเฟรมแบบไหน: intro → in, ท้าย → out, กลาง → วนซ้ำ loopN เฟรม (ไม่มีลูป = ภาพเดียวค้าง)
+    const kindOf = (i) => (i < inN ? ['in', i, i / FPS] : i >= total - outN ? ['out', i - (total - outN), timing.fadeStart + (i - (total - outN)) / FPS] : ['hold', (i - inN) % loopN, timing.settle + ((i - inN) % loopN) / FPS]);
+    const holdCache = new Map(); // เฟรมกลางที่วาดแล้ว (เก็บเฉพาะลูปสั้นๆ กันกินแรม)
+    const keepHold = loopN <= 36;
+    // น้ำหนักงานจริง: เฟรมที่ต้องวาดใหม่หนัก เฟรมที่ใช้ภาพเดิมเบา → เปอร์เซ็นต์และเวลาที่เหลือตรงกับเวลาจริง
+    const costs = [];
+    { const seen = new Set(); let sum = 0; for (let i = 0; i < total; i++) { const [k, n] = kindOf(i); const key = `${k}${n}`; const reuse = k === 'hold' && keepHold && seen.has(key); costs.push(reuse ? 0.12 : 1); sum += costs[i]; seen.add(key); } var totalCost = sum; }
+    const draw = (img) => {
+      if (plan.bg) { ctx.fillStyle = plan.bg; ctx.fillRect(0, 0, w, h); } else ctx.clearRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0);
+    };
+    const prepare = (i) => { // วาดเฟรม i (ไม่เรียก await ก่อนจับภาพ DOM) คืน promise ของภาพ หรือ null ถ้าใช้ภาพเดิมได้
+      const [k, n, t] = kindOf(i);
+      if (k === 'hold' && holdCache.has(n)) return null;
+      painter.setTime(t, timing, spec.motion);
+      return painter.image();
+    };
+    let done = 0;
+    let nextImg = prepare(0);
+    let lastHold = -1;
+    for (let i = 0; i < total; i++) {
+      checkAbort(signal);
+      const [k, n] = kindOf(i);
+      const cost = costs[i];
+      const img = nextImg ? await nextImg : null;
+      if (img) {
+        draw(img);
+        if (k === 'hold' && keepHold) holdCache.set(n, await createImageBitmap(out));
+        lastHold = k === 'hold' ? n : -1;
+      } else if (k === 'hold') {
+        if (lastHold !== n || loopN > 1) { draw(holdCache.get(n)); lastHold = n; }
+      }
+      nextImg = i + 1 < total ? prepare(i + 1) : null; // วาดเฟรมถัดไปคู่ขนานกับที่เข้ารหัสเฟรมนี้
+      await source.add(i / FPS, 1 / FPS);
+      done += cost;
+      if (i % 4 === 0 || i === total - 1) {
+        const frac = Math.min(1, done / totalCost);
+        const e = eta(frac);
+        onProgress(Math.round(2 + 90 * frac), `กำลังสร้างวิดีโอ เฟรม ${i + 1}/${total}`, { eta: e });
+      }
+    }
+    checkAbort(signal);
+    onProgress(93, 'กำลังบันทึกไฟล์', { eta: null });
+    source.close();
+    await output.finalize();
+    for (const b of holdCache.values()) { try { b.close(); } catch (e) { /* ข้าม */ } }
+    onProgress(100, 'เสร็จแล้ว', { eta: 0 });
+    return { blob: new Blob([output.target.buffer], { type: spec.mime }), ms: Math.round(performance.now() - t0), frames: total, engine: 'webcodecs' };
+  } catch (e) {
+    try { await output.cancel(); } catch (e2) { /* ข้าม */ }
+    throw e;
+  } finally {
+    painter.dispose();
+  }
+}
+
+// ทางเลือก: ใช้ทางด่วนเมื่อเบราว์เซอร์รองรับ ไม่งั้น (หรือทางด่วนพัง) ใช้ ffmpeg เหมือนเดิม
+export async function renderAnimation(spec, onProgress = () => {}, opts = {}) {
+  const { signal } = opts;
+  const plan = opts.forceFFmpeg ? null : await fastPlan(spec.format, spec.size.w, spec.size.h);
+  if (plan) {
+    try { return await renderFast(spec, plan, onProgress, signal); } catch (e) {
+      if (e && e.name === 'AbortError') throw e;
+      console.warn('[render] ทางด่วนใช้ไม่ได้ สลับไปใช้ ffmpeg', e);
+      onProgress(2, 'เบราว์เซอร์นี้เข้ารหัสแบบเร็วไม่ได้ กำลังใช้วิธีสำรอง', { eta: null });
+    }
+  }
+  const r = await renderWithFFmpeg(spec, onProgress, signal);
+  r.engine = 'ffmpeg';
+  return r;
 }
 
 // ---------- คลิป: อ่านข้อมูล / แยกเสียง ----------
@@ -368,8 +511,10 @@ async function videoPlan(file, w, h) {
   }
 }
 
-export async function burnSubtitles(file, spec, onProgress = () => {}) {
+export async function burnSubtitles(file, spec, onProgress = () => {}, opts = {}) {
   const t0 = performance.now();
+  const { signal } = opts;
+  const eta = etaTracker();
   const M = await mediabunny();
   let { w, h } = spec.out;
   let L = spec.layout;
@@ -425,8 +570,11 @@ export async function burnSubtitles(file, spec, onProgress = () => {}) {
       },
     });
     if (!conv.isValid) throw new Error('เบราว์เซอร์นี้อ่านหรือสร้างคลิปนี้ไม่ได้ ลองส่งออกคลิปเป็น MP4 (H.264) แล้วลองใหม่');
-    conv.onProgress = (p) => onProgress(Math.round(2 + 96 * p), 'กำลังสร้างคลิปพร้อมซับ');
-    await conv.execute();
+    conv.onProgress = (p) => onProgress(Math.round(2 + 96 * p), 'กำลังสร้างคลิปพร้อมซับ', { eta: eta(p) });
+    const onAbort = () => { try { conv.cancel(); } catch (e) { /* ข้าม */ } };
+    if (signal) { checkAbort(signal); signal.addEventListener('abort', onAbort); }
+    try { await conv.execute(); } catch (e) { if (signal && signal.aborted) throw abortError(); throw e; } finally { if (signal) signal.removeEventListener('abort', onAbort); }
+    checkAbort(signal);
     onProgress(100, 'เสร็จแล้ว');
     return { blob: new Blob([output.target.buffer], { type: 'video/mp4' }), ms: Math.round(performance.now() - t0) };
   } finally {

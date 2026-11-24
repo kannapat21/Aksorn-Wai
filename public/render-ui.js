@@ -20,20 +20,32 @@ async function getJson(url) {
   return j;
 }
 
-// แถบความคืบหน้า: [data-bar] [data-pct] [data-stage] [data-err]
+// แถบความคืบหน้า: [data-bar] [data-pct] [data-stage] [data-err] · ใส่เวลาที่เหลือ (จากความเร็วจริง) และปุ่มยกเลิกได้
+const fmtEta = (s) => (s < 60 ? `${Math.max(1, s)} วินาที` : `${Math.floor(s / 60)} นาที ${s % 60 ? `${s % 60} วินาที` : ''}`.trim());
 function progressUi(box) {
   const bar = $('[data-bar]', box), pct = $('[data-pct]', box), stage = $('[data-stage]', box), err = $('[data-err]', box);
-  let last = 0;
+  let last = 0, cancelBtn = null;
   return {
-    set(p, text) {
+    set(p, text, info) {
       p = Math.max(last, Math.min(100, Math.round(p)));
       last = p;
       if (bar) bar.style.width = `${p}%`;
       if (pct) pct.textContent = `${p}%`;
-      if (stage && text) stage.textContent = text;
+      if (stage && text) stage.textContent = info && info.eta ? `${text} · เหลือประมาณ ${fmtEta(info.eta)}` : text;
     },
     reset() { last = 0; this.set(0); },
     error(t) { if (err) { err.textContent = t || ''; err.hidden = !t; } },
+    // ปุ่มยกเลิก: คืนตัวควบคุม (AbortController) · เรียก done() เมื่อจบงาน
+    cancelable() {
+      const ctl = new AbortController();
+      if (stage && stage.parentNode) {
+        cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button'; cancelBtn.className = 'btn light small'; cancelBtn.textContent = 'ยกเลิก'; cancelBtn.style.marginLeft = '.6rem';
+        cancelBtn.addEventListener('click', () => { cancelBtn.disabled = true; cancelBtn.textContent = 'กำลังยกเลิก…'; ctl.abort(); });
+        stage.parentNode.appendChild(cancelBtn);
+      }
+      return { signal: ctl.signal, done: () => { if (cancelBtn) { cancelBtn.remove(); cancelBtn = null; } } };
+    },
   };
 }
 
@@ -65,20 +77,24 @@ if (job) {
     busy = true; ui.error(''); ui.reset();
     if (btn) { btn.disabled = true; btn.classList.add('loading'); }
     const release = guardLeave(true);
+    const cancel = ui.cancelable();
     try {
       ui.set(1, 'กำลังเตรียม');
       const spec = await getJson(`${base}/spec${mode === 'download' ? '?download=1' : ''}`);
-      const r = await renderAnimation(spec, (p, s) => ui.set(p, s));
+      const r = await renderAnimation(spec, (p, s, i) => ui.set(p, s, i), { signal: cancel.signal });
       saveBlob(r.blob, spec.fileName);
       if (mode !== 'download') await postJson(`${base}/finished`, csrf, { bytes: r.blob.size, ms: r.ms });
       ui.set(100, `บันทึกไฟล์ลงเครื่องแล้ว · ${fmtMB(r.blob.size)} (ถ้าไม่เห็นไฟล์ ดูในโฟลเดอร์ดาวน์โหลด)`);
       if (after) after.hidden = false;
       if (btn) { btn.hidden = true; }
     } catch (e) {
-      ui.error(e.message || 'สร้างไฟล์ไม่สำเร็จ');
-      if (mode !== 'download') postJson(`${base}/failed`, csrf, { error: String(e.message || e) }).catch(() => {});
-      if (btn) { btn.disabled = false; btn.classList.remove('loading'); btn.hidden = false; btn.textContent = 'ลองอีกครั้ง'; }
+      const stopped = e && e.name === 'AbortError';
+      ui.error(stopped ? 'ยกเลิกแล้ว กดสร้างใหม่ได้เมื่อพร้อม' : (e.message || 'สร้างไฟล์ไม่สำเร็จ'));
+      if (!stopped && mode !== 'download') postJson(`${base}/failed`, csrf, { error: String(e.message || e) }).catch(() => {});
+      ui.reset();
+      if (btn) { btn.disabled = false; btn.classList.remove('loading'); btn.hidden = false; btn.textContent = stopped ? 'สร้างอีกครั้ง' : 'ลองอีกครั้ง'; }
     } finally {
+      cancel.done();
       release();
       busy = false;
     }
@@ -222,8 +238,9 @@ async function burnAndSave(spec, box, csrf, { report }) {
   const bad = unsupported() || (supportInfo().webcodecs ? '' : 'เบราว์เซอร์นี้สร้างคลิปไม่ได้ ลองเปิดด้วย Chrome / Edge / Safari รุ่นใหม่');
   if (bad) { burnError(box, ui, bad); return false; }
   const release = guardLeave(true);
+  const cancel = ui.cancelable();
   try {
-    const r = await burnSubtitles(clipFile, spec, (p, s) => ui.set(p, s));
+    const r = await burnSubtitles(clipFile, spec, (p, s, i) => ui.set(p, s, i), { signal: cancel.signal });
     if (!r || !r.blob || !r.blob.size) throw new Error('ได้ไฟล์เปล่า ลองอีกครั้ง หรือลองเปิดด้วย Chrome รุ่นใหม่');
     // ปุ่มดาวน์โหลดค้างไว้เสมอ (บางเบราว์เซอร์ เช่น Safari บนมือถือ ไม่ยอมโหลดเองอัตโนมัติ)
     if (lastUrl) URL.revokeObjectURL(lastUrl);
@@ -239,9 +256,10 @@ async function burnAndSave(spec, box, csrf, { report }) {
     return true;
   } catch (e) {
     console.error(e);
-    burnError(box, ui, (e && e.message) || 'สร้างคลิปไม่สำเร็จ ลองอีกครั้ง');
+    burnError(box, ui, e && e.name === 'AbortError' ? 'ยกเลิกแล้ว กดสร้างใหม่ได้เมื่อพร้อม' : (e && e.message) || 'สร้างคลิปไม่สำเร็จ ลองอีกครั้ง');
     return false;
   } finally {
+    cancel.done();
     release();
   }
 }

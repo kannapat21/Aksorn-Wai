@@ -1254,6 +1254,9 @@ function authPage({ cfg, user, csrf, mode, form = {}, error, next, notice = '' }
       <label class="field">รหัสผ่าน ${signup ? '<span class="muted small">(อย่างน้อย 8 ตัวอักษร)</span>' : ''}
         <span class="pw"><input type="password" name="password" required minlength="${signup ? 8 : 1}" maxlength="200" autocomplete="${signup ? 'new-password' : 'current-password'}" ${form.email ? 'autofocus' : ''}><button type="button" class="pw-toggle" data-pw-toggle aria-label="แสดงรหัสผ่าน">แสดง</button></span>
       </label>
+      ${signup ? `<label class="field">กรอกรหัสผ่านอีกครั้ง
+        <span class="pw"><input type="password" name="password2" required minlength="8" maxlength="200" autocomplete="new-password"><button type="button" class="pw-toggle" data-pw-toggle aria-label="แสดงรหัสผ่าน">แสดง</button></span>
+      </label>` : ''}
       ${signup ? '' : '<p class="small right"><a href="/forgot">ลืมรหัสผ่าน?</a></p>'}
       <button class="btn primary block" type="submit">${signup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</button>
       ${signup ? '<p class="muted small center">การสมัครถือว่ายอมรับ <a href="/terms">เงื่อนไขการใช้งาน</a> และ <a href="/privacy">นโยบายความเป็นส่วนตัว</a></p>' : ''}
@@ -1301,6 +1304,9 @@ function reset({ cfg, user, csrf, token, error }) {
     <input type="hidden" name="t" value="${esc(token)}">
     <label class="field">รหัสผ่านใหม่ <span class="muted small">(อย่างน้อย 8 ตัวอักษร)</span>
       <span class="pw"><input type="password" name="password" required minlength="8" maxlength="200" autocomplete="new-password" autofocus><button type="button" class="pw-toggle" data-pw-toggle aria-label="แสดงรหัสผ่าน">แสดง</button></span>
+    </label>
+    <label class="field">กรอกรหัสผ่านใหม่อีกครั้ง
+      <span class="pw"><input type="password" name="password2" required minlength="8" maxlength="200" autocomplete="new-password"><button type="button" class="pw-toggle" data-pw-toggle aria-label="แสดงรหัสผ่าน">แสดง</button></span>
     </label>
     <button class="btn primary block" type="submit">บันทึกรหัสผ่านใหม่</button>
   </form>

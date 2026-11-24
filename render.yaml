@@ -30,7 +30,7 @@ services:
       - { key: GROQ_API_KEY, sync: false }
       - { key: PAYMENT_PROVIDER, value: manual }
       # ยังไม่มี SMTP: ปิดอีเมลไปก่อน (ตั้ง MAIL_MODE=smtp + SMTP_HOST/PORT/USER/PASS + MAIL_FROM ทีหลังได้)
-      - { key: MAIL_MODE, value: "off" }
+      - { key: MAIL_MODE, value: "off" } # เปลี่ยนเป็น brevo เมื่อตั้ง BREVO_API_KEY + MAIL_FROM แล้ว (ดู docs)
       - { key: PROMPTPAY_ID, sync: false }
       - { key: PROMPTPAY_NAME, sync: false }
       - { key: LEGAL_NAME, sync: false }

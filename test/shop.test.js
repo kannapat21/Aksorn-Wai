@@ -107,7 +107,7 @@ function client() {
       return r;
     },
     async csrf() { if (!jar.csrf) await c.req('/login'); return decodeURIComponent(jar.csrf); },
-    async post(p, form = {}) { return c.req(p, { method: 'POST', form: { csrf: await c.csrf(), ...form } }); },
+    async post(p, form = {}) { return c.req(p, { method: 'POST', form: { csrf: await c.csrf(), ...(p === '/signup' && form.password !== undefined && form.password2 === undefined ? { password2: form.password } : {}), ...form } }); },
     async signup(email, password = 'correct-horse-9', name = '') { return c.post('/signup', { email, password, name, next: '/library' }); },
     async login(email, password = 'correct-horse-9') { return c.post('/login', { email, password, next: '/library' }); },
   };
@@ -994,12 +994,12 @@ test('ลืมรหัสผ่าน: ไม่บอกว่าอีเม
   assert.equal(ctx.mailer.sent.length, n + 1);
   assert.equal((await anon.req(link)).status, 200);
   const token = new URL('http://x' + link).searchParams.get('t');
-  assert.equal((await anon.post('/reset', { t: token, password: 'short' })).status, 400);
-  assert.equal((await anon.req('/reset', { method: 'POST', form: { t: token, password: 'new-password-123' } })).status, 403); // ไม่มี CSRF
-  const ok = await anon.post('/reset', { t: token, password: 'new-password-123' });
+  assert.equal((await anon.post('/reset', { t: token, password: 'short', password2: 'short' })).status, 400);
+  assert.equal((await anon.req('/reset', { method: 'POST', form: { t: token, password: 'new-password-123', password2: 'new-password-123' } })).status, 403); // ไม่มี CSRF
+  const ok = await anon.post('/reset', { t: token, password: 'new-password-123', password2: 'new-password-123' });
   assert.equal(ok.status, 303);
   assert.equal(ok.headers.get('location'), '/login?reset=1');
-  assert.equal((await anon.post('/reset', { t: token, password: 'another-pass-456' })).status, 400, 'ใช้ซ้ำไม่ได้');
+  assert.equal((await anon.post('/reset', { t: token, password: 'another-pass-456', password2: 'another-pass-456' })).status, 400, 'ใช้ซ้ำไม่ได้');
   // เซสชันเดิมใช้ไม่ได้ รหัสเก่าใช้ไม่ได้ รหัสใหม่ใช้ได้
   assert.equal((await fetch(`${base}/library`, { redirect: 'manual', headers: { cookie: `sid=${sidBefore}` } })).status, 303);
   assert.equal((await client().login('reset@example.com')).status, 401);
@@ -1014,6 +1014,24 @@ test('ลืมรหัสผ่าน: ไม่บอกว่าอีเม
     clock += 31 * MIN;
     assert.equal((await anon.req(link2)).status, 400);
   } finally { clock = saved; }
+});
+
+test('รหัสผ่านสองช่องไม่ตรง → สมัคร/ตั้งใหม่ไม่ได้ และส่งอีเมลล้มเหลวก็ตอบเหมือนเดิม (ไม่เปิดเผยว่ามีบัญชี)', async () => {
+  const d = client();
+  assert.equal((await d.post('/signup', { email: 'mm@example.com', password: 'correct-horse-9', password2: 'correct-horse-8', next: '/library' })).status, 400);
+  assert.equal(user('mm@example.com'), undefined);
+  assert.equal((await d.post('/signup', { email: 'mm@example.com', password: 'correct-horse-9', next: '/library' })).status, 303);
+  const anon = client();
+  const origSend = ctx.mailer.send;
+  const savedClock = clock;
+  clock = savedClock + 6 * 60 * MIN; // เริ่มช่วงนับลิมิตใหม่
+  ctx.mailer.send = async () => { throw new Error('Brevo down'); };
+  try {
+    const known = await anon.post('/forgot', { email: 'mm@example.com' });
+    const unknown = await anon.post('/forgot', { email: 'nobody-here@example.com' });
+    assert.equal(known.status, unknown.status);
+    assert.equal(known.status, 200);
+  } finally { ctx.mailer.send = origSend; clock = savedClock; }
 });
 
 test('กันสแปม: ขอลิงก์ลืมรหัสผ่านถี่เกินไป → 429 และมีส่วนหัวความปลอดภัย', async () => {
@@ -1190,7 +1208,7 @@ test('Omise: PromptPay QR → webhook ที่เซ็นแล้ว + ดึ
       return r;
     };
     const csrf = async () => { if (!jar.csrf) await req('/login'); return decodeURIComponent(jar.csrf); };
-    const post = async (p, f = {}) => req(p, { method: 'POST', form: { csrf: await csrf(), ...f } });
+    const post = async (p, f = {}) => req(p, { method: 'POST', form: { csrf: await csrf(), ...(p === '/signup' && f.password !== undefined && f.password2 === undefined ? { password2: f.password } : {}), ...f } });
     return { req, post };
   };
   const webhook = (event, secret = whSecret) => {
@@ -1379,7 +1397,7 @@ test('manual: ลูกค้ากดยืนยันโอน → รอต�
       return r;
     };
     const csrf = async () => { if (!jar.csrf) await req('/login'); return decodeURIComponent(jar.csrf); };
-    const post = async (p, f = {}) => req(p, { method: 'POST', form: { csrf: await csrf(), ...f } });
+    const post = async (p, f = {}) => req(p, { method: 'POST', form: { csrf: await csrf(), ...(p === '/signup' && f.password !== undefined && f.password2 === undefined ? { password2: f.password } : {}), ...f } });
     return { req, post };
   };
   try {
@@ -1576,7 +1594,7 @@ test('manual (ค่าเริ่มต้น ไม่บวกสตาง�
       for (const sc of r.headers.getSetCookie()) { const [kv] = sc.split(';'); const i = kv.indexOf('='); const v = kv.slice(i + 1); if (v) jar[kv.slice(0, i)] = v; else delete jar[kv.slice(0, i)]; }
       return r;
     };
-    const post = async (p, f = {}) => { if (!jar.csrf) await req('/login'); return req(p, { method: 'POST', form: { csrf: decodeURIComponent(jar.csrf), ...f } }); };
+    const post = async (p, f = {}) => { if (!jar.csrf) await req('/login'); return req(p, { method: 'POST', form: { csrf: decodeURIComponent(jar.csrf), ...(p === '/signup' && f.password !== undefined && f.password2 === undefined ? { password2: f.password } : {}), ...f } }); };
     return { req, post };
   };
   try {
@@ -1629,7 +1647,7 @@ test('BASE_URL เป็น https แต่เปิดผ่าน http://local
     assert.ok(viaTunnel.headers.get('strict-transport-security'));
     // สมัครแล้วใช้คุกกี้ต่อผ่าน http ได้จริง
     const csrf = decodeURIComponent(pc.split(';')[0].split('=')[1]);
-    const su = await fetch(`${hb}/signup`, { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: `csrf=${csrf}` }, body: new URLSearchParams({ csrf, email: 'sec@example.com', password: 'correct-horse-9', next: '/library' }) });
+    const su = await fetch(`${hb}/signup`, { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: `csrf=${csrf}` }, body: new URLSearchParams({ csrf, email: 'sec@example.com', password: 'correct-horse-9', password2: 'correct-horse-9', next: '/library' }) });
     const sid = su.headers.getSetCookie().find((c) => c.startsWith('sid='));
     assert.ok(sid && !/;\s*Secure/i.test(sid));
     assert.equal((await fetch(`${hb}/library`, { redirect: 'manual', headers: { cookie: sid.split(';')[0] } })).status, 200);

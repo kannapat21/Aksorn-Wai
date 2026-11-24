@@ -113,7 +113,7 @@ function client() {
       return r;
     },
     async csrf() { if (!jar.csrf) await c.req('/login'); return decodeURIComponent(jar.csrf); },
-    async post(p, form = {}) { return c.req(p, { method: 'POST', form: { csrf: await c.csrf(), ...form } }); },
+    async post(p, form = {}) { return c.req(p, { method: 'POST', form: { csrf: await c.csrf(), ...(p === '/signup' && form.password !== undefined && form.password2 === undefined ? { password2: form.password } : {}), ...form } }); },
     async json(p, obj) { return c.req(p, { method: 'POST', headers: { 'content-type': 'application/json', 'x-csrf-token': await c.csrf() }, body: JSON.stringify(obj) }); },
     async raw(p, buf, type = 'audio/wav') { return c.req(p, { method: 'POST', headers: { 'content-type': type, 'x-csrf-token': await c.csrf() }, body: buf }); },
   };
