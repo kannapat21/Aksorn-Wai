@@ -29,12 +29,9 @@ services:
       - { key: DATABASE_AUTH_TOKEN, sync: false }
       - { key: GROQ_API_KEY, sync: false }
       - { key: PAYMENT_PROVIDER, value: manual }
+      # ยังไม่มี SMTP: ปิดอีเมลไปก่อน (ตั้ง MAIL_MODE=smtp + SMTP_HOST/PORT/USER/PASS + MAIL_FROM ทีหลังได้)
+      - { key: MAIL_MODE, value: "off" }
       - { key: PROMPTPAY_ID, sync: false }
       - { key: PROMPTPAY_NAME, sync: false }
-      - { key: MAIL_FROM, sync: false }
-      - { key: SMTP_HOST, value: smtp.gmail.com }
-      - { key: SMTP_PORT, value: "587" }
-      - { key: SMTP_USER, sync: false }
-      - { key: SMTP_PASS, sync: false }
       - { key: LEGAL_NAME, sync: false }
       - { key: CONTACT_EMAIL, sync: false }
