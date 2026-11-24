@@ -57,9 +57,19 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     );
     CREATE INDEX IF NOT EXISTS subtitle_user ON subtitle_jobs(user_id, created_at);
     CREATE INDEX IF NOT EXISTS subtitle_queue ON subtitle_jobs(status, queued_at);
-    UPDATE subtitle_jobs SET status = 'queued', progress = 0, stage = '' WHERE status = 'transcribing';
-    UPDATE subtitle_jobs SET status = 'queued_render', progress = 0, stage = '' WHERE status = 'rendering';
   `);
+  // โหมดเบราว์เซอร์ (serverless): เครื่องร้านไม่ได้ทำงานค้างเอง ห้ามรีเซ็ตสถานะตอนฟังก์ชันเริ่มใหม่
+  const browserMode = cfg.renderMode === 'browser';
+  if (!browserMode) {
+    db.exec(`
+      UPDATE subtitle_jobs SET status = 'queued', progress = 0, stage = '' WHERE status = 'transcribing';
+      UPDATE subtitle_jobs SET status = 'queued_render', progress = 0, stage = '' WHERE status = 'rendering';
+    `);
+  }
+  // คำที่ถอดได้ทีละท่อน (เบราว์เซอร์ส่งเสียงมาทีละท่อน) · งานที่คลิปอยู่ในเครื่องลูกค้าเท่านั้น
+  const subCols = db.prepare('PRAGMA table_info(subtitle_jobs)').all().map((c) => c.name);
+  if (!subCols.includes('asr_json')) db.exec('ALTER TABLE subtitle_jobs ADD COLUMN asr_json TEXT');
+  if (!subCols.includes('browser')) db.exec('ALTER TABLE subtitle_jobs ADD COLUMN browser INTEGER NOT NULL DEFAULT 0');
   const q = {
     insert: db.prepare(`INSERT INTO subtitle_jobs (id, user_id, order_id, product_slug, font, fill, stroke, outline, shadow, size, position, status,
                           src_name, src_ext, src_bytes, width, height, duration, hdr, created_at, queued_at, updated_at, expires_at)
@@ -87,6 +97,13 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     purgeOld: db.prepare("DELETE FROM subtitle_jobs WHERE status = 'expired' AND expires_at < ?"),
     del: db.prepare("UPDATE subtitle_jobs SET status = 'expired', cues_json = NULL, src_name = '', expires_at = ?, updated_at = ? WHERE id = ? AND user_id = ? AND status IN ('review','done','failed','queued','queued_render')"),
     known: db.prepare("SELECT id FROM subtitle_jobs WHERE status != 'expired'"),
+    insertBrowser: db.prepare(`INSERT INTO subtitle_jobs (id, user_id, order_id, product_slug, font, fill, stroke, outline, shadow, size, position, status, stage,
+                          src_name, src_ext, src_bytes, width, height, duration, hdr, browser, asr_json, created_at, queued_at, updated_at, expires_at)
+                        VALUES (@id, @user_id, @order_id, @product_slug, @font, @fill, @stroke, @outline, @shadow, @size, @position, 'transcribing', 'กำลังฟังเสียงพูด',
+                          @src_name, @src_ext, @src_bytes, @width, @height, @duration, 0, 1, '[]', @t, @t, @t, @expires_at)`),
+    asrSave: db.prepare("UPDATE subtitle_jobs SET asr_json = ?, progress = ?, stage = ?, updated_at = ? WHERE id = ? AND status = 'transcribing'"),
+    asrRestart: db.prepare("UPDATE subtitle_jobs SET status = 'transcribing', progress = 0, stage = 'กำลังฟังเสียงพูด', error = NULL, asr_json = '[]', updated_at = ? WHERE id = ? AND status IN ('transcribing','failed') AND cues_json IS NULL"),
+    renderedBrowser: db.prepare("UPDATE subtitle_jobs SET status = 'done', progress = 100, stage = '', out_bytes = ?, renders = renders + 1, finished_at = ?, updated_at = ? WHERE id = ? AND status IN ('review','done','failed') AND cues_json IS NOT NULL"),
   };
 
   const dirOf = (id) => path.join(S.dir, id);
@@ -96,8 +113,11 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
   const busyStates = ['queued', 'transcribing', 'queued_render', 'rendering'];
   let running = 0;
 
+  const activeRecent = db.prepare("SELECT COUNT(*) AS n FROM subtitle_jobs WHERE user_id = ? AND status = 'transcribing' AND updated_at > ?");
   function limits(userId) {
-    return { today: q.since.get(userId, now() - 24 * HOUR).n, maxPerDay: S.dailyLimit, active: q.active.get(userId).n };
+    // โหมดเบราว์เซอร์: งานที่ฟังเสียงค้าง (ลูกค้าปิดหน้าไปกลางทาง) เกิน 15 นาที ไม่บล็อกคลิปใหม่
+    const active = browserMode ? activeRecent.get(userId, now() - 15 * 60 * 1000).n : q.active.get(userId).n;
+    return { today: q.since.get(userId, now() - 24 * HOUR).n, maxPerDay: S.dailyLimit, active };
   }
 
   // ตรวจแบบตัวอักษร (สไตล์) ที่ลูกค้าเลือก: ต้องเป็นแอนิเมชันที่มีในคลัง
@@ -143,6 +163,52 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     setImmediate(pump);
     return { job: q.get.get(id) };
   }
+
+  // ---------- โหมดเบราว์เซอร์: คลิปไม่ถูกอัปขึ้นร้าน เบราว์เซอร์ส่งแค่ข้อมูลคลิป + เสียงพูดทีละท่อน ----------
+  function checkInfo(info) {
+    if (!info.audio) return { error: 'คลิปนี้ไม่มีเสียง ระบบต้องฟังเสียงพูดเพื่อทำซับ' };
+    if (!(info.duration > 0) || !(info.width > 0) || !(info.height > 0)) return { error: 'เปิดไฟล์นี้ไม่ได้ ไฟล์อาจเสียหรือไม่ใช่วิดีโอ ลองส่งออกจากแอปตัดต่อเป็น MP4 แล้วเลือกใหม่' };
+    if (info.duration > S.maxSeconds + 0.5) return { error: `คลิปยาว ${fmtDur(info.duration)} เกินที่รับได้ (${fmtDur(S.maxSeconds)}) ตัดให้สั้นลงแล้วเลือกใหม่` };
+    if (info.duration < 1) return { error: 'คลิปสั้นเกินไป' };
+    if (Math.min(info.width, info.height) < 240) return { error: 'คลิปความละเอียดต่ำเกินไป (ต้องอย่างน้อย 240p)' };
+    if (Math.max(info.width, info.height) > 8192) return { error: 'คลิปความละเอียดสูงเกินไป' };
+    if (info.bytes > S.maxMb * 1024 * 1024) return { error: `ไฟล์ใหญ่เกิน ${S.maxMb} MB` };
+    return null;
+  }
+
+  function createBrowserJob({ user, style, name, info }) {
+    const bad = checkInfo(info);
+    if (bad) return bad;
+    const id = crypto.randomBytes(12).toString('hex');
+    const ext = /\.(mov|m4v|webm|mkv)$/i.exec(name || '') ? RegExp.$1.toLowerCase() : 'mp4';
+    const t = now();
+    q.insertBrowser.run({
+      id, user_id: user.id, ...style, src_name: cleanName(name), src_ext: ext, src_bytes: Math.round(info.bytes) || 0,
+      width: Math.round(info.width), height: Math.round(info.height), duration: Number(info.duration), t, expires_at: t + S.retentionHours * HOUR,
+    });
+    log(`[subtitles] เริ่มคลิป ${id} (${fmtDur(info.duration)}, ${info.width}x${info.height}, ฟังเสียงผ่าน Groq)`);
+    return { job: q.get.get(id) };
+  }
+
+  // รับคำที่ถอดได้ของท่อนที่ i (จากทั้งหมด n ท่อน) · ท่อนสุดท้ายแล้ว = สร้างบรรทัดซับ → ให้ลูกค้าตรวจ
+  function asrChunk(job, i, n, words) {
+    const prev = i === 0 ? [] : JSON.parse(job.asr_json || '[]');
+    const all = prev.concat(words.map((w) => ({ text: w.text, start: Math.round(w.start * 1000) / 1000, end: Math.round(w.end * 1000) / 1000 })));
+    if (i < n - 1) {
+      q.asrSave.run(JSON.stringify(all), Math.round(((i + 1) / n) * 95), 'กำลังฟังเสียงพูด', now(), job.id);
+      return { done: false };
+    }
+    const maxChars = cuesLib.maxCharsFor(job.width, job.height);
+    const cues = cuesLib.buildCues(all, { maxChars, duration: job.duration });
+    q.review.run(JSON.stringify(cues), 'groq', now(), job.id);
+    db.prepare('UPDATE subtitle_jobs SET asr_json = NULL WHERE id = ?').run(job.id);
+    log(`[subtitles] ถอดเสียงเสร็จ ${job.id} (${cues.length} บรรทัด)`);
+    return { done: true, cues };
+  }
+
+  const restartAsr = (job) => q.asrRestart.run(now(), job.id).changes > 0;
+  const failAsr = (job, msg) => q.fail.run(msg, now(), now(), job.id);
+  const renderedInBrowser = (job, bytes) => q.renderedBrowser.run(Math.max(0, Math.round(Number(bytes) || 0)), now(), now(), job.id).changes > 0;
 
   async function work(job) {
     const phase = job.status === 'queued' ? 'asr' : 'render';
@@ -302,7 +368,7 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     get: (id) => q.get.get(String(id || '')),
     byUser: (userId) => q.byUser.all(userId),
     position: (job) => (job.status === 'queued' || job.status === 'queued_render' ? q.position.get(job.queued_at).n + 1 : 0),
-    limits, validateStyle, receive, saveCues, setStyle, queueRender, retry, reopen, remove, sweep, pump, idle,
+    limits, validateStyle, receive, saveCues, createBrowserJob, asrChunk, restartAsr, failAsr, renderedInBrowser, setStyle, queueRender, retry, reopen, remove, sweep, pump, idle,
     cuesOf, srcOf, outOf, dirOf, busy: (job) => busyStates.includes(job.status),
     tmpDir: () => { const d = path.join(S.dir, '.incoming'); fs.mkdirSync(d, { recursive: true, mode: 0o700 }); return d; },
   };

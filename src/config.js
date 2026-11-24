@@ -12,9 +12,14 @@ const ROOT = path.resolve(__dirname, '..');
 require('../public/motion.js');
 const MOTIONS = globalThis.TTMotion.MOTIONS;
 
+// รันบนโฮสต์แบบ serverless (Netlify/Vercel/AWS Lambda): ไม่มีดิสก์ถาวร ไม่มี Chrome/ffmpeg เขียนได้แค่ /tmp
+function isServerless(env) {
+  return env.SERVERLESS === '1' || Boolean(env.NETLIFY || env.AWS_LAMBDA_FUNCTION_NAME || env.VERCEL);
+}
+
 function ensureEnvFile() {
   const envPath = path.join(ROOT, '.env');
-  if (fs.existsSync(envPath) || process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'test') return;
+  if (isServerless(process.env) || fs.existsSync(envPath) || process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'test') return;
   const rnd = (n) => crypto.randomBytes(n).toString('hex');
   const adminPw = crypto.randomBytes(18).toString('base64url'); // 24 ตัวอักษร สุ่ม
   const text = fs.readFileSync(path.join(ROOT, '.env.example'), 'utf8')
@@ -45,6 +50,9 @@ function loadConfig(overrides = {}) {
   ensureEnvFile();
   require('dotenv').config({ path: path.join(ROOT, '.env') });
   const env = { ...process.env, ...overrides };
+  const serverless = isServerless(env);
+  // ที่เก็บไฟล์ชั่วคราว: บน serverless เขียนได้แค่ /tmp
+  const writable = (rel, envName) => path.resolve(serverless ? path.join(require('os').tmpdir(), 'aksornwai') : ROOT, env[envName] || rel);
 
   const cfg = {
     root: ROOT,
@@ -100,19 +108,31 @@ function loadConfig(overrides = {}) {
     },
     storageDir: path.resolve(ROOT, env.STORAGE_DIR || 'storage/products'),
     // ไฟล์ที่ลูกค้าปรับแต่งเอง (เก็บถาวร ให้โหลดซ้ำจากคลังได้)
-    customDir: path.resolve(ROOT, env.CUSTOM_DIR || 'storage/custom'),
+    customDir: writable('storage/custom', 'CUSTOM_DIR'),
     customConcurrency: Number(env.CUSTOM_CONCURRENCY || 1), // เรนเดอร์พร้อมกันได้กี่งานทั้งร้าน
     customMaxActive: Number(env.CUSTOM_MAX_ACTIVE || 1), // บัญชีหนึ่งมีงานรอ/กำลังทำได้กี่งาน
     customDailyLimit: Number(env.CUSTOM_DAILY_LIMIT || 0), // จำกัดครั้งต่อ 24 ชม. (0 = ไม่จำกัด)
     customStorageMb: Number(env.CUSTOM_STORAGE_MB || 3000), // พื้นที่เก็บ "เวอร์ชันของฉัน" ต่อบัญชี
-    userFontDir: path.resolve(ROOT, env.USER_FONT_DIR || 'storage/user-fonts'),
+    userFontDir: writable('storage/user-fonts', 'USER_FONT_DIR'),
+    serverless,
+    // server = เครื่องร้านเรนเดอร์เอง (Chrome + ffmpeg) · browser = เบราว์เซอร์ของลูกค้าเรนเดอร์ เซิร์ฟเวอร์ใช้แรมแทบไม่มี
+    renderMode: env.RENDER_MODE || (serverless ? 'browser' : 'server'),
+    // ไฟล์สินค้าและฟอนต์ลูกค้า: local = โฟลเดอร์ในเครื่อง · supabase = Supabase Storage (ลิงก์ดาวน์โหลดเซ็นชั่วคราว)
+    storage: {
+      driver: env.STORAGE_DRIVER || (env.SUPABASE_URL ? 'supabase' : 'local'),
+      supabaseUrl: String(env.SUPABASE_URL || '').replace(/\/+$/, ''),
+      supabaseKey: env.SUPABASE_SERVICE_KEY || '',
+      bucket: env.SUPABASE_BUCKET || 'shop-files',
+    },
+    // ถอดเสียงด้วย Groq (Whisper large-v3 บนคลาวด์ ฟรีตามโควตา) ใช้เมื่อ SUBTITLE_ENGINE=groq
+    groq: { apiKey: env.GROQ_API_KEY || '', model: env.GROQ_MODEL || 'whisper-large-v3', apiBase: env.GROQ_API_BASE || 'https://api.groq.com/openai/v1' },
     userFontMax: Number(env.USER_FONT_MAX || 20), // ฟอนต์ที่อัปโหลดได้ต่อบัญชี
     // ซับอัตโนมัติ: ลูกค้าอัปคลิป ร้านถอดเสียงด้วย Whisper ในเครื่อง แล้วเบิร์นซับด้วยแบบในคลัง
     subtitles: {
-      engine: env.SUBTITLE_ENGINE || 'auto', // auto | mlx | faster-whisper | off
+      engine: env.SUBTITLE_ENGINE || (env.GROQ_API_KEY ? 'groq' : 'auto'), // auto | mlx | faster-whisper | groq | off
       python: env.SUBTITLE_PYTHON || (fs.existsSync(path.join(ROOT, '.venv-stt', 'bin', 'python')) ? path.join(ROOT, '.venv-stt', 'bin', 'python') : 'python3'),
       model: env.SUBTITLE_MODEL || '', // ว่าง = whisper-large-v3-turbo
-      dir: path.resolve(ROOT, env.SUBTITLE_DIR || 'storage/subtitles'),
+      dir: writable('storage/subtitles', 'SUBTITLE_DIR'),
       maxMb: Number(env.SUBTITLE_MAX_MB || 300), // ขนาดคลิปสูงสุด
       maxSeconds: Number(env.SUBTITLE_MAX_SECONDS || 180), // ความยาวคลิปสูงสุด (วินาที)
       dailyLimit: Number(env.SUBTITLE_DAILY_LIMIT || 5), // อัปคลิปได้กี่คลิปต่อบัญชีต่อ 24 ชม. (0 = ไม่จำกัด)
@@ -160,7 +180,15 @@ function loadConfig(overrides = {}) {
     if (!cfg.legal.name || !cfg.legal.contactEmail) problems.push('ตั้ง LEGAL_NAME และ CONTACT_EMAIL สำหรับหน้านโยบาย');
   }
   const S = cfg.subtitles;
-  if (!['auto', 'mlx', 'faster-whisper', 'off'].includes(S.engine)) problems.push('SUBTITLE_ENGINE ต้องเป็น auto / mlx / faster-whisper / off');
+  if (!['auto', 'mlx', 'faster-whisper', 'groq', 'off'].includes(S.engine)) problems.push('SUBTITLE_ENGINE ต้องเป็น auto / mlx / faster-whisper / groq / off');
+  if (S.engine === 'groq' && !cfg.groq.apiKey) problems.push('SUBTITLE_ENGINE=groq ต้องตั้ง GROQ_API_KEY (สมัครฟรีที่ console.groq.com)');
+  if (!['server', 'browser'].includes(cfg.renderMode)) problems.push('RENDER_MODE ต้องเป็น server หรือ browser');
+  if (cfg.renderMode === 'browser' && S.engine !== 'groq' && S.engine !== 'off') problems.push('RENDER_MODE=browser ถอดเสียงในเซิร์ฟเวอร์ไม่ได้: ตั้ง GROQ_API_KEY (หรือ SUBTITLE_ENGINE=off)');
+  const ST = cfg.storage;
+  if (!['local', 'supabase'].includes(ST.driver)) problems.push('STORAGE_DRIVER ต้องเป็น local หรือ supabase');
+  if (ST.driver === 'supabase' && (!/^https:\/\//.test(ST.supabaseUrl) || !ST.supabaseKey)) problems.push('ตั้ง SUPABASE_URL (https://xxxx.supabase.co) และ SUPABASE_SERVICE_KEY ให้ครบ');
+  if (serverless && ST.driver === 'local') problems.push('บน Netlify ต้องเก็บไฟล์สินค้าบน Supabase: ตั้ง SUPABASE_URL และ SUPABASE_SERVICE_KEY');
+  if (serverless && /^\//.test(cfg.databaseFile) && !/^[a-z]+:\/\//.test(env.DATABASE_URL || '')) problems.push('บน Netlify ต้องใช้ฐานข้อมูล Turso: ตั้ง DATABASE_URL (libsql://...) และ DATABASE_AUTH_TOKEN');
   if (!(S.maxMb >= 5 && S.maxMb <= 4000)) problems.push('SUBTITLE_MAX_MB ต้องอยู่ระหว่าง 5–4000');
   if (!(S.maxSeconds >= 10 && S.maxSeconds <= 1800)) problems.push('SUBTITLE_MAX_SECONDS ต้องอยู่ระหว่าง 10–1800');
   if (!(S.retentionHours >= 1 && S.retentionHours <= 720)) problems.push('SUBTITLE_RETENTION_HOURS ต้องอยู่ระหว่าง 1–720');

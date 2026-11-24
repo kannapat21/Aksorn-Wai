@@ -128,8 +128,10 @@ function createCustomizer({ db, cfg, log, now, renderer, toolsOk }) {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS user_fonts_user ON user_fonts(user_id, created_at);
-    UPDATE custom_renders SET status = 'queued', progress = 0, stage = '' WHERE status = 'rendering';
   `);
+  // โหมดเบราว์เซอร์: เบราว์เซอร์ลูกค้าเรนเดอร์เอง เซิร์ฟเวอร์ไม่มีคิว (ไม่รีเซ็ตสถานะตอนฟังก์ชันเริ่มใหม่)
+  const browserMode = cfg.renderMode === 'browser';
+  if (!browserMode) db.exec("UPDATE custom_renders SET status = 'queued', progress = 0, stage = '' WHERE status = 'rendering'");
   // งานรุ่นใหม่: แนวที่เลือก ความยาว และชนิดไฟล์
   const cols = db.prepare('PRAGMA table_info(custom_renders)').all().map((x) => x.name);
   if (!cols.includes('size')) db.exec("ALTER TABLE custom_renders ADD COLUMN size TEXT NOT NULL DEFAULT 'vertical'");
@@ -222,15 +224,29 @@ function createCustomizer({ db, cfg, log, now, renderer, toolsOk }) {
     }
   }
 
+  // ไฟล์ที่เบราว์เซอร์ลูกค้าสร้าง (browser: true) อยู่ในเครื่องลูกค้า ไม่กินพื้นที่ร้าน
   function usedBytes(userId) {
-    return q.doneFiles.all(userId).reduce((sum, r) => sum + JSON.parse(r.files_json || '[]').reduce((a, f) => a + (f.bytes || 0), 0), 0);
+    return q.doneFiles.all(userId).reduce((sum, r) => sum + JSON.parse(r.files_json || '[]').reduce((a, f) => a + (f.browser ? 0 : f.bytes || 0), 0), 0);
   }
+
+  // เบราว์เซอร์ลูกค้าเริ่มสร้าง / สร้างเสร็จ / ไม่สำเร็จ
+  function browserStart(job) {
+    if (job.status === 'queued') q.start.run(now(), job.id);
+    return q.get.get(job.id);
+  }
+  function browserDone(job, { codec, ext, bytes, ms }) {
+    const file = { format: 'single', codec, size: job.size, seconds: job.seconds, file: `${job.id}.${ext}`, bytes: Math.max(0, Math.round(Number(bytes) || 0)), ms: Math.round(Number(ms) || 0), browser: true };
+    q.done.run(JSON.stringify([file]), now(), job.id);
+  }
+  function browserFail(job, msg) { if (job.status !== 'done') q.fail.run(msg, now(), job.id); }
 
   // ไม่จำกัดจำนวนครั้ง: กันเครื่องล่มด้วยคิวทีละงานต่อบัญชี และโควตาพื้นที่เก็บไฟล์
   // (CUSTOM_DAILY_LIMIT ตั้งได้ถ้าอยากจำกัดต่อวัน ค่าเริ่มต้น 0 = ไม่จำกัด)
+  const activeRecent = db.prepare("SELECT COUNT(*) AS n FROM custom_renders WHERE user_id = ? AND status IN ('queued','rendering') AND created_at > ?");
   function limits(userId) {
     return {
-      active: q.active.get(userId).n,
+      // โหมดเบราว์เซอร์: งานที่ลูกค้าปิดหน้าไปก่อนเสร็จ ไม่บล็อกงานใหม่เกิน 10 นาที
+      active: browserMode ? activeRecent.get(userId, now() - 10 * 60 * 1000).n : q.active.get(userId).n,
       today: q.since.get(userId, now() - DAY_MS).n,
       maxActive: cfg.customMaxActive,
       maxPerDay: cfg.customDailyLimit,
@@ -265,6 +281,7 @@ function createCustomizer({ db, cfg, log, now, renderer, toolsOk }) {
     list: (userId) => q.fonts.all(userId),
     get: (id, userId) => q.fontGet.get(String(id || ''), userId),
     path: fontPath,
+    key: (row) => `user-fonts/${row.user_id}/${row.id}.${row.format}`,
     add(userId, buf) {
       if (q.fonts.all(userId).length >= cfg.userFontMax) throw new FontError(`อัปโหลดฟอนต์ได้สูงสุด ${cfg.userFontMax} ไฟล์ ลบฟอนต์ที่ไม่ใช้ก่อน`);
       const info = inspectFont(buf);
@@ -330,7 +347,7 @@ function createCustomizer({ db, cfg, log, now, renderer, toolsOk }) {
     get: (id) => q.get.get(id),
     byUser: (userId) => q.byUser.all(userId),
     byUserOrder: (userId, orderId) => q.byUserOrder.all(userId, orderId),
-    limits, enqueue, queuePosition, remove, pump, idle, outDir, presets, fileOf: (job) => JSON.parse(job.files_json || '[]').find((f) => f.format === 'single') || null, rememberLast, userFonts, fontsFor, resolveFont,
+    limits, enqueue, queuePosition, remove, pump, idle, outDir, browserStart, browserDone, browserFail, presets, fileOf: (job) => JSON.parse(job.files_json || '[]').find((f) => f.format === 'single') || null, rememberLast, userFonts, fontsFor, resolveFont,
   };
 }
 

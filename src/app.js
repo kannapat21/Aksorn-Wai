@@ -14,6 +14,7 @@ const custom = require('./customizer');
 const renderTools = require('../render/tools');
 const { createSubtitles } = require('./subtitles');
 const { createTranscriber } = require('./transcribe');
+const { createStorage, productKey } = require('./storage');
 
 const MIN_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * MIN_MS;
@@ -24,6 +25,7 @@ function createApp(cfg, opts = {}) {
   const mailer = opts.mailer || createMailer(cfg);
   const provider = opts.provider || getProvider(cfg.paymentProvider);
   const log = opts.log || console.log;
+  const storage = opts.storage || createStorage(cfg);
   const now = opts.now || (() => Date.now());
   const secureCookies = cfg.baseUrl.startsWith('https://');
   // คุกกี้ Secure เฉพาะคำขอที่มาทาง https จริง (เปิดผ่าน http://localhost ตอนทดสอบในเครื่อง ต้องเข้าสู่ระบบได้ด้วย
@@ -39,8 +41,11 @@ function createApp(cfg, opts = {}) {
   // ความพร้อมของเครื่องมือเรนเดอร์ (ตรวจซ้ำทุก 1 นาทีถ้ายังไม่พร้อม เผื่อเพิ่งติดตั้ง ffmpeg)
   let toolsCache = null;
   let toolsCheckedAt = 0;
+  const browserMode = cfg.renderMode === 'browser';
   function tools() {
     if (opts.renderTools) return opts.renderTools;
+    // โหมดเบราว์เซอร์: เครื่องร้านไม่เรนเดอร์ (ไม่มี Chrome/ffmpeg) เบราว์เซอร์ลูกค้าทำเอง
+    if (browserMode) return { ok: true, browserMode: true, browser: { how: 'เบราว์เซอร์ของลูกค้า (ffmpeg.wasm + WebCodecs)' } };
     if (!toolsCache || (!toolsCache.ok && Date.now() - toolsCheckedAt > 60 * 1000)) {
       toolsCache = renderTools.checkRenderTools();
       toolsCheckedAt = Date.now();
@@ -50,13 +55,18 @@ function createApp(cfg, opts = {}) {
   const { editors } = cfg.editorsConfig;
 
   // ---------- ส่วนหัวความปลอดภัย ----------
+  // โหมดเบราว์เซอร์: ตัวเข้ารหัสวิดีโอ (ffmpeg.wasm) โหลดจาก cdn.jsdelivr.net ครั้งแรกแล้วเก็บในเครื่องลูกค้า
+  // ต้องอนุญาต WebAssembly, worker และ blob: (ภาพเฟรมที่วาดในเบราว์เซอร์)
+  const CSP = browserMode
+    ? "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; connect-src 'self' blob: data: https://cdn.jsdelivr.net; object-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+    : "default-src 'self'; img-src 'self' data:; media-src 'self' blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'";
   app.use((req, res, next) => {
     res.set({
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
       // ลิงก์ดาวน์โหลดมีลายเซ็นใน URL ห้ามส่ง Referer ออกนอกเว็บ (ภายในเว็บส่งได้ ใช้ตัดสินว่าแสดงหน้าโหลดไหม)
       'Referrer-Policy': 'same-origin',
-      'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; media-src 'self' blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      'Content-Security-Policy': CSP,
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Resource-Policy': 'same-origin',
@@ -129,7 +139,7 @@ function createApp(cfg, opts = {}) {
   const customizer = custom.createCustomizer({
     db, cfg, log, now,
     renderer: opts.renderer || custom.createRenderer(cfg),
-    toolsOk: () => tools().ok,
+    toolsOk: () => !browserMode && tools().ok,
   });
 
   // ---------- ซับอัตโนมัติ ----------
@@ -140,7 +150,7 @@ function createApp(cfg, opts = {}) {
   })();
   const subtitles = createSubtitles({
     db, cfg, log, now, transcriber, renderer: subRender,
-    toolsOk: () => tools().ok,
+    toolsOk: () => !browserMode && tools().ok,
     resolveFont: (job) => {
       const f = customizer.resolveFont(job);
       if (f.user) f.chars = (customizer.userFonts.get(job.font.slice(2), job.user_id) || {}).chars || '';
@@ -914,7 +924,7 @@ function createApp(cfg, opts = {}) {
     const job = ownCustom(req);
     if (!job) return notFound(req, res, 'ไม่พบเวอร์ชันนี้ในคลังของคุณ');
     res.set('Cache-Control', 'no-store');
-    send(req, res, 'customStatus', { job, p: productsBySlug.get(job.product_slug), position: customizer.queuePosition(job), fonts: customizer.fontsFor(req.user.id) });
+    send(req, res, 'customStatus', { job, p: productsBySlug.get(job.product_slug), position: customizer.queuePosition(job), fonts: customizer.fontsFor(req.user.id), browserMode, save: req.query.save === '1' });
   });
 
   app.get('/library/custom/:id/status', (req, res) => {
@@ -924,8 +934,78 @@ function createApp(cfg, opts = {}) {
     res.json({ status: job.status, progress: job.progress, stage: job.stage, position: customizer.queuePosition(job) });
   });
 
+  // ---------- โหมดเบราว์เซอร์: เบราว์เซอร์ลูกค้าเรนเดอร์เอง ร้านส่งแค่ "สูตร" ----------
+  const RENDER_SIZES = { vertical: { w: 1080, h: 1920 }, horizontal: { w: 1920, h: 1080 } };
+  const SINGLE_FMT = { mp4_green: { ext: 'mp4', mime: 'video/mp4' }, mp4_black: { ext: 'mp4', mime: 'video/mp4' }, prores4444: { ext: 'mov', mime: 'video/quicktime' }, webm_alpha: { ext: 'webm', mime: 'video/webm' } };
+  const fontSpec = (userId, fontId) => {
+    const f = customizer.fontsFor(userId).find((x) => x.id === fontId);
+    if (!f) return null;
+    const ext = String(f.user ? (customizer.userFonts.get(f.rowId, userId) || {}).format || 'ttf' : path.extname(f.url).slice(1) || 'ttf');
+    return { url: f.url, weight: f.weight || 400, mime: `font/${ext}`, label: f.label };
+  };
+  function customSpec(job, userId) {
+    const ed = editors[job.editor] || {};
+    const p = productsBySlug.get(job.product_slug);
+    const format = job.filetype === 'alt' && ed.alt ? ed.alt : ed.single;
+    const fmt = SINGLE_FMT[format];
+    const font = fontSpec(userId, job.font);
+    if (!fmt || !font) return null;
+    const friendly = `${job.text} - ${ed.label || job.editor} - ${job.size === 'horizontal' ? 'แนวนอน' : 'แนวตั้ง'} ${job.seconds}วิ.${fmt.ext}`.replace(/[\\/:*?"<>|]/g, ' ');
+    return {
+      id: job.id, text: job.text, fill: job.fill, stroke: job.stroke, strokeRatio: custom.OUTLINES[job.outline] || 0, shadow: Boolean(job.shadow),
+      motion: (p && p.motion) || 'pop', size: RENDER_SIZES[job.size] || RENDER_SIZES.vertical, seconds: Number(job.seconds) || 5, fps: 60,
+      format, ext: fmt.ext, mime: fmt.mime, fileName: friendly, font,
+    };
+  }
+  const jsonCsrf = (req, res) => {
+    if (!auth.safeEqual(req.get('x-csrf-token'), req.csrf)) { res.status(403).json({ error: 'หมดเวลาแบบฟอร์ม กรุณาโหลดหน้าใหม่' }); return false; }
+    return true;
+  };
+
+  // สูตรเรนเดอร์ (เจ้าของเท่านั้น) · ?download=1 = ทำไฟล์ซ้ำเพื่อดาวน์โหลด (นับโควตาดาวน์โหลดต่อวันเหมือนไฟล์อื่น)
+  app.get('/library/custom/:id/spec', requireUser, limit.download, (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    let job = ownCustom(req);
+    if (!job) return res.status(404).json({ error: 'ไม่พบเวอร์ชันนี้ในคลังของคุณ' });
+    if (!browserMode) return res.status(409).json({ error: 'ร้านนี้เรนเดอร์บนเครื่องร้าน' });
+    if (req.query.download === '1') {
+      if (job.status !== 'done') return res.status(409).json({ error: 'เวอร์ชันนี้ยังสร้างไม่เสร็จ' });
+      if (downloadsLeft(req.user.id) <= 0) return res.status(429).json({ error: `วันนี้ดาวน์โหลดครบ ${cfg.dailyDownloadLimit} ครั้งแล้ว กลับมาโหลดได้อีกครั้งพรุ่งนี้` });
+      const one = customizer.fileOf(job);
+      q.logDownload.run(req.user.id, job.order_id, one ? one.file : `${job.id}`, job.editor, now());
+    } else if (job.status === 'queued' || job.status === 'rendering' || job.status === 'failed') {
+      job = customizer.browserStart(job.status === 'failed' ? { ...job, status: 'x' } : job);
+    } else {
+      return res.status(409).json({ error: 'เวอร์ชันนี้สร้างเสร็จแล้ว' });
+    }
+    const spec = customSpec(job, req.user.id);
+    if (!spec) return res.status(400).json({ error: 'ไม่พบฟอนต์หรือชนิดไฟล์ของเวอร์ชันนี้ (ฟอนต์อาจถูกลบไปแล้ว)' });
+    res.json(spec);
+  });
+
+  app.post('/library/custom/:id/finished', requireUser, express.json({ limit: '4kb' }), (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!jsonCsrf(req, res)) return;
+    const job = ownCustom(req);
+    if (!job || !browserMode) return res.status(404).json({ error: 'ไม่พบเวอร์ชันนี้' });
+    const spec = customSpec(job, req.user.id);
+    if (job.status !== 'done' && spec) customizer.browserDone(job, { codec: spec.format, ext: spec.ext, bytes: (req.body || {}).bytes, ms: (req.body || {}).ms });
+    res.json({ ok: true });
+  });
+
+  app.post('/library/custom/:id/failed', requireUser, express.json({ limit: '4kb' }), (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!jsonCsrf(req, res)) return;
+    const job = ownCustom(req);
+    if (!job || !browserMode) return res.status(404).json({ error: 'ไม่พบเวอร์ชันนี้' });
+    log(`[custom] เบราว์เซอร์ลูกค้าเรนเดอร์ไม่สำเร็จ ${job.id}: ${String((req.body || {}).error || '').slice(0, 200)}`);
+    customizer.browserFail(job, 'เบราว์เซอร์นี้สร้างไฟล์ไม่สำเร็จ ลองใหม่ หรือเปิดด้วย Chrome บนคอมพิวเตอร์');
+    res.json({ ok: true });
+  });
+
   // ปุ่มดาวน์โหลดเดียว: ไฟล์วิดีโอไฟล์เดียวของเวอร์ชันนี้
   app.get('/library/custom/:id/download', requireUser, limit.download, (req, res) => {
+    if (browserMode) return res.redirect(303, `/library/custom/${encodeURIComponent(req.params.id)}?save=1`);
     const job = ownCustom(req);
     const file = job && job.status === 'done' && customizer.fileOf(job);
     if (!file) return notFound(req, res, 'ไฟล์ยังไม่พร้อม หรือไม่พบเวอร์ชันนี้ในคลังของคุณ');
@@ -1091,13 +1171,21 @@ function createApp(cfg, opts = {}) {
   });
 
   // อัปโหลดเป็นไฟล์ดิบ (application/octet-stream) จากสคริปต์ในหน้า ต้องมี CSRF ใน header และยืนยันสิทธิ์ใช้ฟอนต์
-  app.post('/library/fonts', limit.fontUpload, express.raw({ type: 'application/octet-stream', limit: '5mb' }), (req, res) => {
+  app.post('/library/fonts', limit.fontUpload, express.raw({ type: 'application/octet-stream', limit: '5mb' }), async (req, res, next) => {
     res.set('Cache-Control', 'no-store');
     if (!req.user) return res.status(401).json({ error: 'กรุณาเข้าสู่ระบบ' });
     if (!auth.safeEqual(req.get('x-csrf-token'), req.csrf)) return res.status(403).json({ error: 'หมดเวลาแบบฟอร์ม กรุณาโหลดหน้าใหม่' });
     if (req.get('x-font-rights') !== 'yes') return res.status(400).json({ error: 'กรุณายืนยันว่าคุณมีสิทธิ์ใช้ฟอนต์นี้เชิงพาณิชย์' });
     try {
-      const f = customizer.userFonts.add(req.user.id, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
+      const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      // บน Netlify คำขอรับได้ราว 4.5 MB (ไฟล์ถูกแปลงเป็น base64 ระหว่างทาง)
+      if (cfg.serverless && buf.length > 4 * 1024 * 1024) return res.status(413).json({ error: 'ไฟล์ฟอนต์ใหญ่เกิน 4 MB' });
+      const f = customizer.userFonts.add(req.user.id, buf);
+      if (storage.driver === 'supabase') {
+        // เก็บถาวรบน Supabase (ดิสก์ของ Netlify หายทุกครั้งที่ฟังก์ชันเริ่มใหม่)
+        const row = customizer.userFonts.get(f.id, req.user.id);
+        await storage.put(customizer.userFonts.key(row), buf, `font/${row.format}`);
+      }
       log('[fonts] ลูกค้าอัปโหลดฟอนต์');
       const latest = q.libraryOrders.all(req.user.id)[0];
       res.json({
@@ -1106,20 +1194,25 @@ function createApp(cfg, opts = {}) {
       });
     } catch (e) {
       if (e.name === 'FontError') return res.status(400).json({ error: e.message });
-      throw e;
+      next(e);
     }
   });
 
   // ส่งไฟล์ฟอนต์ให้เจ้าของเท่านั้น (ใช้แสดงตัวอย่าง) คนอื่นตอบเหมือนไม่มี
-  app.get('/library/fonts/:id/file', requireUser, (req, res) => {
+  app.get('/library/fonts/:id/file', requireUser, async (req, res, next) => {
     const row = customizer.userFonts.get(req.params.id, req.user.id);
     if (!row) return res.status(404).end();
     res.set({ 'Content-Type': `font/${row.format}`, 'Cache-Control': 'private, max-age=3600', 'Content-Disposition': 'inline', 'X-Content-Type-Options': 'nosniff' });
+    if (storage.driver === 'supabase' && !fs.existsSync(customizer.userFonts.path(row))) {
+      try { return res.send(await storage.get(customizer.userFonts.key(row))); } catch (e) { return next(e); }
+    }
     res.sendFile(customizer.userFonts.path(row));
   });
 
   app.post('/library/fonts/:id/delete', requireUser, requireCsrf, (req, res) => {
+    const row = customizer.userFonts.get(req.params.id, req.user.id);
     if (!customizer.userFonts.remove(req.params.id, req.user.id)) return notFound(req, res, 'ไม่พบฟอนต์นี้');
+    if (storage.driver === 'supabase') storage.remove(customizer.userFonts.key(row)).catch((e) => log(`[fonts] ลบไฟล์บน Supabase ไม่สำเร็จ: ${e.message}`));
     res.redirect(303, '/library/fonts');
   });
 
@@ -1146,7 +1239,7 @@ function createApp(cfg, opts = {}) {
     await subCheck();
     send(req, res, 'subtitlesHome', {
       owned: ownedItems(req.user.id), jobs: subtitles.byUser(req.user.id), limits: subtitles.limits(req.user.id),
-      ready: { ok: subReady.ok && tools().ok }, now: now(), picked: String(req.query.style || ''),
+      ready: { ok: subReady.ok && tools().ok }, now: now(), picked: String(req.query.style || ''), browserMode,
     });
   });
 
@@ -1197,8 +1290,95 @@ function createApp(cfg, opts = {}) {
     } catch (e) { next(e); }
   });
 
+  // ---------- ซับโหมดเบราว์เซอร์: คลิปอยู่ในเครื่องลูกค้า ร้านรับแค่ข้อมูลคลิป + เสียงพูด (WAV 16 kHz โมโน) ทีละท่อน ----------
+  app.post('/subtitles/new', limit.subUpload, express.json({ limit: '8kb' }), async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!req.user) return res.status(401).json({ error: 'กรุณาเข้าสู่ระบบ' });
+    if (!jsonCsrf(req, res)) return;
+    if (!browserMode) return res.status(409).json({ error: 'ร้านนี้รับคลิปแบบอัปโหลด' });
+    if (!(await subCheck()).ok) return res.status(503).json({ error: 'ระบบใส่ซับยังไม่พร้อมใช้งาน ลองใหม่ภายหลัง' });
+    const b = req.body || {};
+    const lim = subtitles.limits(req.user.id);
+    if (lim.active > 0) return res.status(409).json({ error: 'มีคลิปที่กำลังฟังเสียงอยู่ รอให้เสร็จก่อนแล้วค่อยเริ่มคลิปใหม่' });
+    if (lim.maxPerDay > 0 && lim.today >= lim.maxPerDay) return res.status(429).json({ error: `วันนี้ทำครบ ${lim.maxPerDay} คลิปแล้ว ทำเพิ่มได้อีกครั้งพรุ่งนี้` });
+    const owned = ownedItems(req.user.id).map((x) => x.order);
+    const item = ownedItems(req.user.id).find((x) => x.order.id === String(b.order || ''));
+    if (!item) return res.status(400).json({ error: 'กรุณาเลือกแบบตัวอักษรจากคลังของคุณ' });
+    const st = subtitles.validateStyle(defaultStyle(req.user, item), { owned, fonts: subFonts(req.user.id) });
+    const style = st.value || subtitles.validateStyle({ ...defaultStyle(req.user, item), font: 'kanit' }, { owned, fonts: subFonts(req.user.id) }).value;
+    const info = { width: Number(b.width), height: Number(b.height), duration: Number(b.duration), audio: Boolean(b.audio), bytes: Number(b.bytes) || 0 };
+    const r = subtitles.createBrowserJob({ user: req.user, style, name: String(b.name || '').slice(0, 200), info });
+    if (r.error) return res.status(400).json({ error: r.error });
+    res.json({ ok: true, id: r.job.id, url: `/subtitles/${r.job.id}` });
+  });
+
+  // เสียงท่อนที่ i จาก n (เริ่มที่วินาที start) → Groq ถอดเสียง → เก็บคำ · ท่อนสุดท้าย = ได้บรรทัดซับ
+  app.post('/subtitles/:id/audio', limit.subSave, express.raw({ type: ['audio/wav', 'application/octet-stream'], limit: '4500kb' }), async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!req.user) return res.status(401).json({ error: 'กรุณาเข้าสู่ระบบ' });
+    if (!jsonCsrf(req, res)) return;
+    const job = ownSub(req);
+    if (!job || !job.browser) return res.status(404).json({ error: 'ไม่พบคลิปนี้' });
+    const i = Number(req.query.i), n = Number(req.query.n), start = Number(req.query.start);
+    if (!(Number.isInteger(i) && Number.isInteger(n) && n >= 1 && n <= 60 && i >= 0 && i < n && start >= 0 && start <= job.duration + 1)) return res.status(400).json({ error: 'ข้อมูลเสียงไม่ถูกต้อง' });
+    if (job.status !== 'transcribing') {
+      if (i === 0 && !subtitles.restartAsr(job)) return res.status(409).json({ error: 'คลิปนี้ฟังเสียงเสร็จแล้ว' });
+      if (i !== 0) return res.status(409).json({ error: 'คลิปนี้ฟังเสียงเสร็จแล้ว' });
+    }
+    const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    try { require('./transcribe').parseWav(buf); } catch { return res.status(400).json({ error: 'ไฟล์เสียงไม่ถูกต้อง' }); }
+    try {
+      const fresh = subtitles.get(job.id);
+      const prompt = i > 0 ? JSON.parse(fresh.asr_json || '[]').slice(-40).map((w) => w.text).join('') : '';
+      const r = await transcriber.chunk(buf, start, prompt);
+      const out = subtitles.asrChunk(subtitles.get(job.id), i, n, r.words);
+      res.json({ ok: true, done: out.done, url: `/subtitles/${job.id}` });
+    } catch (e) {
+      log(`[subtitles] ถอดเสียงไม่สำเร็จ ${job.id}: ${String(e.message).split('\n')[0]}`);
+      const msg = e.userMessage || 'ถอดเสียงไม่สำเร็จ ลองใหม่อีกครั้ง';
+      subtitles.failAsr(job, msg);
+      res.status(e.status === 429 ? 429 : 502).json({ error: msg });
+    }
+  });
+
+  // เบราว์เซอร์สร้างคลิปพร้อมซับเสร็จ (ไฟล์อยู่ในเครื่องลูกค้า ร้านเก็บแค่ขนาดไฟล์)
+  app.post('/subtitles/:id/rendered', requireUser, express.json({ limit: '4kb' }), (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!jsonCsrf(req, res)) return;
+    const job = ownSub(req);
+    if (!job || !job.browser) return res.status(404).json({ error: 'ไม่พบคลิปนี้' });
+    subtitles.renderedInBrowser(job, (req.body || {}).bytes);
+    log('[subtitles] เบราว์เซอร์ลูกค้าสร้างคลิปพร้อมซับเสร็จ');
+    res.json({ ok: true });
+  });
+
+  // สูตรเบิร์นซับให้เบราว์เซอร์ (ฟอนต์ สี ตำแหน่ง ท่าเคลื่อนไหว บรรทัดซับ)
+  function subtitleSpec(job) {
+    const R = require('../public/subplan');
+    const p = productsBySlug.get(job.product_slug);
+    const font = fontSpec(job.user_id, job.font);
+    const { w, h } = R.outSize(job.width, job.height);
+    return {
+      id: job.id, cues: subtitles.cuesOf(job), motion: (p && p.motion) || 'pop', fill: job.fill, stroke: job.stroke,
+      strokeRatio: custom.OUTLINES[job.outline] || 0, shadow: Boolean(job.shadow), size: job.size, position: job.position,
+      font, out: { w, h }, layout: R.layoutFor(w, h, { size: job.size, position: job.position }), fps: R.FPS, duration: job.duration,
+      fileName: `${(job.src_name || 'clip').replace(/\.[a-z0-9]{2,4}$/i, '')}-ซับ.mp4`.replace(/[\\/:*?"<>|]/g, ' '),
+      srcName: job.src_name, srcBytes: job.src_bytes,
+    };
+  }
+  app.get('/subtitles/:id/spec', requireUser, limit.download, (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const job = ownSub(req);
+    if (!job || !job.browser || !job.cues_json) return res.status(404).json({ error: 'ไม่พบคลิปนี้' });
+    if (req.query.download === '1') {
+      if (downloadsLeft(req.user.id) <= 0) return res.status(429).json({ error: `วันนี้ดาวน์โหลดครบ ${cfg.dailyDownloadLimit} ครั้งแล้ว` });
+      q.logDownload.run(req.user.id, job.order_id, `subtitles:${job.id}`, 'subtitles', now());
+    }
+    res.json(subtitleSpec(job));
+  });
+
   function subLayout(job) {
-    const R = require('../render/subtitles');
+    const R = require('../public/subplan');
     const { w, h } = R.outSize(job.width, job.height);
     const sizes = {};
     for (const k of ['sm', 'md', 'lg']) for (const pos of ['top', 'middle', 'bottom']) sizes[`${k}:${pos}`] = R.layoutFor(w, h, { size: k, position: pos });
@@ -1211,7 +1391,7 @@ function createApp(cfg, opts = {}) {
     res.set('Cache-Control', 'no-store');
     send(req, res, 'subtitleJob', {
       job, cues: subtitles.cuesOf(job), owned: ownedItems(req.user.id), fonts: subFonts(req.user.id),
-      layoutInfo: subLayout(job), position: subtitles.position(job), now: now(),
+      layoutInfo: subLayout(job), position: subtitles.position(job), now: now(), save: req.query.save === '1',
     });
   });
 
@@ -1258,6 +1438,8 @@ function createApp(cfg, opts = {}) {
     if (req.query.render === '1') {
       if (!tools().ok) return res.status(503).json({ error: 'ระบบสร้างคลิปยังไม่พร้อม ลองใหม่ภายหลัง' });
       if (!r.cues.length) return res.status(400).json({ error: 'ยังไม่มีข้อความซับ เพิ่มอย่างน้อย 1 บรรทัด' });
+      // โหมดเบราว์เซอร์: ส่งสูตรกลับไปให้เบราว์เซอร์ลูกค้าสร้างคลิปเอง
+      if (job.browser) return res.json({ ok: true, cues: r.cues, spec: subtitleSpec(subtitles.get(job.id)) });
       if (!subtitles.queueRender(subtitles.get(job.id))) return res.status(409).json({ error: 'เริ่มสร้างคลิปไม่ได้ ลองโหลดหน้าใหม่' });
       log('[subtitles] ลูกค้าสั่งสร้างคลิป');
     }
@@ -1267,7 +1449,8 @@ function createApp(cfg, opts = {}) {
   app.post('/subtitles/:id/retry', requireUser, requireCsrf, (req, res) => {
     const job = ownSub(req);
     if (!job) return notFound(req, res, 'ไม่พบคลิปนี้');
-    subtitles.retry(job);
+    if (job.browser) subtitles.restartAsr(job);
+    else subtitles.retry(job);
     res.redirect(303, `/subtitles/${job.id}`);
   });
 
@@ -1289,6 +1472,7 @@ function createApp(cfg, opts = {}) {
 
   app.get('/subtitles/:id/download', requireUser, limit.download, (req, res) => {
     const job = ownSub(req);
+    if (job && job.browser) return res.redirect(303, `/subtitles/${encodeURIComponent(job.id)}?save=1`);
     if (!job || job.status !== 'done' || !fs.existsSync(subtitles.outOf(job))) return notFound(req, res, 'ยังไม่มีคลิปพร้อมซับ');
     const base = (job.src_name || 'clip').replace(/\.[a-z0-9]{2,4}$/i, '');
     res.set({ 'Content-Type': 'video/mp4', 'Cache-Control': 'private, no-store' });
@@ -1398,6 +1582,13 @@ function createApp(cfg, opts = {}) {
     // ชื่อไฟล์ต้องอยู่ใน manifest ของสินค้าที่ซื้อ (กัน path traversal)
     const file = p.manifest.files.find((f) => f.file === req.params.file);
     if (!file) return notFound(req, res, 'ไม่พบไฟล์');
+    if (storage.driver === 'supabase') {
+      // ไฟล์อยู่บน Supabase (private): ส่งลูกค้าไปโหลดด้วยลิงก์เซ็นอายุ 2 นาที ไฟล์ไม่ผ่านเซิร์ฟเวอร์ร้าน
+      const k = productKey(p.slug, file);
+      return storage.signedUrl(k.key, { expiresIn: 120, downloadName: k.name })
+        .then((u) => res.redirect(302, u))
+        .catch(next);
+    }
     const abs = path.join(cfg.storageDir, p.slug, path.basename(file.file));
     res.download(abs, file.file, { headers: { 'Cache-Control': 'no-store' } }, (err) => { if (err && !res.headersSent) next(err); });
   });

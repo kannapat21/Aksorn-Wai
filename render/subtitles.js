@@ -18,10 +18,8 @@ require('../public/motion.js');
 const TT = globalThis.TTMotion;
 const MOTION_JS = fs.readFileSync(path.join(__dirname, '..', 'public', 'motion.js'), 'utf8');
 
-const FPS = 30;
-const MAX_SIDE = 1920; // คลิปใหญ่กว่านี้ (2K/4K) ย่อเหลือด้านยาว 1920 ให้เรนเดอร์ทันและไฟล์ไม่ใหญ่เกิน
-const SIZE_K = { sm: 0.066, md: 0.082, lg: 0.1 };
-const POS_Y = { bottom: { v: 0.70, h: 0.85 }, middle: { v: 0.5, h: 0.5 }, top: { v: 0.2, h: 0.16 } };
+const PLAN = require('../public/subplan');
+const { FPS, MAX_SIDE, SIZE_K, POS_Y, outSize, layoutFor } = PLAN;
 const HDR_TRC = ['smpte2084', 'arib-std-b67'];
 
 // อ่านข้อมูลคลิป: ขนาดที่แสดงจริง (หมุนแล้ว), ความยาว, มีเสียงไหม
@@ -45,50 +43,7 @@ async function probe(file) {
   };
 }
 
-// ขนาดไฟล์ผลลัพธ์ (เลขคู่ ด้านยาวไม่เกิน MAX_SIDE)
-function outSize(w, h) {
-  const k = Math.min(1, MAX_SIDE / Math.max(w, h));
-  const even = (x) => Math.max(2, Math.round((x * k) / 2) * 2);
-  return { w: even(w), h: even(h) };
-}
-
-// ขนาดตัวอักษร / แถบซับ / ตำแหน่ง ตามแนวคลิป (หน้าแก้ซับใช้สูตรเดียวกันในตัวอย่างสด)
-function layoutFor(w, h, { size = 'md', position = 'bottom' } = {}) {
-  const fontPx = Math.round(Math.min(w, h) * (SIZE_K[size] || SIZE_K.md));
-  const band = Math.min(h, Math.round((fontPx * 3.6) / 2) * 2);
-  const vertical = h > w;
-  const cy = h * (POS_Y[position] || POS_Y.bottom)[vertical ? 'v' : 'h'];
-  const y = Math.max(0, Math.min(h - band, Math.round(cy - band / 2)));
-  return { fontPx, band, y };
-}
-
-// วางแผนเฟรม: สำหรับทุกเฟรมของคลิป บอกว่าใช้ภาพไหน (ว่าง / วาดใหม่ที่เวลา t ของบรรทัด c)
-function planFrames(cues, { duration, motion }) {
-  const total = Math.max(1, Math.ceil(duration * FPS));
-  const frames = new Array(total).fill(null); // null = ว่าง
-  const shots = []; // ภาพที่ต้องวาด { cue, t, timing }
-  cues.forEach((c, ci) => {
-    const f0 = Math.max(0, Math.round(c.start * FPS));
-    const f1 = Math.min(total, Math.round(c.end * FPS));
-    if (f1 - f0 < 2) return;
-    const d = (f1 - f0) / FPS;
-    const wordAt = (c.w || []).filter((x) => x[1] !== null).map((x) => Math.min(x[1], Math.max(0, d - 0.3)));
-    const timing = TT.subtitleTiming(motion, d, FPS, wordAt);
-    let staticShot = -1;
-    for (let f = f0; f < f1; f++) {
-      const t = (f - f0) / FPS;
-      if (TT.subtitleMoving(motion, t, timing)) {
-        shots.push({ cue: ci, t, timing });
-        frames[f] = shots.length - 1;
-        staticShot = -1;
-      } else {
-        if (staticShot < 0) { shots.push({ cue: ci, t, timing }); staticShot = shots.length - 1; }
-        frames[f] = staticShot;
-      }
-    }
-  });
-  return { total, frames, shots };
-}
+const planFrames = (cues, o) => PLAN.planFrames(cues, { ...o, TT });
 
 /*
  * opts: { browser?, src, outFile, cues, motion, fill, stroke, strokeRatio, shadow, font: { file, weight, mime },
