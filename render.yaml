@@ -1,0 +1,42 @@
+# ทางสำรองถ้าใช้ Netlify ไม่ได้: Render (เว็บเซอร์วิสฟรี) ใช้ Turso + Supabase + Groq ชุดเดียวกับ Netlify
+# Render → New → Blueprint → เลือกรีโพนี้ แล้วกรอกค่าที่ขึ้นว่า sync: false (ดู docs/ย้ายขึ้น-Netlify.md ขั้นที่ 7)
+services:
+  - type: web
+    name: aksornwai
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD
+        value: "1"
+      - key: RENDER_MODE
+        value: browser
+      - key: DOWNLOAD_LINK_SECRET
+        generateValue: true
+      - key: PAYMENT_WEBHOOK_SECRET
+        generateValue: true
+      - { key: BASE_URL, sync: false }
+      - { key: ADMIN_EMAIL, sync: false }
+      - { key: ADMIN_PASSWORD, sync: false }
+      - { key: DATABASE_URL, sync: false }
+      - { key: DATABASE_AUTH_TOKEN, sync: false }
+      - { key: SUPABASE_URL, sync: false }
+      - { key: SUPABASE_SERVICE_KEY, sync: false }
+      - { key: GROQ_API_KEY, sync: false }
+      - { key: PAYMENT_PROVIDER, value: manual }
+      - { key: PROMPTPAY_ID, sync: false }
+      - { key: PROMPTPAY_NAME, sync: false }
+      - { key: MAIL_FROM, sync: false }
+      - { key: SMTP_HOST, value: smtp.gmail.com }
+      - { key: SMTP_PORT, value: "587" }
+      - { key: SMTP_USER, sync: false }
+      - { key: SMTP_PASS, sync: false }
+      - { key: LEGAL_NAME, sync: false }
+      - { key: CONTACT_EMAIL, sync: false }

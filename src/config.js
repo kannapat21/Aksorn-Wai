@@ -14,7 +14,7 @@ const MOTIONS = globalThis.TTMotion.MOTIONS;
 
 // รันบนโฮสต์แบบ serverless (Netlify/Vercel/AWS Lambda): ไม่มีดิสก์ถาวร ไม่มี Chrome/ffmpeg เขียนได้แค่ /tmp
 function isServerless(env) {
-  return env.SERVERLESS === '1' || Boolean(env.NETLIFY || env.AWS_LAMBDA_FUNCTION_NAME || env.VERCEL);
+  return env.SERVERLESS === '1' || Boolean(env.NETLIFY || env.AWS_LAMBDA_FUNCTION_NAME || env.VERCEL || env.RENDER);
 }
 
 function ensureEnvFile() {
