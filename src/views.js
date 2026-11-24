@@ -1474,7 +1474,7 @@ ${cfg.paymentProvider === 'manual' ? `<a class="cz-cta review-cta${reviewCount ?
   <div class="stat"><span>ยอดขาย</span><b>${baht(stats.revenue)}</b></div>
   <div class="stat"><span>สมาชิก</span><b>${stats.users}</b></div>
 </div>
-${tools ? `<div class="note${tools.ok ? '' : ' warn'}">${ICON.bolt}<span><b>ระบบปรับแต่ง (เรนเดอร์):</b> ${tools.ok ? `พร้อม · ใช้ ${esc(tools.browser.how)} + ffmpeg` : `ยังไม่พร้อม<br>${installHelp.map((l) => esc(l)).join('<br>')}`}</span></div>` : ''}
+${tools ? `<div class="note${tools.ok ? '' : ' warn'}">${ICON.bolt}<span><b>ระบบปรับแต่ง (เรนเดอร์):</b> ${tools.ok ? `พร้อม · ใช้ ${esc(tools.browser.how)}${tools.browserMode ? '' : ' + ffmpeg'}` : `ยังไม่พร้อม<br>${installHelp.map((l) => esc(l)).join('<br>')}`}</span></div>` : ''}
 <h2>ลูกค้าโหลดไฟล์ไปใช้กับโปรแกรมไหน (นับต่อคำสั่งซื้อ)</h2>
 <div class="bars">${bars}</div>
 <h2>คำสั่งซื้อล่าสุด</h2>
