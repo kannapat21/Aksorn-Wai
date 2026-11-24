@@ -29,6 +29,7 @@ const SUBDIR = fs.mkdtempSync(path.join(os.tmpdir(), 'shop-subs-'));
 const fakeClip = (o = {}) => Buffer.from(JSON.stringify({ ok: true, width: 1080, height: 1920, duration: 16.5, audio: true, hdr: false, ...o }));
 let asrGate = null;
 let asrFail = null;
+let peakCalls = 0;
 let lastAsrTimeout = 0;
 const transcribed = [];
 const rendered = [];
@@ -47,6 +48,7 @@ const transcriber = {
 const subtitleRenderer = {
   probe: async (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return { ok: false }; } },
   extractAudio: async (src, out) => { fs.writeFileSync(out, 'wav'); },
+  peaks: async () => { peakCalls++; return { perSec: 50, data: [0, 128, 255] }; },
   render: async (o) => {
     rendered.push(o);
     o.onProgress(50, 'กำลังวาดซับ');
@@ -270,6 +272,17 @@ test('อัปคลิป → ถอดเสียง → แก้คำ/เ
   assert.match(ed, /สวัสดีครับทุกคน/);
   assert.match(ed, /src="\/subtitles\/[a-f0-9]+\/source"/);
   assert.doesNotMatch(ed.split('id="sub-data">')[1].split('</script>')[0], /</, 'JSON ไม่มี < ดิบ');
+  // ไทม์ไลน์แบบแอปตัดต่อ: มีเลนซับ + คลื่นเสียง (คำนวณครั้งเดียวแล้วเก็บไว้กับงาน)
+  assert.match(ed, /data-tl-track/);
+  assert.match(ed, /data-tl-wave/);
+  assert.match(ed, /data-tl-split/);
+  const pk = await c.req(`/subtitles/${id}/peaks`);
+  assert.equal(pk.status, 200);
+  assert.deepEqual((await pk.json()).data, [0, 128, 255]);
+  await c.req(`/subtitles/${id}/peaks`);
+  assert.equal(peakCalls, 1, 'ใช้ไฟล์ที่เก็บไว้ ไม่คำนวณซ้ำ');
+  assert.ok(fs.existsSync(path.join(SUBDIR, id, 'peaks.json')));
+  assert.equal((await client().req(`/subtitles/${id}/peaks`)).status, 303, 'คนอื่นดูไม่ได้');
   const src = await c.req(`/subtitles/${id}/source`, { headers: { range: 'bytes=0-9' } });
   assert.equal(src.status, 206, 'เลื่อนเวลาในคลิปได้ (Range)');
   assert.equal(src.headers.get('cache-control'), 'private, no-store');
@@ -489,6 +502,10 @@ test('เรนเดอร์จริง: เบิร์นซับท่า
       src, outFile: path.join(dir, 'out.mp4'), cues, motion: 'kinetic', fill: '#ffffff', stroke: '#111111', strokeRatio: 0.05, shadow: true,
       font: { file: path.join(__dirname, '..', 'fonts', 'Kanit-Bold.ttf'), weight: 700 }, info, onProgress: (p) => steps.push(p),
     });
+    const pk = await R.peaks(src);
+    assert.equal(pk.perSec, 50);
+    assert.ok(Math.abs(pk.data.length - 150) <= 2, `คลื่นเสียง 50 จุด/วินาที (${pk.data.length})`);
+    assert.ok(pk.data.every((v) => v >= 0 && v <= 255) && Math.max(...pk.data) > 200);
     const out = await R.probe(path.join(dir, 'out.mp4'));
     assert.deepEqual([out.width, out.height, out.audio], [720, 1280, true]);
     assert.ok(Math.abs(out.duration - info.duration) < 0.15);

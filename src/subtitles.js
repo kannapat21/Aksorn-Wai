@@ -248,6 +248,21 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     return ok;
   }
 
+  // คลื่นเสียงของคลิป (คำนวณครั้งเดียว เก็บไว้ในโฟลเดอร์งาน ถูกลบพร้อมคลิป)
+  const peaksBusy = new Map();
+  function peaksOf(job) {
+    const file = path.join(dirOf(job.id), 'peaks.json');
+    try { return Promise.resolve(JSON.parse(fs.readFileSync(file, 'utf8'))); } catch { /* ยังไม่มี */ }
+    if (!renderer.peaks || !fs.existsSync(srcOf(job))) return Promise.resolve(null);
+    if (!peaksBusy.has(job.id)) {
+      peaksBusy.set(job.id, renderer.peaks(srcOf(job)).then((r) => {
+        try { fs.writeFileSync(file, JSON.stringify(r), { mode: 0o600 }); } catch { /* โฟลเดอร์ถูกลบไปแล้ว */ }
+        return r;
+      }).finally(() => peaksBusy.delete(job.id)));
+    }
+    return peaksBusy.get(job.id);
+  }
+
   function retry(job) {
     const ok = q.retryAsr.run(now(), now(), job.id).changes > 0;
     if (ok) setImmediate(pump);
@@ -302,7 +317,7 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     get: (id) => q.get.get(String(id || '')),
     byUser: (userId) => q.byUser.all(userId),
     position: (job) => (job.status === 'queued' || job.status === 'queued_render' ? q.position.get(job.queued_at).n + 1 : 0),
-    limits, validateStyle, receive, saveCues, setStyle, queueRender, retry, reopen, remove, sweep, pump, idle,
+    limits, validateStyle, receive, saveCues, setStyle, queueRender, retry, peaksOf, reopen, remove, sweep, pump, idle,
     cuesOf, srcOf, outOf, dirOf, busy: (job) => busyStates.includes(job.status),
     tmpDir: () => { const d = path.join(S.dir, '.incoming'); fs.mkdirSync(d, { recursive: true, mode: 0o700 }); return d; },
   };

@@ -202,6 +202,39 @@ async function extractAudio(src, out) {
   await run(tools.ffmpegPath(), ['-y', '-hide_banner', '-loglevel', 'error', '-i', src, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', out], { timeoutMs: 5 * 60 * 1000 });
 }
 
+// คลื่นเสียงสำหรับไทม์ไลน์ในหน้าแก้ซับ: ค่าความดังสูงสุด 0–255 ทุก 1/perSec วินาที (อ่านจาก ffmpeg ทีละช่วง ไม่กินแรม)
+function peaks(src, { perSec = 50, timeoutMs = 2 * 60 * 1000 } = {}) {
+  const { spawn } = require('child_process');
+  const rate = 8000, per = Math.round(rate / perSec);
+  return new Promise((resolve, reject) => {
+    const p = spawn(tools.ffmpegPath(), ['-hide_banner', '-loglevel', 'error', '-i', src, '-vn', '-ac', '1', '-ar', String(rate), '-f', 's16le', '-'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const out = [];
+    let n = 0, max = 0, carry = null, err = '';
+    const timer = setTimeout(() => p.kill('SIGKILL'), timeoutMs);
+    p.stdout.on('data', (b) => {
+      if (carry) { b = Buffer.concat([carry, b]); carry = null; }
+      const len = b.length - (b.length % 2);
+      if (len < b.length) carry = b.subarray(len);
+      for (let i = 0; i < len; i += 2) {
+        const v = Math.abs(b.readInt16LE(i));
+        if (v > max) max = v;
+        if (++n === per) { out.push(max); n = 0; max = 0; }
+      }
+    });
+    p.stderr.on('data', (d) => { err += d; });
+    p.on('error', (e) => { clearTimeout(timer); reject(e); });
+    p.on('close', (code) => {
+      clearTimeout(timer);
+      if (code !== 0) return reject(new Error(`ffmpeg ${code}: ${err.slice(-300)}`));
+      if (n) out.push(max);
+      // ปรับให้คลื่นเห็นชัดแม้คลิปเสียงเบา (อิงค่าสูงสุดช่วง 99%)
+      const sorted = out.slice().sort((a, b) => a - b);
+      const ref = Math.max(500, sorted[Math.floor(sorted.length * 0.99)] || 0);
+      resolve({ perSec, data: out.map((v) => Math.min(255, Math.round((Math.sqrt(v / ref)) * 255))) });
+    });
+  });
+}
+
 // ภาพหน้าปก (เฟรมที่ 1 วินาที) ใช้แสดงในรายการงาน
 async function poster(src, out, info) {
   const t = Math.min(1, Math.max(0, info.duration / 3));
@@ -211,4 +244,4 @@ async function poster(src, out, info) {
     '-vf', `scale=${Math.round((w * k) / 2) * 2}:${Math.round((h * k) / 2) * 2}`, '-q:v', '4', out], { timeoutMs: 60 * 1000 });
 }
 
-module.exports = { probe, outSize, layoutFor, planFrames, renderSubtitled, extractAudio, poster, FPS, MAX_SIDE, SIZE_K, POS_Y };
+module.exports = { probe, outSize, layoutFor, planFrames, renderSubtitled, extractAudio, poster, peaks, FPS, MAX_SIDE, SIZE_K, POS_Y };
