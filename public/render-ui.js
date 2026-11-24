@@ -190,6 +190,7 @@ if (local) {
 async function burnAndSave(spec, box, csrf, { report }) {
   const ui = progressUi(box);
   box.hidden = false; ui.reset(); ui.error('');
+  ui.set(1, 'กำลังเตรียมคลิปและฟอนต์…');
   if (!clipFile) clipFile = await loadClip(spec.id);
   if (!clipFile) { ui.error('ต้องเลือกคลิปต้นฉบับ (ไฟล์เดิม) ก่อน ร้านไม่ได้เก็บคลิปของคุณไว้'); const ask = $('[data-clip-ask]'); if (ask) ask.hidden = false; return false; }
   const bad = unsupported() || (supportInfo().webcodecs ? '' : 'เบราว์เซอร์นี้สร้างคลิปไม่ได้ ลองเปิดด้วย Chrome / Edge / Safari รุ่นใหม่');
@@ -212,6 +213,7 @@ async function burnAndSave(spec, box, csrf, { report }) {
 }
 
 // ปุ่ม "สร้างคลิปพร้อมซับ" (subtitles.js บันทึกแล้วส่งสูตรมาให้ทาง event)
+window.AWRenderReady = true; // subtitles.js เช็กก่อนกดสร้าง (ถ้าสคริปต์นี้โหลดไม่ขึ้น จะบอกลูกค้าแทนการเงียบ)
 document.addEventListener('aw:render-subtitles', async (e) => {
   const box = $('[data-burn]');
   if (box) { box.hidden = false; box.scrollIntoView({ behavior: 'smooth', block: 'center' }); }

@@ -125,7 +125,7 @@
   var style = D.style;
   var video = $('[data-video]'), player = $('[data-player]'), band = $('[data-band]'), el = $('[data-sub-text]');
   var clock = $('[data-clock]'), playBtn = $('[data-play]');
-  var list = $('[data-list]'), countEl = $('[data-count]'), saveState = $('[data-save-state]'), errEl = $('[data-err]');
+  var saveState = $('[data-save-state]'), errEl = $('[data-err]');
   var look = $('[data-look]'), lookSum = $('[data-look-sum]'), motionNote = $('[data-motion-note]');
   var renderBtn = $('[data-render]'), addBtn = $('[data-add]');
   var disabled = D.disabled;
@@ -152,12 +152,12 @@
   var cur = -1, dirty = true, scale = 1, lay = null;
   function measure() {
     // ขนาดเครื่องเล่นพอดีสัดส่วนคลิป (แถบซับต้องวางตรงตำแหน่งเดียวกับไฟล์จริง)
-    var maxH = innerWidth <= 900 ? innerHeight * 0.3 : Math.max(220, Math.min(innerHeight * 0.7, innerHeight - 380));
+    var maxH = innerWidth <= 900 ? Math.max(180, innerHeight * 0.32) : Math.max(260, Math.min(innerHeight * 0.62, 600));
     var pw = Math.min(player.parentElement.clientWidth, maxH * D.width / D.height);
     player.style.width = Math.round(pw) + 'px';
     player.style.height = Math.round(pw * D.height / D.width) + 'px';
     scale = player.clientWidth / D.width;
-    lay = D.sizes[(style.size || 'md') + ':' + (style.position || 'bottom')];
+    lay = window.TTSubPlan.layoutFor(D.width, D.height, { size: style.size, position: style.position });
     band.style.top = (lay.y * scale) + 'px';
     band.style.height = (lay.band * scale) + 'px';
     dirty = true;
@@ -270,21 +270,12 @@
   function select(i, quiet) {
     sel = i;
     $$('.sub-tl-cue.sel', tlCues).forEach(function (b) { b.classList.remove('sel'); });
-    $$('.sub-row.sel', list).forEach(function (b) { b.classList.remove('sel'); });
     if (i < 0) return;
     var b = tlCues.children[i];
     if (b) {
       b.classList.add('sel');
       var x = cues[i].start * pps, w = tlScroll.clientWidth;
       if (x < tlScroll.scrollLeft || x > tlScroll.scrollLeft + w - 60) tlScroll.scrollLeft = Math.max(0, x - w * 0.25);
-    }
-    var li = list.children[i];
-    if (li) {
-      li.classList.add('sel');
-      if (!quiet && !li.contains(document.activeElement)) {
-        var r = li.getBoundingClientRect(), lr = list.getBoundingClientRect();
-        if (list.scrollHeight > list.clientHeight + 4 && (r.top < lr.top || r.bottom > lr.bottom)) list.scrollTop += r.top - lr.top - 40;
-      }
     }
   }
   function removeCue(i) {
@@ -424,6 +415,8 @@
     if (z) { setZoom(zoom + Number(z.getAttribute('data-tl-zoom'))); return; }
     if (e.target.closest('[data-tl-play]')) { toggle(); return; }
     if (e.target.closest('[data-tl-split]')) { splitAtHead(); return; }
+    if (e.target.closest('[data-tl-edit]')) { var ei = pick(); if (ei >= 0) openEdit(ei); else setErr('แตะบล็อกซับที่ต้องการแก้ก่อน'); return; }
+    if (e.target.closest('[data-tl-del]')) { var di = pick(); if (di >= 0) removeCue(di); else setErr('แตะบล็อกซับที่ต้องการลบก่อน'); return; }
     if (e.target.closest('[data-tl-undo]')) undo();
   });
   tlScroll.addEventListener('wheel', function (e) {
@@ -437,7 +430,8 @@
   var drag = null;
   var timeAt = function (e) { return (e.clientX - track.getBoundingClientRect().left) / pps; };
   track.addEventListener('pointerdown', function (e) {
-    if (e.button > 0) return;
+    if (e.button > 0 || (edIn && e.target === edIn)) return;
+    if (edIn) closeEdit();
     var blk = e.target.closest('.sub-tl-cue'), h = e.target.closest('[data-h]');
     var i = blk ? Number(blk.getAttribute('data-ti')) : -1;
     if (i < 0 || disabled) {
@@ -446,7 +440,7 @@
       seek(timeAt(e));
     } else {
       var c = cues[i];
-      drag = { mode: h ? h.getAttribute('data-h') : 'move', i: i, x0: e.clientX, s0: c.start, e0: c.end, t: timeAt(e), live: !!h, snapped: false };
+      drag = { mode: h ? h.getAttribute('data-h') : 'move', i: i, x0: e.clientX, s0: c.start, e0: c.end, t: timeAt(e), live: !!h, snapped: false, was: sel === i };
       select(i, true);
       e.preventDefault();
     }
@@ -470,11 +464,6 @@
     if (!drag.snapped) { snap(); drag.snapped = true; }
     c.start = ns; c.end = ne; c.w = c.w && drag.mode === 'move' ? c.w : null;
     tlUpdate(i);
-    var li = list.children[i];
-    if (li) {
-      $('[data-start]', li).value = c.start.toFixed(1); $('[data-end]', li).value = c.end.toFixed(1);
-      $('[data-seek]', li).textContent = fmtT(c.start, true);
-    }
     if (video.paused) seek(drag.mode === 'r' ? c.end - 0.05 : c.start + 0.01);
     dirty = true;
   });
@@ -485,9 +474,12 @@
     if (d.mode === 'tap') { seek(d.t); return; }
     if (d.mode === 'scrub') return;
     if (d.snapped) { changed(); draw(); return; }
-    if (e && e.type === 'pointerup') seek(clamp(d.t, cues[d.i].start, cues[d.i].end - 0.01)); // แตะบล็อก = เลือก + ไปที่จุดนั้น
+    if (!e || e.type !== 'pointerup') return;
+    if (d.was && d.mode === 'move') { openEdit(d.i); return; } // แตะบล็อกที่เลือกอยู่ = พิมพ์แก้ในบล็อก
+    seek(clamp(d.t, cues[d.i].start, cues[d.i].end - 0.01)); // แตะบล็อก = เลือก + ไปที่จุดนั้น
   }
   track.addEventListener('pointerup', endDrag);
+  track.addEventListener('dblclick', function (e) { var b = e.target.closest('.sub-tl-cue'); if (b) openEdit(Number(b.getAttribute('data-ti'))); });
   track.addEventListener('pointercancel', endDrag);
   track.addEventListener('keydown', function (e) {
     if (e.key === 'Home') { e.preventDefault(); seek(0); }
@@ -504,106 +496,75 @@
   })();
   addEventListener('resize', function () { tlSize(); drawWave(); });
 
-  // ---------- รายการบรรทัดซับ ----------
-  function rowHtml() {
-    return '<button type="button" class="sub-time" data-seek></button>' +
-      '<textarea rows="1" data-text maxlength="120" aria-label="ข้อความซับ"></textarea>' +
-      '<div class="sub-row-tools">' +
-      '<label class="sub-num">เริ่ม <input type="number" step="0.1" min="0" inputmode="decimal" data-start></label>' +
-      '<label class="sub-num">จบ <input type="number" step="0.1" min="0" inputmode="decimal" data-end></label>' +
-      '<button type="button" class="sub-mini" data-split title="แบ่งเป็น 2 บรรทัดตรงตำแหน่งเคอร์เซอร์">แบ่ง</button>' +
-      '<button type="button" class="sub-mini" data-merge title="รวมกับบรรทัดถัดไป">รวม↓</button>' +
-      '<button type="button" class="sub-mini danger" data-del aria-label="ลบบรรทัดนี้">ลบ</button></div>';
-  }
-  function fit(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+  // ---------- แก้คำในบล็อกบนไทม์ไลน์ ----------
+  var edIn = null, edI = -1, edOld = '', edSnap = false;
+  function pick() { return sel >= 0 && cues[sel] ? sel : findCue(video.currentTime || 0); }
   function renderList() {
-    list.innerHTML = '';
-    cues.forEach(function (c, i) {
-      var li = document.createElement('li');
-      li.className = 'sub-row';
-      li.setAttribute('data-i', i);
-      li.innerHTML = rowHtml();
-      $('[data-seek]', li).textContent = fmtT(c.start, true);
-      var ta = $('[data-text]', li);
-      ta.value = c.text;
-      $('[data-start]', li).value = c.start.toFixed(1);
-      $('[data-end]', li).value = c.end.toFixed(1);
-      if (disabled) $$('textarea,input,button', li).forEach(function (x) { if (!x.hasAttribute('data-seek')) x.disabled = true; });
-      list.appendChild(li);
-      fit(ta);
-    });
-    countEl.textContent = cues.length + ' บรรทัด';
+    closeEdit(true);
     tlRender();
-    renderBtn.disabled = disabled || !cues.length;
+    renderBtn.disabled = disabled;
     cur = -2; draw();
   }
-  function highlight(i) {
-    tlActive(i);
-    $$('.sub-row.on', list).forEach(function (x) { x.classList.remove('on'); });
-    if (i < 0) return;
-    var li = list.children[i];
-    if (!li) return;
-    li.classList.add('on');
-    if (!video.paused && !list.contains(document.activeElement)) {
-      var r = li.getBoundingClientRect(), lr = list.getBoundingClientRect();
-      if (list.scrollHeight > list.clientHeight + 4 && (r.top < lr.top || r.bottom > lr.bottom)) list.scrollTop += r.top - lr.top - 40;
-    }
+  function highlight(i) { tlActive(i); }
+  function openEdit(i) {
+    if (disabled || !cues[i]) return;
+    closeEdit();
+    select(i);
+    var c = cues[i], b = tlCues.children[i];
+    if (!b) return;
+    if (video.paused && findCue(video.currentTime || 0) !== i) seek(c.start + Math.min(0.6, (c.end - c.start) / 2));
+    edI = i; edOld = c.text; edSnap = false;
+    edIn = document.createElement('input');
+    edIn.type = 'text'; edIn.className = 'sub-tl-input'; edIn.maxLength = 120; edIn.value = c.text;
+    edIn.setAttribute('enterkeyhint', 'done'); edIn.setAttribute('aria-label', 'แก้ข้อความซับบรรทัดนี้'); edIn.placeholder = 'พิมพ์ข้อความซับ';
+    var w = Math.max(b.offsetWidth, Math.min(300, tlScroll.clientWidth - 16));
+    var left = Math.max(0, Math.min(b.offsetLeft, track.offsetWidth - w));
+    edIn.style.left = left + 'px'; edIn.style.width = w + 'px';
+    b.classList.add('editing');
+    tlCues.appendChild(edIn);
+    if (left < tlScroll.scrollLeft || left + w > tlScroll.scrollLeft + tlScroll.clientWidth) tlScroll.scrollLeft = Math.max(0, left - 8);
+    edIn.addEventListener('input', function () {
+      if (!edSnap) { snap(); edSnap = true; }
+      c.text = edIn.value.replace(/\s+/g, ' '); c.w = null;
+      tlUpdate(i); dirty = true; draw(); changed();
+    });
+    edIn.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); closeEdit(); }
+      if (e.key === 'Escape') { e.preventDefault(); if (edSnap) { c.text = edOld; c.w = null; changed(); } closeEdit(); }
+    });
+    var me = edIn;
+    edIn.addEventListener('blur', function () { setTimeout(function () { if (edIn === me) closeEdit(); }, 0); });
+    edIn.focus();
+    try { edIn.setSelectionRange(edIn.value.length, edIn.value.length); } catch (err) { /* ข้าม */ }
   }
-  var idx = function (node) { var li = node.closest('.sub-row'); return li ? Number(li.getAttribute('data-i')) : -1; };
-  list.addEventListener('click', function (e) {
-    var i = idx(e.target);
-    if (i < 0) return;
+  function closeEdit(quiet) {
+    if (!edIn) return;
+    var n = edIn, i = edI;
+    edIn = null; edI = -1;
+    if (n.parentNode) n.parentNode.removeChild(n);
+    $$('.sub-tl-cue.editing', tlCues).forEach(function (b) { b.classList.remove('editing'); });
+    if (quiet) return;
     var c = cues[i];
-    if (e.target.closest('[data-seek]')) { select(i); seek(c.start + 0.01); return; }
-    if (e.target.closest('[data-del]')) { removeCue(i); return; }
-    if (e.target.closest('[data-merge]')) {
-      var n = cues[i + 1];
-      if (!n) return;
-      snap();
-      c.text = (c.text + ' ' + n.text).trim(); c.end = n.end; c.w = null;
-      cues.splice(i + 1, 1); renderList(); changed(); return;
-    }
-    if (e.target.closest('[data-split]')) {
-      var ta = $('[data-text]', list.children[i]);
-      var pos = ta.selectionStart || 0;
-      var a = c.text.slice(0, pos).trim(), b = c.text.slice(pos).trim();
-      if (!a || !b) { a = c.text.slice(0, Math.ceil(c.text.length / 2)); b = c.text.slice(a.length); }
-      var k = graphemes(a).length / Math.max(1, graphemes(a + b).length);
-      splitCue(i, c.start + (c.end - c.start) * k, a, b);
-    }
-  });
-  list.addEventListener('input', function (e) {
-    var i = idx(e.target);
-    if (i < 0) return;
-    var c = cues[i];
-    if (!hist.typingFocus) { snap(); hist.typingFocus = true; } // เลิกทำได้ทั้งก้อนที่พิมพ์ในช่องนี้
-    if (e.target.matches('[data-text]')) { c.text = e.target.value.replace(/\s+/g, ' '); c.w = null; fit(e.target); }
-    if (e.target.matches('[data-start]')) { var s = Number(e.target.value); if (isFinite(s)) { c.start = Math.max(0, s); c.w = null; $('[data-seek]', list.children[i]).textContent = fmtT(c.start, true); } }
-    if (e.target.matches('[data-end]')) { var en = Number(e.target.value); if (isFinite(en)) { c.end = Math.min(D.duration, en); c.w = null; } }
-    tlUpdate(i);
-    dirty = true; draw(); changed();
-  });
-  list.addEventListener('focusout', function () { hist.typingFocus = false; });
-  // เลื่อนไปช่วงของบรรทัดที่กำลังแก้ (ไม่เล่นเอง)
-  list.addEventListener('focusin', function (e) {
-    var i = idx(e.target);
-    if (i >= 0) select(i, true);
-    if (i >= 0 && video.paused && findCue(video.currentTime) !== i) { video.currentTime = cues[i].start + Math.min(0.6, (cues[i].end - cues[i].start) / 2); }
-  });
+    if (c) c.text = c.text.trim();
+    if (c && !c.text) { cues.splice(i, 1); sel = -1; renderList(); changed(); return; } // บรรทัดว่าง = ลบทิ้ง
+    if (c) { tlUpdate(i); dirty = true; draw(); }
+  }
   addBtn.addEventListener('click', function () {
     var t = Math.round((video.currentTime || 0) * 10) / 10;
     var i = 0;
     while (i < cues.length && cues[i].start <= t) i++;
     var nextStart = i < cues.length ? cues[i].start : D.duration;
-    if (i > 0 && cues[i - 1].end > t) cues[i - 1].end = Math.max(cues[i - 1].start + 0.3, t);
+    if (i > 0 && cues[i - 1].end > t) {
+      if (t - cues[i - 1].start < 0.6) { setErr('ตรงนี้มีซับอยู่แล้ว เลื่อนเส้นเวลาไปช่วงที่ว่าง แล้วกด + เพิ่ม อีกครั้ง'); return; }
+      snap();
+      cues[i - 1].end = Math.max(cues[i - 1].start + 0.3, t);
+    } else snap();
     var end = Math.min(nextStart, t + 2, D.duration);
-    if (end - t < 0.3) { setErr('ช่วงเวลานี้มีซับอยู่แล้ว เลื่อนไปช่วงที่ว่างแล้วกดใหม่'); return; }
-    snap();
+    if (end - t < 0.3) { hist.stack.pop(); setErr('ตรงนี้มีซับอยู่แล้ว เลื่อนเส้นเวลาไปช่วงที่ว่าง แล้วกด + เพิ่ม อีกครั้ง'); return; }
+    setErr('');
     cues.splice(i, 0, { id: '', start: t, end: Math.round(end * 10) / 10, text: '', w: null });
     renderList();
-    var ta = $('[data-text]', list.children[i]);
-    ta.focus();
-    ta.placeholder = 'พิมพ์ข้อความ';
+    openEdit(i);
   });
 
   saveState.addEventListener('click', function (e) { if (e.target.closest('[data-undo]')) undo(); });
@@ -615,7 +576,28 @@
     if (input) input.value = val;
     $$('[data-swatch="' + name + '"]', look).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-color') === style[name]); });
   }
+  var sizeIn = $('[data-size]', look), sizeOut = $('[data-size-out]', look);
+  function showSize() {
+    sizeOut.textContent = style.size + '%';
+    $$('[data-size-q]', look).forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-size-q') === String(style.size)); });
+  }
+  var fontPick = $('[data-font-pick]', look), fontCur = $('[data-font-cur]', look), fontList = $('[data-font-list]', look), fontName = $('[data-font-cur-name]', look);
+  function showFont() {
+    var f = fontOf();
+    fontName.textContent = f.label;
+    fontName.style.fontFamily = "'tt-" + f.id + "'"; fontName.style.fontWeight = f.weight || 700;
+  }
+  function fontOpen(on) {
+    fontList.hidden = !on; fontCur.setAttribute('aria-expanded', on ? 'true' : 'false'); fontPick.classList.toggle('open', on);
+    if (on) { var c = $('input:checked', fontList); if (c) c.closest('.font-opt').scrollIntoView({ block: 'nearest' }); }
+  }
+  fontCur.addEventListener('click', function () { fontOpen(fontList.hidden); });
+  document.addEventListener('click', function (e) { if (!fontList.hidden && !fontPick.contains(e.target)) fontOpen(false); });
+  fontList.addEventListener('keydown', function (e) { if (e.key === 'Escape') { fontOpen(false); fontCur.focus(); } });
   look.addEventListener('click', function (e) {
+    var q = e.target.closest('[data-size-q]');
+    if (q) { style.size = q.getAttribute('data-size-q'); sizeIn.value = style.size; showSize(); restyle(); changed(); return; }
+    if (e.target.closest('.font-opt input')) setTimeout(function () { fontOpen(false); }, 120);
     var sw = e.target.closest('[data-swatch]');
     if (!sw) return;
     setColor(sw.getAttribute('data-swatch'), sw.getAttribute('data-color'));
@@ -625,8 +607,9 @@
     var t = e.target;
     if (t.name === 'fill' || t.name === 'stroke') setColor(t.name, t.value);
     else if (t.name === 'shadow') style.shadow = t.checked;
-    else if (t.name === 'font') style.font = t.value;
-    else if (t.name === 'order' || t.name === 'outline' || t.name === 'size' || t.name === 'position') style[t.name] = t.value;
+    else if (t.name === 'font') { style.font = t.value; showFont(); }
+    else if (t.name === 'size') { style.size = String(t.value); showSize(); }
+    else if (t.name === 'order' || t.name === 'outline' || t.name === 'position') style[t.name] = t.value;
     else return;
     restyle(); changed();
   });
@@ -661,16 +644,24 @@
       if (!pending && sentFor.length === cues.length && res.j.cues) {
         var same = res.j.cues.length === cues.length && res.j.cues.every(function (s, i) { return s.text === cues[i].text.trim(); });
         if (same) res.j.cues.forEach(function (s, i) { cues[i].id = s.id; cues[i].w = s.w; cues[i].start = s.start; cues[i].end = s.end; });
-        else if (!list.contains(document.activeElement)) { cues = res.j.cues.map(function (c) { return { id: c.id, start: c.start, end: c.end, text: c.text, w: c.w }; }); renderList(); }
+        else if (!edIn) { cues = res.j.cues.map(function (c) { return { id: c.id, start: c.start, end: c.end, text: c.text, w: c.w }; }); renderList(); }
       }
       if (!pending) saveState.textContent = 'บันทึกแล้ว';
       dirty = true; draw();
       return true;
-    }).catch(function () { saving = null; saveState.textContent = 'ยังไม่ได้บันทึก (เน็ตหลุด) จะลองใหม่'; saveTimer = setTimeout(save, 4000); return false; });
+    }).catch(function () {
+      saving = null;
+      if (render) { setErr('ส่งข้อมูลไม่สำเร็จ (เน็ตหลุดหรือร้านกำลังตื่น) รอสักครู่แล้วกด "สร้างคลิปพร้อมซับ" อีกครั้ง'); saveState.textContent = 'ยังไม่ได้บันทึก'; return false; }
+      saveState.textContent = 'ยังไม่ได้บันทึก (เน็ตหลุด) จะลองใหม่'; saveTimer = setTimeout(save, 4000); return false;
+    });
     return saving;
   }
   renderBtn.addEventListener('click', function () {
-    if (!cues.length) return;
+    closeEdit();
+    if (!cues.length) { setErr('ยังไม่มีซับ เลื่อนเส้นเวลาไปจุดที่มีคนพูด แล้วกด "+ เพิ่ม" เพื่อพิมพ์ซับก่อน'); return; }
+    // โหมดเบราว์เซอร์: ตัวสร้างคลิป (render-ui.js) ต้องโหลดเสร็จก่อน ไม่งั้นกดแล้วจะเงียบ
+    if (D.browser && !window.AWRenderReady) { setErr('ตัวสร้างคลิปยังโหลดไม่เสร็จ รอ 2–3 วินาทีแล้วกดอีกครั้ง (ถ้ายังไม่ได้ ให้รีเฟรชหน้า หรือเปิดด้วย Chrome / Safari รุ่นใหม่)'); return; }
+    setErr('');
     renderBtn.classList.add('loading'); renderBtn.disabled = true;
     save(true).then(function (ok) {
       if (ok === 'browser' || (ok === false && D.browser)) { renderBtn.classList.remove('loading'); renderBtn.disabled = false; return; }
@@ -680,6 +671,7 @@
   });
 
   renderList();
+  showSize(); showFont();
   restyle();
   measure();
   draw();
