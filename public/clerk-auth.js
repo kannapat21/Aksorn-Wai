@@ -17,11 +17,12 @@ function showError(msg) {
   errBox.hidden = false;
 }
 
-async function waitForClerk(ms = 20000) {
+async function waitFor(get, ms = 20000) {
   const end = Date.now() + ms;
-  while (!window.Clerk && Date.now() < end) await new Promise((r) => setTimeout(r, 100));
-  return window.Clerk || null;
+  while (!get() && Date.now() < end) await new Promise((r) => setTimeout(r, 100));
+  return get() || null;
 }
+const waitForClerk = () => waitFor(() => window.Clerk);
 
 // แท็บ เข้าสู่ระบบ / สมัครสมาชิก: เลื่อนแถบก่อน แล้วค่อยเปลี่ยนหน้า
 const tabs = document.querySelector('.ca-tabs');
@@ -45,12 +46,12 @@ function appearance() {
   return {
     variables: {
       colorPrimary: cssVar('--accent', '#1e3a5f'),
-      colorTextOnPrimaryBackground: cssVar('--accent-ink', '#ffffff'),
+      colorPrimaryForeground: cssVar('--accent-ink', '#ffffff'),
       colorBackground: cssVar('--surface', '#ffffff'),
-      colorInputBackground: cssVar('--surface-2', '#f0f0ec'),
-      colorInputText: cssVar('--ink', '#171a20'),
-      colorText: cssVar('--ink', '#171a20'),
-      colorTextSecondary: cssVar('--muted', '#5d636e'),
+      colorInput: cssVar('--surface-2', '#f0f0ec'),
+      colorInputForeground: cssVar('--ink', '#171a20'),
+      colorForeground: cssVar('--ink', '#171a20'),
+      colorMutedForeground: cssVar('--muted', '#5d636e'),
       colorNeutral: cssVar('--ink', '#171a20'),
       colorDanger: cssVar('--err', '#b42318'),
       colorSuccess: cssVar('--ok', '#127a3a'),
@@ -65,6 +66,7 @@ function appearance() {
       card: { background: 'transparent', boxShadow: 'none', border: 'none', padding: '0', gap: '20px' },
       footer: { background: 'transparent', borderTop: '1px solid var(--line)', marginTop: '2px', paddingTop: '4px' },
       footerAction: { display: 'none' }, // สลับเข้าสู่ระบบ/สมัครใช้แท็บด้านบนแทน
+      // ปุ่ม Google: กรอบชัด เห็นง่ายบนพื้นเรียบ
       socialButtonsBlockButton: 'ak-social',
       form: 'ak-form',
       formFieldInput: 'ak-input',
@@ -72,7 +74,7 @@ function appearance() {
       headerTitle: { fontSize: '1.15rem' },
     },
     // ซ่อนป้าย "Development mode" ของ Clerk (ตัวเลือกที่ Clerk มีให้เอง) · ป้าย "Secured by Clerk" ปิดได้เฉพาะแพ็กเกจเสียเงินของ Clerk
-    layout: { socialButtonsPlacement: 'top', socialButtonsVariant: 'blockButton', shimmer: false, unsafe_disableDevelopmentModeWarnings: true },
+    options: { socialButtonsPlacement: 'top', socialButtonsVariant: 'blockButton', shimmer: false, unsafe_disableDevelopmentModeWarnings: true },
   };
 }
 
@@ -85,7 +87,10 @@ async function main() {
   }
   let localization;
   try { localization = (await import('/vendor/clerk-th-TH.mjs')).thTH; } catch { /* ไม่มีไฟล์ภาษาไทย ใช้ภาษาอังกฤษไป */ }
-  await Clerk.load({ localization, appearance: appearance() });
+  // Core 3: ต้องส่งตัววาดหน้าตา (จาก ui.browser.js) ให้ Clerk เอง
+  const ClerkUI = await waitFor(() => window.__internal_ClerkUICtor);
+  if (!ClerkUI && !root.hasAttribute('data-clerk-signout')) return showError('โหลดระบบเข้าสู่ระบบไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วโหลดหน้าใหม่อีกครั้ง');
+  await Clerk.load({ localization, appearance: appearance(), ...(ClerkUI ? { ui: { ClerkUI } } : {}) });
 
   if (root.hasAttribute('data-clerk-signout')) {
     try { await Clerk.signOut(); } catch { /* ออกจากร้านแล้ว ไม่ต้องรอ Clerk */ }

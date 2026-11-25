@@ -137,7 +137,9 @@ test('หน้า /login และ /signup ใช้กล่อง Clerk + CSP
   assert.equal(r.status, 200);
   const html = await r.text();
   assert.match(html, /data-clerk-auth/);
-  assert.match(html, new RegExp(`src="https://${FAPI.replace(/\./g, '\\.')}/npm/@clerk/clerk-js@5/dist/clerk\\.browser\\.js"`));
+  assert.match(html, new RegExp(`src="https://${FAPI.replace(/\./g, '\\.')}/npm/@clerk/clerk-js@6/dist/clerk\\.browser\\.js"`));
+  // Core 3: หน้าตา (@clerk/ui) โหลดแยก ต้องมาจากโดเมน Clerk ของร้าน
+  assert.match(html, new RegExp(`src="https://${FAPI.replace(/\./g, '\\.')}/npm/@clerk/ui@1/dist/ui\\.browser\\.js"`));
   assert.match(html, /data-clerk-publishable-key="pk_test_/);
   assert.ok(!html.includes(SK), 'ห้ามส่ง secret key ไปหน้าเว็บ');
   assert.match(r.headers.get('content-security-policy'), new RegExp(FAPI.replace(/\./g, '\\.')));
