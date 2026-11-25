@@ -1703,6 +1703,10 @@ test('ของฟรี: กดรับ → เข้าคลังทัน�
   const home = await (await anon.req('/')).text();
   assert.match(home, /class="badge-free">ฟรี</);
   assert.match(home, /class="badge-premium">/);
+  // ซับอัตโนมัติหาง่าย: แถบบน แถบล่างมือถือ และหน้าแรก มีป้าย Beta
+  assert.match(home, /<a href="\/subtitles" class="nav-sub">[\s\S]*?<span class="beta">Beta<\/span><\/a>/);
+  assert.match(home, /<a href="\/subtitles" data-tab="subs"/);
+  assert.match(home, /class="sub-banner" href="\/subtitles"/);
   // หน้าแรก: กรองฟรี/พรีเมียมได้ การ์ดมีราคาและปุ่มชัด
   assert.match(home, /data-cat-btn="free">ฟรี</);
   assert.match(home, /data-cat-btn="premium">พรีเมียม</);

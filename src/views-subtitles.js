@@ -62,7 +62,7 @@ function subtitlesHome({ cfg, user, csrf, owned, jobs, limits, ready, now, picke
 <nav class="crumb" aria-label="ตำแหน่งหน้า"><a href="/library">คลังของฉัน</a><span>/</span><span aria-current="page">ใส่ซับอัตโนมัติ</span></nav>
 <div class="sub-hero">
   <p class="eyebrow">ใหม่ · ใช้ได้กับทุกแบบในคลังของคุณ</p>
-  <h1>ใส่ซับอัตโนมัติ</h1>
+  <h1>ใส่ซับอัตโนมัติ <span class="beta">Beta</span></h1>
   <p class="lead">อัปคลิปที่มีเสียงพูดภาษาไทย ระบบฟังแล้วพิมพ์ซับให้ แก้คำที่ผิดได้ก่อน แล้วได้คลิปพร้อมซับด้วยแบบตัวอักษรที่คุณเลือก</p>
   <ol class="sub-steps" aria-label="ขั้นตอน">
     <li><b>1</b><span>เลือกแบบ + อัปคลิป</span></li>

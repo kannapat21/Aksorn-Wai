@@ -139,7 +139,7 @@
   var tabbar = document.querySelector('[data-tabbar]');
   if (tabbar) {
     var p = location.pathname;
-    var tab = p === '/' ? (location.hash === '#catalog' ? 'shop' : 'home') : /^\/p\//.test(p) ? 'shop' : /^\/library/.test(p) ? 'library' : /^\/(account|login|signup|forgot|reset|admin)/.test(p) ? 'account' : '';
+    var tab = p === '/' ? (location.hash === '#catalog' ? 'shop' : 'home') : /^\/p\//.test(p) ? 'shop' : /^\/subtitles/.test(p) ? 'subs' : /^\/library/.test(p) ? 'library' : /^\/(account|login|signup|forgot|reset|admin)/.test(p) ? 'account' : '';
     var setTab = function (t) { tabbar.querySelectorAll('[data-tab]').forEach(function (a) { var on = a.getAttribute('data-tab') === t; a.classList.toggle('active', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }); };
     setTab(tab);
     addEventListener('hashchange', function () { if (location.pathname === '/') setTab(location.hash === '#catalog' ? 'shop' : 'home'); });

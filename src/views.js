@@ -132,6 +132,7 @@ ${intro ? `<div class="loader" data-loader aria-hidden="true">
   <div class="top-in">
     ${brand(shopName)}
     <nav class="nav" aria-label="เมนูหลัก">
+      <a href="/subtitles" class="nav-sub">${ICON.cc}<span>ซับอัตโนมัติ</span><span class="beta">Beta</span></a>
       <a href="/#catalog">สินค้า</a>
       <a href="/#kit">ปรับแต่งได้</a>
       <a href="/#how">วิธีสั่งซื้อ</a>
@@ -153,6 +154,7 @@ ${body}
       <p>แอนิเมชันข้อความภาษาไทยสำหรับคนตัดต่อ ${esc(LICENSE.short)}</p></div>
     <nav class="foot-links" aria-label="ลิงก์ท้ายเว็บ">
       <a href="/#catalog">สินค้าทั้งหมด</a>
+      <a href="/subtitles">ใส่ซับอัตโนมัติ (Beta)</a>
       <a href="/library">คลังของฉัน</a>
       <a href="/license">สิทธิ์การใช้งาน</a>
       <a href="/terms">เงื่อนไขการใช้งาน</a>
@@ -171,6 +173,7 @@ ${body}
 <nav class="tabbar" aria-label="เมนูแอป" data-tabbar>
   <a href="/" data-tab="home">${ICON.grid}<span>หน้าแรก</span></a>
   <a href="/#catalog" data-tab="shop">${ICON.search}<span>สินค้า</span></a>
+  <a href="/subtitles" data-tab="subs" class="tab-sub"><span class="tab-ico">${ICON.cc}<span class="beta">Beta</span></span><span>ใส่ซับ</span></a>
   <a href="/library" data-tab="library">${ICON.library}<span>คลัง</span></a>
   <a href="/account" data-tab="account">${ICON.user}<span>${user ? 'บัญชี' : 'เข้าสู่ระบบ'}</span></a>
 </nav>
@@ -249,6 +252,12 @@ function home({ cfg, user, csrf, products, owned = new Set() }) {
     <span class="hero-tag">${esc(lead.title)} · ${priceLabel(lead)}</span>
   </a>` : ''}
 </section>
+
+<a class="sub-banner" href="/subtitles">
+  <span class="sub-banner-icon">${ICON.cc}</span>
+  <span class="sub-banner-text"><b>ใส่ซับอัตโนมัติ <span class="beta">Beta</span></b><small>อัปคลิปที่มีเสียงพูด ได้ซับไทยพร้อมแอนิเมชัน แก้คำได้</small></span>
+  <span class="btn small primary">ลองเลย</span>
+</a>
 
 <section id="catalog" class="catalog">
   <div class="section-head">
@@ -745,7 +754,7 @@ ${items.length ? `<div class="lib-grid">${list}</div>` : `
 </div>`}
 ${items.length ? `<a class="cz-cta sub-cta" href="/subtitles">
   <span class="cz-cta-icon">${ICON.cc}</span>
-  <span><b>ใหม่! ใส่ซับอัตโนมัติด้วยแบบในคลัง</b><small>อัปคลิปที่มีเสียงพูด ระบบทำซับไทยให้ แก้คำได้ แล้วได้คลิปพร้อมซับ + ไฟล์ .srt</small></span>
+  <span><b>ใส่ซับอัตโนมัติด้วยแบบในคลัง <span class="beta">Beta</span></b><small>อัปคลิปที่มีเสียงพูด ระบบทำซับไทยให้ แก้คำได้ แล้วได้คลิปพร้อมซับ + ไฟล์ .srt</small></span>
   <span class="cz-cta-go">›</span>
 </a>
 <nav class="lib-tools" aria-label="เครื่องมือปรับแต่ง">
