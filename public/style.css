@@ -1357,8 +1357,6 @@ img[loading="lazy"]:not(.loaded) { opacity: 0; }
 }
 .buy-bar .btn { min-width: 128px; }
 /* ใต้คลิปหน้าแก้ซับ: สถานะแปลงคลิป / ปุ่มแปลงเมื่อภาพไม่ขึ้น */
-.sub-fix { margin: 6px 2px 0; text-align: center; color: var(--muted); }
-.sub-fix .error { color: var(--err); }
 
 /* ---------- ซับอัตโนมัติ: หาง่ายจากแถบบน แถบล่างมือถือ และหน้าแรก ---------- */
 .nav a.nav-sub { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-weight: 700; background: var(--accent-soft); }

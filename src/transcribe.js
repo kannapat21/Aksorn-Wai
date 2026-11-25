@@ -92,9 +92,38 @@ function withSpaces(words, segments) {
   });
 }
 
-// ประโยคตัวอย่างนำทาง Whisper: ภาษาไทยสะกดถูก เว้นวรรคตามวลี ไม่มีคำเติม (เอ่อ อ่า) → ผลที่ได้เขียนแบบเดียวกัน
-// (ห้ามใส่วลีท้ายคลิป เช่น "กดติดตาม" เพราะ Whisper จะเดาวลีนั้นใส่ตอนเงียบ)
-const BASE_PROMPT = 'สวัสดีครับ วันนี้จะมาเล่าเรื่องร้านอาหารที่ไปมา อร่อยมาก ราคาไม่แพงด้วยค่ะ';
+// บริบทตั้งต้นให้ Whisper: ประโยคไทยสะอาด ไม่มีคำเติม (เอ่อ/อืม) เพื่อให้ถอดออกมาเป็นภาษาเขียนสั้นกระชับ
+// ร้านไม่ส่งข้อความจากท่อนก่อนแล้ว (asrPrompt ยังรับได้) เพราะถ้าท่อนก่อนถอดผิด/วนซ้ำ ความผิดจะลามไปท่อนถัดไป
+const BASE_PROMPT = 'สวัสดีครับ วันนี้เราจะมาเล่าเรื่องนี้ให้ฟังกันนะคะ ใช้ภาษาไทยเป็นหลัก มีคำภาษาอังกฤษปนบ้าง เช่น TikTok, YouTube, Facebook';
+
+// ประโยคที่ Whisper ชอบแต่งขึ้นเองตอนเงียบ/มีแต่เพลง
+const HALLUCINATION_RE = /^(ขอบคุณ(ที่|สำหรับการ)?รับชม.*|ขอบคุณครับ|ขอบคุณค่ะ|ฝากกด(ไลค์|ติดตาม|subscribe).*|กด(ไลค์|ติดตาม|subscribe|กระดิ่ง).*|(ซับ|คำบรรยาย)(ไตเติ้ล)?(ภาษาไทย)?(โดย|by).*|subtitles? by.*|thank(s| you) for watching.*|\.+|…+)$/iu;
+
+/*
+ * ตัดท่อนที่น่าจะไม่ใช่เสียงพูดจริง (เกณฑ์เดียวกับ Whisper ต้นฉบับ)
+ *   - no_speech_prob สูง และความมั่นใจต่ำ = ช่วงเงียบ/เพลงที่ถูกแต่งเป็นคำ
+ *   - compression_ratio สูง = ข้อความวนซ้ำ
+ *   - ประโยคแต่งเองยอดฮิต ("ขอบคุณที่รับชม") ในช่วงที่ไม่ค่อยมีเสียงพูด
+ *   - ท่อนที่ซ้ำกับท่อนก่อนหน้าแบบเป๊ะๆ ติดกัน 2 ครั้งขึ้นไป
+ */
+function cleanSegments(raw) {
+  const keep = [];
+  let last = '', rep = 0;
+  for (const x of raw || []) {
+    const text = String(x.text || '').trim();
+    const ns = Number(x.no_speech_prob) || 0;
+    const lp = Number.isFinite(Number(x.avg_logprob)) ? Number(x.avg_logprob) : 0;
+    const cr = Number(x.compression_ratio) || 0;
+    let bad = !text || (ns > 0.6 && lp < -1) || cr > 2.4 || lp < -1.6;
+    if (!bad && HALLUCINATION_RE.test(text.replace(/\s+/g, '')) && (ns > 0.2 || lp < -0.7)) bad = true;
+    const norm = text.replace(/[\s.,!?…]/g, '');
+    if (!bad && norm && norm === last) { rep++; if (rep >= 1) bad = true; } else if (norm) { rep = 0; }
+    if (norm) last = norm;
+    keep.push({ ...x, bad });
+  }
+  return keep;
+}
+const THAI_PROMPT = BASE_PROMPT;
 const asrPrompt = (prev = '') => (prev ? `${BASE_PROMPT} ${String(prev).replace(/\s+/g, ' ').trim().slice(-120)}` : BASE_PROMPT);
 
 // ถอดเสียงท่อนเดียว (WAV ไม่เกิน 25 MB) → { words: [{text,start,end}], segments }
@@ -130,10 +159,15 @@ async function groqTranscribe(cfg, wavBuf, { offset = 0, fetchImpl = globalThis.
     throw e;
   }
   const j = await r.json();
-  const segments = (j.segments || []).map((x) => ({ start: Number(x.start) + offset, end: Number(x.end) + offset, text: String(x.text || '') }));
+  const all = cleanSegments(j.segments);
+  const good = all.filter((x) => !x.bad);
+  const dropped = all.filter((x) => x.bad).map((x) => [Number(x.start), Number(x.end)]);
+  const segments = good.map((x) => ({ start: Number(x.start) + offset, end: Number(x.end) + offset, text: String(x.text || '') }));
   let words = withSpaces(j.words || [], j.segments);
+  // คำที่อยู่ในท่อนที่ตัดทิ้ง (กึ่งกลางคำอยู่ในช่วงนั้น) ตัดทิ้งด้วย
+  if (dropped.length) words = words.filter((w) => { const m = (w.start + w.end) / 2; return !dropped.some(([a, b]) => m >= a && m <= b); });
   // บางครั้งไม่มีเวลาของคำ: ใช้เวลาของท่อนแทน (ซับยังตรงระดับประโยค)
-  if (!words.length) words = segments.map((x) => ({ text: ` ${x.text.trim()}`, start: x.start - offset, end: x.end - offset }));
+  if (!words.length && !(j.words || []).length) words = segments.map((x) => ({ text: ` ${x.text.trim()}`, start: x.start - offset, end: x.end - offset }));
   words = words.filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end)).map((w) => ({ ...w, start: w.start + offset, end: w.end + offset }));
   return { words, segments, text: String(j.text || '') };
 }
@@ -147,16 +181,15 @@ function createTranscriber(cfg) {
       async transcribe(audioFile, { onProgress = () => {} } = {}) {
         const parts = splitWav(fs.readFileSync(audioFile));
         const words = [], segments = [];
-        let prompt = '';
         for (let i = 0; i < parts.length; i++) {
-          const r = await groqTranscribe(cfg, parts[i].buf, { offset: parts[i].start, prompt });
-          words.push(...r.words); segments.push(...r.segments); prompt = r.text;
+          const r = await groqTranscribe(cfg, parts[i].buf, { offset: parts[i].start });
+          words.push(...r.words); segments.push(...r.segments);
           onProgress(Math.round(((i + 1) / parts.length) * 100));
         }
         return { engine: 'groq', language: 'th', words, segments };
       },
       // ท่อนเสียงที่เบราว์เซอร์ลูกค้าส่งมา (โหมด serverless)
-      chunk: (wavBuf, offset, prompt) => groqTranscribe(cfg, wavBuf, { offset, prompt }),
+      chunk: (wavBuf, offset) => groqTranscribe(cfg, wavBuf, { offset }),
     };
   }
   let checked = null;
@@ -211,4 +244,4 @@ function createTranscriber(cfg) {
   return { check, transcribe };
 }
 
-module.exports = { BASE_PROMPT, asrPrompt, createTranscriber, run, groqTranscribe, splitWav, parseWav, wavHeader, withSpaces };
+module.exports = { BASE_PROMPT, THAI_PROMPT, asrPrompt, createTranscriber, run, groqTranscribe, cleanSegments, splitWav, parseWav, wavHeader, withSpaces };
