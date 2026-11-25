@@ -962,6 +962,16 @@ function createApp(cfg, opts = {}) {
     } catch (e) { next(e); }
   });
 
+  app.get('/pay/transfer/:id/qr.png', requireUser, async (req, res, next) => {
+    try {
+      const order = transferOrder(req, res);
+      if (!order) return;
+      if (!cfg.transfer.promptpayId || !['pending', 'rejected'].includes(order.status)) return notFound(req, res);
+      res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'no-store', 'Content-Disposition': `attachment; filename="QR-${String(order.pay_ref).replace(/[^\w-]/g, '')}.png"` });
+      res.send(await require('./promptpay').png(cfg.transfer.promptpayId, order.transfer_amount));
+    } catch (e) { next(e); }
+  });
+
   app.post('/pay/transfer/:id/confirm', requireUser, limit.confirm, requireCsrf, (req, res, next) => {
     try {
       const order = transferOrder(req, res);

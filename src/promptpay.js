@@ -40,4 +40,9 @@ async function svg(id, amountSatang) {
   return QRCode.toString(payload(id, amountSatang), { type: 'svg', margin: 2, errorCorrectionLevel: 'M' });
 }
 
-module.exports = { payload, svg, crc16, normalizeId };
+// รูป PNG สำหรับกด "บันทึกรูป" บนมือถือ แล้วเลือกจากคลังภาพในแอปธนาคาร
+async function png(id, amountSatang) {
+  return QRCode.toBuffer(payload(id, amountSatang), { type: 'png', margin: 4, width: 720, errorCorrectionLevel: 'M' });
+}
+
+module.exports = { payload, svg, png, crc16, normalizeId };

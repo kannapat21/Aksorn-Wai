@@ -180,25 +180,25 @@ ${body}
 }
 
 function card(p, i, owned) {
-  const tags = [p.category, ...(p.tags || [])].filter(Boolean);
-  const search = [p.title, p.subtitle, p.description, ...tags].join(' ').toLowerCase();
+  const tier = p.free ? 'free' : 'premium';
+  const have = owned && owned.has(p.slug);
   return `
-    <article class="card reveal" data-card data-cat="${esc(p.category || '')}" data-price="${esc(p.price)}" data-order="${i}" data-search="${esc(search)}">
+    <article class="card" data-card data-cat="${tier}" data-price="${esc(p.price)}" data-order="${i}" data-search="${esc([p.title, p.subtitle].join(' ').toLowerCase())}">
       <a class="card-link" href="/p/${esc(p.slug)}" aria-label="${esc(p.title)} ${priceLabel(p)}">
         <div class="thumb" data-hover-play>
           <img src="/previews/${esc(p.slug)}_horizontal.jpg" alt="" loading="lazy" width="960" height="540">
           <video data-src="/previews/${esc(p.slug)}_horizontal.mp4" muted loop playsinline preload="none"></video>
           <span class="play-hint">${ICON.play} ชี้เพื่อดูตัวอย่าง</span>
-          ${p.free ? '<span class="badge-free">ฟรี</span>' : p.premium ? '<span class="badge-premium">✦ พรีเมียม</span>' : ''}
-          ${owned && owned.has(p.slug) ? '<span class="dur owned">อยู่ในคลังแล้ว</span>' : `<span class="dur">${ICON.stretch} ยืดได้</span>`}
+          ${p.free ? '<span class="badge-free">ฟรี</span>' : '<span class="badge-premium">พรีเมียม</span>'}
+          ${have ? '<span class="dur owned">อยู่ในคลังแล้ว</span>' : ''}
         </div>
         <div class="card-body">
-          <div class="card-top">
-            <h3>${esc(p.title)}</h3>
-            <span class="price${p.free ? ' free' : ''}">${priceLabel(p)}</span>
-          </div>
+          <h3>${esc(p.title)}</h3>
           <p class="muted small">${esc(p.subtitle || '')}</p>
-          <ul class="chips mini">${tags.slice(0, 3).map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
+          <div class="card-foot">
+            <span class="price${p.free ? ' free' : ''}">${priceLabel(p)}</span>
+            <span class="card-cta">${have ? 'เปิดใช้' : p.free ? 'รับฟรี' : 'ดูและซื้อ'} ›</span>
+          </div>
         </div>
       </a>
     </article>`;
@@ -221,126 +221,77 @@ function kitTimeline({ big = false, p = null } = {}) {
 
 function home({ cfg, user, csrf, products, owned = new Set() }) {
   const { editors } = cfg.editorsConfig;
-  const cats = [...new Set(products.map((p) => p.category).filter(Boolean))];
   const cards = products.map((p, i) => card(p, i, owned)).join('');
   const editorNames = Object.values(editors).filter((e) => !/อื่น/.test(e.label)).map((e) => e.label);
-  const editorList = editorNames.map((n) => `<li class="reveal">${ICON.film}<span>${esc(n)}</span></li>`).join('');
-  const minPrice = products.length ? Math.min(...products.map((p) => p.price)) : 0;
-  const lead = products[0];
-  const phrases = ['ลากใส่คลิปได้ทันที', 'ยืดความยาวได้ตามใจ', 'ซื้อครั้งเดียว ใช้ได้ตลอด'];
-  const marquee = editorNames.map((n) => `<span>${esc(n)}</span><span class="sep">✦</span>`).join('');
+  const freeCount = products.filter((p) => p.free).length;
+  const paid = products.filter((p) => !p.free);
+  const minPaid = paid.length ? Math.min(...paid.map((p) => p.price)) : 0;
+  const lead = products.find((p) => p.premium) || products[0];
   return layout({
     title: 'แอนิเมชันข้อความภาษาไทย', shopName: cfg.shopName, user, csrf, page: 'page-home',
     body: `
 <section class="hero">
-  <div class="hero-bg" aria-hidden="true"></div>
   <div class="hero-copy">
-    <p class="eyebrow pill"><span class="dot"></span> ร้านแอนิเมชันข้อความภาษาไทย สำหรับคนตัดต่อ</p>
-    <h1 class="type" aria-label="ข้อความเคลื่อนไหวพร้อมใช้ ${esc(phrases[0])}">
-      <span class="type-line" data-type-static aria-hidden="true">ข้อความเคลื่อนไหวพร้อมใช้</span>
-      <span class="type-line hl-line" aria-hidden="true"><span class="hl" data-type-rotate="${esc(JSON.stringify(phrases))}">${esc(phrases[0])}</span><span class="caret"></span></span>
-    </h1>
-    <p class="lead">เลือกแอนิเมชัน บอกว่าตัดต่อด้วยโปรแกรมอะไร แล้วรับไฟล์ที่ตรงกับโปรแกรมนั้นทันที หลังซื้อปรับข้อความ ฟอนต์ สี แนว และความยาวได้เอง แล้วโหลดเป็นไฟล์เดียว</p>
+    <h1>แอนิเมชันข้อความไทย<br><span class="hl">ลากใส่คลิปได้ทันที</span></h1>
+    <p class="lead">พิมพ์ข้อความเอง เลือกฟอนต์และสีได้ ใช้กับ ${esc([...new Set(editorNames.map((n) => n.replace(/\s*(มือถือ|คอม)$/, '')))].slice(0, 3).join(', '))} และโปรแกรมอื่น</p>
     <div class="hero-cta">
-      <a class="btn primary lg" href="#catalog">ดูสินค้าทั้งหมด</a>
-      <a class="btn ghost lg" href="#kit">ปรับแต่งได้อย่างไร</a>
+      <a class="btn primary lg" href="#catalog">เลือกแอนิเมชัน</a>
+      ${freeCount ? `<a class="btn ghost lg" href="#catalog" data-pick="free">ลองแบบฟรี</a>` : ''}
     </div>
-    <ul class="facts">
-      <li><b>${products.length}</b><span>แอนิเมชัน</span></li>
-      <li><b>2</b><span>ขนาด แนวตั้ง/แนวนอน</span></li>
-      <li><b>${editorNames.length}+</b><span>โปรแกรมตัดต่อ</span></li>
-      ${minPrice === 0 ? '<li><b>ฟรี</b><span>มีแบบให้ลองใช้</span></li>' : `<li><b>${baht(minPrice)}</b><span>ราคาเริ่มต้น</span></li>`}
+    <ul class="hero-ticks">
+      ${freeCount ? `<li>${ICON.check} มีแบบฟรี ${freeCount} แบบ</li>` : ''}
+      ${minPaid ? `<li>${ICON.check} พรีเมียมเริ่ม ${baht(minPaid)}</li>` : ''}
+      <li>${ICON.check} จ่ายครั้งเดียว ใช้ได้ตลอด</li>
     </ul>
   </div>
-  ${lead ? `<a class="hero-visual" href="/p/${esc(lead.slug)}" aria-label="ดูตัวอย่าง ${esc(lead.title)}" data-tilt>
-    <div class="window">
-      <div class="window-bar"><i></i><i></i><i></i><span>ตัวอย่าง · ${esc(lead.title)}</span></div>
-      <video src="/previews/${esc(lead.slug)}_horizontal.mp4" poster="/previews/${esc(lead.slug)}_horizontal.jpg" autoplay muted loop playsinline preload="metadata"></video>
-      ${kitTimeline()}
-    </div>
+  ${lead ? `<a class="hero-visual" href="/p/${esc(lead.slug)}" aria-label="ดูตัวอย่าง ${esc(lead.title)}">
+    <video src="/previews/${esc(lead.slug)}_horizontal.mp4" poster="/previews/${esc(lead.slug)}_horizontal.jpg" autoplay muted loop playsinline preload="metadata"></video>
+    <span class="hero-tag">${esc(lead.title)} · ${priceLabel(lead)}</span>
   </a>` : ''}
-</section>
-
-<section class="marquee" aria-label="โปรแกรมที่รองรับ: ${esc(editorNames.join(', '))}">
-  <div class="marquee-track" aria-hidden="true">${marquee}${marquee}${marquee}${marquee}</div>
 </section>
 
 <section id="catalog" class="catalog">
   <div class="section-head">
-    <div><p class="eyebrow">แคตตาล็อก</p><h2>สินค้าทั้งหมด</h2></div>
-    <p class="muted small" data-count-label aria-live="polite">${products.length} รายการ</p>
+    <h2>เลือกแอนิเมชัน</h2>
+    <p class="muted small" data-count-label aria-live="polite">${products.length} แบบ</p>
   </div>
-  <div class="toolbar" data-toolbar>
-    <label class="search">
-      ${ICON.search}
-      <input type="search" placeholder="ค้นหาข้อความ เช่น สั่งซื้อ, ลดราคา" aria-label="ค้นหาแอนิเมชัน" data-search autocomplete="off">
-      <kbd>/</kbd>
-    </label>
-    <div class="chips filter" role="group" aria-label="หมวดหมู่">
-      <button type="button" class="chip active" data-cat-btn="">ทั้งหมด</button>
-      ${cats.map((c) => `<button type="button" class="chip" data-cat-btn="${esc(c)}">${esc(c)}</button>`).join('')}
-    </div>
-    <div class="tools-right">
-      <select data-sort aria-label="เรียงลำดับ">
-        <option value="order">แนะนำ</option>
-        <option value="price-asc">ราคาต่ำ → สูง</option>
-        <option value="price-desc">ราคาสูง → ต่ำ</option>
-      </select>
-      <div class="seg" role="group" aria-label="รูปแบบการแสดงผล">
-        <button type="button" class="active" data-view="grid" aria-label="แบบตาราง">${ICON.grid}</button>
-        <button type="button" data-view="list" aria-label="แบบรายการ">${ICON.list}</button>
-      </div>
-    </div>
+  <div class="chips filter" role="group" aria-label="กรองตามราคา">
+    <button type="button" class="chip active" data-cat-btn="">ทั้งหมด</button>
+    ${freeCount ? '<button type="button" class="chip" data-cat-btn="free">ฟรี</button>' : ''}
+    ${paid.length ? '<button type="button" class="chip" data-cat-btn="premium">พรีเมียม</button>' : ''}
   </div>
   <div class="grid" data-grid>${cards}</div>
   <div class="empty" data-empty hidden>
-    <p><b>ไม่พบแอนิเมชันที่ค้นหา</b></p>
-    <p class="muted small">ลองคำอื่น หรือ <button type="button" class="linklike" data-reset>ล้างตัวกรอง</button></p>
+    <p><b>ไม่พบแอนิเมชัน</b></p>
+    <p class="muted small"><button type="button" class="linklike" data-reset>ดูทั้งหมด</button></p>
   </div>
-</section>
-
-<section id="kit" class="kit-section">
-  <div class="kit-copy reveal">
-    <p class="eyebrow">ปรับแต่งหลังซื้อ · ไม่จำกัดครั้ง</p>
-    <h2>อยากให้ข้อความค้างนานแค่ไหนก็ได้</h2>
-    <p class="muted">เลือกแนวตั้งหรือแนวนอน เลือกว่าจะให้ข้อความค้างนานแค่ไหน พิมพ์ประโยคเอง เลือกฟอนต์และสี แล้วได้ไฟล์วิดีโอไฟล์เดียวที่ลากใส่โปรแกรมได้ทันที</p>
-    <ol class="kit-steps">
-      <li><b>เลือกแนวและความยาว</b><span>9:16 หรือ 16:9 · 3, 5, 10, 15 หรือ 30 วินาที</span></li>
-      <li><b>ใส่ข้อความ ฟอนต์ สีของคุณ</b><span>ดูตัวอย่างเคลื่อนไหวสดก่อนสร้าง</span></li>
-      <li><b>โหลดไฟล์เดียว</b><span>สร้างเสร็จในไม่กี่วินาที เก็บในคลังตลอด</span></li>
-    </ol>
-  </div>
-  <div class="kit-visual reveal">${kitTimeline({ big: true })}</div>
 </section>
 
 <section id="how" class="how">
-  <div class="section-head"><div><p class="eyebrow">ขั้นตอน</p><h2>ซื้อครั้งเดียว อยู่ในคลังตลอดไป</h2></div></div>
+  <h2>ใช้งานง่าย 3 ขั้น</h2>
   <ol class="steps">
-    <li class="reveal"><span class="num">1</span><h3>เลือกแอนิเมชัน</h3><p>ดูตัวอย่างทั้งแนวตั้งและแนวนอนก่อนซื้อ</p></li>
-    <li class="reveal"><span class="num">2</span><h3>เข้าสู่ระบบแล้วจ่ายเงิน</h3><p>${cfg.clerk && cfg.clerk.enabled ? 'กดปุ่ม Google ปุ่มเดียวก็เข้าได้ ไม่ต้องจำรหัสผ่าน' : 'สมัครสมาชิกครั้งเดียว ใช้อีเมลกับรหัสผ่าน ไม่ต้องกรอกข้อมูลซ้ำทุกครั้ง'}</p></li>
-    <li class="reveal"><span class="num">3</span><h3>เปิดใช้จากคลัง</h3><p>ไฟล์เข้าไปอยู่ในคลังของบัญชีคุณทันที เปิดใช้ได้ทุกเมื่อ ทุกเครื่อง</p></li>
+    <li><span class="num">1</span><div><h3>เลือกแบบที่ชอบ</h3><p>ดูตัวอย่างได้ทั้งแนวตั้งและแนวนอน</p></div></li>
+    <li><span class="num">2</span><div><h3>เข้าสู่ระบบแล้ว${cfg.paymentProvider === 'manual' ? 'สแกนจ่าย' : 'ชำระเงิน'}</h3><p>${cfg.clerk && cfg.clerk.enabled ? 'กดปุ่ม Google ปุ่มเดียวก็เข้าได้ · ' : ''}แบบฟรีกดรับได้เลย ไม่ต้องจ่าย</p></div></li>
+    <li><span class="num">3</span><div><h3>ปรับข้อความแล้วโหลด</h3><p>พิมพ์ข้อความ เลือกฟอนต์ สี ความยาว 3–30 วินาที</p></div></li>
   </ol>
 </section>
 
-<section id="editors" class="editors">
-  <div class="section-head"><div><p class="eyebrow">รองรับ</p><h2>ใช้ได้กับโปรแกรมที่คุณถนัด</h2></div></div>
-  <ul class="editor-list">${editorList}</ul>
+<section id="kit" class="editors">
+  <h2>ใช้ได้กับโปรแกรมที่คุณถนัด</h2>
+  <ul class="editor-chips">${editorNames.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>
   <ul class="perks">
     <li>${ICON.check} ไฟล์พื้นเขียว พื้นดำ และแบบโปร่งใส</li>
+    <li>${ICON.check} แนวตั้ง 9:16 และแนวนอน 16:9</li>
     <li>${ICON.check} ใช้ในงานลูกค้าและงานโฆษณาได้</li>
-    <li>${ICON.check} เลือกโปรแกรมตอนใช้งานในคลัง เปลี่ยนได้ตลอด</li>
   </ul>
 </section>
 
-<section class="cta-band reveal">
+<section class="cta-band">
   <div>
-    <h2>ซื้อครั้งเดียว ใช้ได้ตลอด</h2>
-    <p>ไม่มีรายเดือน ไม่มีวันหมดอายุ ทุกอย่างที่ซื้ออยู่ในคลังของบัญชีคุณ เข้าสู่ระบบแล้วโหลดใหม่ได้ทุกเมื่อ</p>
+    <h2>เริ่มจากแบบฟรีก่อนก็ได้</h2>
+    <p>ทุกอย่างที่ได้อยู่ในคลังของคุณตลอด โหลดใหม่ได้ทุกเมื่อ</p>
   </div>
-  <div class="cta-band-actions">
-    <a class="btn light lg" href="${user ? '/library' : '/signup'}">${user ? 'เปิดคลังของฉัน' : 'สมัครสมาชิกฟรี'}</a>
-    <a class="btn outline-light lg" href="/license">อ่านสิทธิ์การใช้งาน</a>
-  </div>
+  <a class="btn light lg" href="${user ? '/library' : '#catalog'}"${user ? '' : ' data-pick="free"'}>${user ? 'เปิดคลังของฉัน' : 'ดูแบบฟรี'}</a>
 </section>`,
   });
 }
@@ -360,7 +311,7 @@ function product({ cfg, user, csrf, p, owned }) {
   return layout({
     title: p.title, shopName: cfg.shopName, user, csrf, page: 'page-product',
     body: `
-<nav class="crumb" aria-label="ตำแหน่งหน้า"><a href="/">หน้าร้าน</a><span>/</span><a href="/#catalog">สินค้าทั้งหมด</a><span>/</span><span aria-current="page">${esc(p.title)}</span></nav>
+<a class="back-link" href="/#catalog">‹ แอนิเมชันทั้งหมด</a>
 <div class="pd">
   <div class="pd-main">
     <div class="preview-head">
@@ -368,7 +319,7 @@ function product({ cfg, user, csrf, p, owned }) {
         <button type="button" class="tab active" data-show="h" role="tab" aria-selected="true">แนวนอน 16:9</button>
         <button type="button" class="tab" data-show="v" role="tab" aria-selected="false">แนวตั้ง 9:16</button>
       </div>
-      <span class="muted small">คลิปตัวอย่างมีลายน้ำ</span>
+      <span class="muted small">ตัวอย่างมีลายน้ำ ไฟล์จริงไม่มี</span>
     </div>
     <div class="preview">
       <video data-pane="h" src="/previews/${esc(p.slug)}_horizontal.mp4" poster="/previews/${esc(p.slug)}_horizontal.jpg" autoplay muted loop playsinline controls></video>
@@ -419,7 +370,7 @@ function product({ cfg, user, csrf, p, owned }) {
       ${owned ? `
       <div class="owned-box">${ICON.check}<span>คุณมีแอนิเมชันนี้ในคลังแล้ว</span></div>
       <a class="btn primary block" href="/library/${esc(owned.id)}">เปิดใช้จากคลัง</a>` : user ? `
-      <form method="post" action="/checkout" data-checkout>
+      <form method="post" action="/checkout" data-checkout id="buy-form">
         <input type="hidden" name="product" value="${esc(p.slug)}">
         <input type="hidden" name="csrf" value="${esc(csrf)}">
         <button class="btn primary block" type="submit"><span>${p.free ? 'รับฟรีเข้าคลัง' : `ซื้อเลย ${baht(p.price)}`}</span></button>
@@ -428,18 +379,18 @@ function product({ cfg, user, csrf, p, owned }) {
       <a class="btn primary block" href="/login?next=${encodeURIComponent('/p/' + p.slug)}">${p.free ? 'เข้าสู่ระบบเพื่อรับฟรี' : 'เข้าสู่ระบบเพื่อซื้อ'}</a>
       <p class="muted small center">ยังไม่มีบัญชี? <a href="/signup?next=${encodeURIComponent('/p/' + p.slug)}">สมัครสมาชิกฟรี</a> ใช้เวลาไม่ถึงนาที</p>`}
       <ul class="assure">
-        <li>${ICON.bolt} ${p.free ? 'กดรับแล้วเข้าคลังทันที ไม่ต้องจ่ายเงิน' : manualPay ? 'สแกนจ่ายด้วย PromptPay ได้ไฟล์เมื่อร้านยืนยันยอด' : 'ได้ไฟล์ทันทีหลังชำระเงิน'}</li>
-        <li>${ICON.infinity} ${p.free ? 'รับครั้งเดียว' : 'ซื้อครั้งเดียว'} อยู่ในคลังตลอดไป</li>
-        <li>${ICON.film} เลือกโปรแกรมตัดต่อตอนใช้งาน เปลี่ยนได้ตลอด</li>
-        <li>${ICON.edit} ปรับแต่งข้อความ ฟอนต์ และสีเองได้${p.free ? 'หลังรับ' : 'หลังซื้อ'}</li>
-        <li>${ICON.check} ใช้ในงานลูกค้าและโฆษณาได้</li>
+        <li>${ICON.bolt} ${p.free ? 'กดรับแล้วเข้าคลังทันที' : manualPay ? 'สแกนจ่าย PromptPay เข้าคลังเมื่อร้านยืนยันยอด' : 'ได้ไฟล์ทันทีหลังชำระเงิน'}</li>
+        <li>${ICON.edit} ปรับข้อความ ฟอนต์ สี และความยาวเองได้</li>
+        <li>${ICON.infinity} อยู่ในคลังตลอด ใช้งานลูกค้าได้</li>
       </ul>
     </section>
   </aside>
 </div>
 <div class="buy-bar" data-buy-bar>
   <div><b>${esc(p.title)}</b><span class="price${p.free ? ' free' : ''}">${priceLabel(p)}</span></div>
-  <a class="btn primary" href="#buy">${owned ? 'เปิดในคลัง' : p.free ? 'รับฟรี' : 'ซื้อเลย'}</a>
+  ${owned ? `<a class="btn primary" href="/library/${esc(owned.id)}">เปิดในคลัง</a>`
+    : user ? `<button class="btn primary" type="submit" form="buy-form">${p.free ? 'รับฟรี' : 'ซื้อเลย'}</button>`
+      : `<a class="btn primary" href="/login?next=${encodeURIComponent('/p/' + p.slug)}">${p.free ? 'รับฟรี' : 'ซื้อเลย'}</a>`}
 </div>`,
   });
 }
@@ -543,7 +494,8 @@ function transferPay({ cfg, user, csrf, order, p, expiresAt, error }) {
   ${T.promptpayId ? `<section class="box xfer-qr">
     <h2>สแกนจ่ายด้วย PromptPay</h2>
     <div class="qr-frame"><img class="qr-img" src="/pay/transfer/${esc(order.id)}/qr" alt="QR PromptPay ยอด ${esc(amt)}" width="280" height="280"><i class="qr-scan" aria-hidden="true"></i></div>
-    <p class="muted small">เปิดแอปธนาคาร สแกน QR นี้ ยอด ${esc(amt)} จะถูกใส่ให้อัตโนมัติ${T.promptpayName ? `<br>ชื่อผู้รับ: <b>${esc(T.promptpayName)}</b>` : ''}</p>
+    <a class="btn block save-qr" href="/pay/transfer/${esc(order.id)}/qr.png" download="QR-${esc(order.pay_ref)}.png">${ICON.download} บันทึกรูป QR</a>
+    <p class="muted small">จ่ายจากมือถือเครื่องนี้? กดบันทึกรูป แล้วเปิดแอปธนาคาร เลือกสแกนจากรูปภาพ ยอด ${esc(amt)} จะขึ้นให้เอง${T.promptpayName ? `<br>ชื่อผู้รับ: <b>${esc(T.promptpayName)}</b>` : ''}</p>
   </section>` : ''}
 
   ${bank ? `<section class="box xfer-bank">
