@@ -353,7 +353,7 @@ function createApp(cfg, opts = {}) {
     fontUpload: limiter('font-upload', 20, HOUR, byUser),
     styles: limiter('styles', 60, MIN15, byUser),
     confirm: limiter('transfer-confirm', 6, HOUR, byUser), // แจ้งโอนได้ 6 ครั้งต่อชั่วโมงต่อบัญชี
-    subUpload: limiter('subtitle-upload', 20, HOUR, byUser),
+    subUpload: limiter('subtitle-upload', 60, HOUR, byUser), // กันสแปม (คนทดสอบปกติไม่ถึง)
     subSave: limiter('subtitle-save', 240, MIN15, byUser),
   };
 
@@ -1457,9 +1457,7 @@ function createApp(cfg, opts = {}) {
     const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
     try { require('./transcribe').parseWav(buf); } catch { return res.status(400).json({ error: 'ไฟล์เสียงไม่ถูกต้อง' }); }
     try {
-      const fresh = subtitles.get(job.id);
-      const prompt = i > 0 ? JSON.parse(fresh.asr_json || '[]').slice(-40).map((w) => w.text).join('') : '';
-      const r = await transcriber.chunk(buf, start, prompt);
+      const r = await transcriber.chunk(buf, start);
       const out = subtitles.asrChunk(subtitles.get(job.id), i, n, r.words);
       res.json({ ok: true, done: out.done, url: `/subtitles/${job.id}` });
     } catch (e) {

@@ -51,6 +51,7 @@ function loadConfig(overrides = {}) {
   require('dotenv').config({ path: path.join(ROOT, '.env') });
   const env = { ...process.env, ...overrides };
   const serverless = isServerless(env);
+  const browserRender = (env.RENDER_MODE || (serverless ? 'browser' : 'server')) === 'browser';
   // ที่เก็บไฟล์ชั่วคราว: บน serverless เขียนได้แค่ /tmp
   const writable = (rel, envName) => path.resolve(serverless ? path.join(require('os').tmpdir(), 'aksornwai') : ROOT, env[envName] || rel);
 
@@ -142,9 +143,12 @@ function loadConfig(overrides = {}) {
       python: env.SUBTITLE_PYTHON || (fs.existsSync(path.join(ROOT, '.venv-stt', 'bin', 'python')) ? path.join(ROOT, '.venv-stt', 'bin', 'python') : 'python3'),
       model: env.SUBTITLE_MODEL || '', // ว่าง = whisper-large-v3-turbo
       dir: writable('storage/subtitles', 'SUBTITLE_DIR'),
-      maxMb: Number(env.SUBTITLE_MAX_MB || 300), // ขนาดคลิปสูงสุด
-      maxSeconds: Number(env.SUBTITLE_MAX_SECONDS || 180), // ความยาวคลิปสูงสุด (วินาที)
-      dailyLimit: Number(env.SUBTITLE_DAILY_LIMIT || 5), // อัปคลิปได้กี่คลิปต่อบัญชีต่อ 24 ชม. (0 = ไม่จำกัด)
+      // โหมดเบราว์เซอร์ คลิปไม่ถูกอัปขึ้นร้าน (ส่งแค่เสียง) จึงรับไฟล์ใหญ่/ยาวกว่าได้ · โหมดเครื่องร้านต้องเก็บคลิปไว้ในดิสก์
+      maxMb: Number(env.SUBTITLE_MAX_MB || (browserRender ? 2000 : 300)), // ขนาดคลิปสูงสุด
+      maxSeconds: Number(env.SUBTITLE_MAX_SECONDS || (browserRender ? 600 : 180)), // ความยาวคลิปสูงสุด (วินาที)
+      // จำกัดคลิปต่อบัญชีต่อ 24 ชม. · 0 = ไม่จำกัด (ค่าเริ่มต้น)
+      // เปิดเมื่ออยากกันบัญชีเดียวใช้โควตาถอดเสียงฟรีของ Groq หมดทั้งร้าน (ราว 8 ชม. เสียงต่อวันรวมทุกคน)
+      dailyLimit: Number(env.SUBTITLE_DAILY_LIMIT || 0),
       retentionHours: Number(env.SUBTITLE_RETENTION_HOURS || 24), // ลบคลิปลูกค้าและไฟล์ที่ได้อัตโนมัติหลังกี่ชั่วโมง
       concurrency: Number(env.SUBTITLE_CONCURRENCY || 1),
       asrTimeoutMin: Number(env.SUBTITLE_ASR_TIMEOUT_MIN || 20),

@@ -383,22 +383,14 @@ export async function renderAnimation(spec, onProgress = () => {}, opts = {}) {
 // ---------- คลิป: อ่านข้อมูล / แยกเสียง ----------
 // คลิปที่เบราว์เซอร์นี้เปิดภาพไม่ได้ (เช่น HEVC/H.265 จาก iPhone หรือ Android, HDR 10-bit)
 // → แปลงเป็น MP4 H.264 ในเครื่องลูกค้าด้วย ffmpeg.wasm ครั้งเดียว แล้วใช้ไฟล์ที่แปลงทั้งตัวอย่างและตอนสร้างคลิป
-// Safari บน iPhone/iPad/Mac เล่น HEVC และ HDR จากกล้อง iPhone ได้เอง ไม่ต้องแปลง
-const appleWebKit = () => {
-  const ua = navigator.userAgent;
-  return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome|Chromium|Edg|Firefox/.test(ua));
-};
+// แปลงเฉพาะคลิปที่เบราว์เซอร์นี้ถอดรหัส/เล่นไม่ได้จริง (คลิปที่เล่นได้ใช้ไฟล์เดิม คมชัดเท่าต้นฉบับ)
 export function needsConvert(info) {
-  if (!info.canDecode || !info.playable) return true;
-  // HEVC / Dolby Vision / HDR 10-bit นอก Safari: หลายเครื่องเล่นเป็นภาพดำหรือสีเพี้ยน
-  const hevc = /hevc|hvc1|hev1|dvh1|dvhe/i.test(`${info.codec} ${info.codecStr}`);
-  if (!appleWebKit() && (info.hdr || hevc)) return true;
-  return false;
+  return !info.canDecode || !info.playable;
 }
-export async function playableClip(file, onProgress = () => {}, { force = false } = {}) {
+export async function playableClip(file, onProgress = () => {}) {
   const info = await probeClip(file);
   if (!info.ok) throw new Error('เปิดไฟล์นี้ไม่ได้ ไฟล์อาจเสียหรือไม่ใช่วิดีโอ ลองส่งออกจากแอปตัดต่อเป็น MP4 แล้วเลือกใหม่');
-  if (!force && !needsConvert(info)) return { file, info, converted: false };
+  if (!needsConvert(info)) return { file, info, converted: false };
   const ff = await getFFmpeg((stage, k) => onProgress(Math.round(2 + 13 * k), stage));
   const dir = `/in${++uid}`;
   const out = `conv${uid}.mp4`;
