@@ -12,7 +12,6 @@ function showError(msg) {
   if (!errBox) return;
   errBox.hidden = true;
   errBox.textContent = msg;
-  void errBox.offsetWidth; // เล่นแอนิเมชันสั่นใหม่ทุกครั้ง
   errBox.hidden = false;
 }
 
@@ -71,7 +70,7 @@ function appearance() {
       headerTitle: { fontSize: '1.15rem' },
     },
     // ซ่อนป้าย "Development mode" ของ Clerk (ตัวเลือกที่ Clerk มีให้เอง) · ป้าย "Secured by Clerk" ปิดได้เฉพาะแพ็กเกจเสียเงินของ Clerk
-    layout: { socialButtonsPlacement: 'top', socialButtonsVariant: 'blockButton', shimmer: true, unsafe_disableDevelopmentModeWarnings: true },
+    layout: { socialButtonsPlacement: 'top', socialButtonsVariant: 'blockButton', shimmer: false, unsafe_disableDevelopmentModeWarnings: true },
   };
 }
 

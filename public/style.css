@@ -1233,30 +1233,26 @@ img[loading="lazy"]:not(.loaded) { opacity: 0; }
 .ca-tabs.go .ca-pill { transform: translateX(calc((1 - var(--x)) * 100%)); }
 .ca-tabs.go a[aria-current] { color: var(--muted); }
 
-.ca-error { margin: 14px 0 0; animation: ca-shake .4s var(--ease); }
-@keyframes ca-shake { 25%, 75% { transform: translateX(-4px); } 50% { transform: translateX(4px); } }
+.ca-error { margin: 14px 0 0; }
 
 .ca-stage { position: relative; margin-top: 22px; min-height: 210px; }
 .ca-mount { opacity: 0; transition: opacity .35s var(--ease); }
 .ca-stage.ready .ca-mount { opacity: 1; }
 .ca-skeleton { position: absolute; inset: 0 0 auto; display: grid; gap: 12px; transition: opacity .25s; }
 .ca-stage.ready .ca-skeleton { opacity: 0; pointer-events: none; }
-.sk { display: block; border-radius: 12px; background: var(--surface-2); animation: ca-pulse 1.4s ease-in-out infinite; }
+.sk { display: block; border-radius: 12px; background: var(--surface-2); }
 .sk-btn { height: 48px; } .sk-input { height: 46px; }
 .sk-or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .8rem; } .sk-or i { flex: 1; height: 1px; background: var(--line); }
-@keyframes ca-pulse { 50% { opacity: .55; } }
 
 /* ปุ่มและช่องกรอกของ Clerk (ตั้ง class เพิ่มใน clerk-auth.js) */
 .ca-mount .cl-rootBox, .ca-mount .cl-cardBox, .ca-mount .cl-card { width: 100%; max-width: none; }
 .ca-mount .ak-social { min-height: 48px; border-radius: 12px !important; font-weight: 700 !important; box-shadow: none !important;
-  transition: transform .2s var(--ease), border-color .2s, background .2s !important; }
-.ca-mount .ak-social:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--ink) 25%, var(--line)) !important; }
-.ca-mount .ak-social:active { transform: scale(.985); }
+  transition: border-color .2s, background .2s !important; }
+.ca-mount .ak-social:hover { border-color: color-mix(in srgb, var(--ink) 25%, var(--line)) !important; }
 .ca-mount .ak-input { min-height: 46px; transition: border-color .2s, box-shadow .2s !important; }
 .ca-mount .ak-input:focus { box-shadow: 0 0 0 3px var(--accent-soft) !important; border-color: var(--accent) !important; }
-.ca-mount .ak-primary { min-height: 48px; border-radius: 12px !important; font-weight: 700 !important; text-transform: none !important; box-shadow: none !important; transition: transform .2s var(--ease), filter .2s !important; }
-.ca-mount .ak-primary:hover { transform: translateY(-1px); filter: brightness(1.08); }
-.ca-mount .ak-primary:active { transform: scale(.985); }
+.ca-mount .ak-primary { min-height: 48px; border-radius: 12px !important; font-weight: 700 !important; text-transform: none !important; box-shadow: none !important; transition: filter .2s !important; }
+.ca-mount .ak-primary:hover { filter: brightness(1.08); }
 
 /* เข้าสำเร็จ: เครื่องหมายถูกวาดเส้น */
 .ca-done { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; text-align: center; gap: 6px; }
@@ -1273,9 +1269,8 @@ img[loading="lazy"]:not(.loaded) { opacity: 0; }
   .clerk-auth { padding: 12px 0 24px; align-items: start; }
   .ca-card { padding: 24px 18px 16px; border-radius: 20px; }
 }
-.calm .sk { animation: none; }
 @media (prefers-reduced-motion: reduce) {
-  .ca-card, .sk, .ca-error, .ca-done-title { animation: none !important; opacity: 1; }
+  .ca-card, .ca-done-title { animation: none !important; opacity: 1; }
   .ca-done circle, .ca-done path { animation: none; stroke-dashoffset: 0; }
   .ca-pill, .ca-mount { transition: none; }
 }
