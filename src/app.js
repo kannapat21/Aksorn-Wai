@@ -35,6 +35,11 @@ function createApp(cfg, opts = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');
+  // จุดเช็กว่าเว็บยังตื่นอยู่ (ตัวปลุกทุก 10 นาทีเรียกที่นี่) ตอบสั้นที่สุด ไม่แตะฐานข้อมูล
+  app.get('/healthz', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.type('text/plain').send('ok');
+  });
   // Netlify: คำขอผ่าน CDN ของ Netlify เสมอ IP จริงของลูกค้าอยู่ใน x-nf-client-connection-ip (ใช้จำกัดจำนวนครั้ง/กันเดารหัส)
   if (cfg.serverless) {
     app.use((req, res, next) => {

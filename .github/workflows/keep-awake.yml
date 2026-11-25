@@ -1,0 +1,24 @@
+# ปลุกร้านบน Render ฟรีไม่ให้หลับ (Render ปิดเว็บถ้าไม่มีคนเข้า 15 นาที)
+# GitHub เรียก /healthz ทุก 10 นาที ฟรีเพราะรีโปเป็นสาธารณะ · ถ้าจะหยุด: แท็บ Actions → Keep shop awake → Disable workflow
+# เปลี่ยนลิงก์ร้าน: ตั้ง Variable ชื่อ SHOP_URL ใน Settings → Secrets and variables → Actions → Variables
+name: Keep shop awake
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+permissions: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /healthz
+        env:
+          SHOP_URL: ${{ vars.SHOP_URL || 'https://aksornwai.onrender.com' }}
+        run: |
+          for i in 1 2 3; do
+            if curl -fsS --max-time 90 "$SHOP_URL/healthz"; then echo; exit 0; fi
+            sleep 10
+          done
+          echo "ร้านไม่ตอบ: $SHOP_URL" >&2
+          exit 1

@@ -154,6 +154,14 @@ const getUrl = (orderId, file, editor) => `/library/${orderId}/get/${encodeURICo
 
 // ---------- บัญชี ----------
 
+test('/healthz ตอบ ok สั้นๆ ไม่ตั้งคุกกี้ ไม่แคช (ใช้ปลุกเว็บบน Render)', async () => {
+  const r = await fetch(base + '/healthz');
+  assert.equal(r.status, 200);
+  assert.equal(await r.text(), 'ok');
+  assert.equal(r.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(r.headers.getSetCookie(), []);
+});
+
 test('สมัครสมาชิก: เก็บรหัสผ่านเป็น scrypt, เข้าสู่ระบบให้เลย, ตรวจอีเมล/รหัสผ่าน/ซ้ำ/CSRF', async () => {
   const c = client();
   const r = await c.signup('New@Example.com', 'correct-horse-9', 'ทดสอบ');
