@@ -1280,6 +1280,82 @@ img[loading="lazy"]:not(.loaded) { opacity: 0; }
 /* หน้าแรกของกล่อง (มีปุ่ม Google) มีหัวข้อของร้านแล้ว ซ่อนหัวข้อของ Clerk · ขั้นถัดไป (กรอกรหัสจากอีเมล) ยังแสดง */
 .ca-mount .cl-card:has(.cl-socialButtonsRoot) .cl-header { display: none; }
 
+/* =================================================================
+   หน้าแรก + การ์ดสินค้า แบบเรียบ อ่านง่ายบนมือถือก่อน
+   (ไม่มีพื้นหลังเบลอ แอนิเมชันเด่นมีแค่คลิปตัวอย่างสินค้า)
+   ================================================================= */
+.page-home .hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px; padding: 40px 0 24px; }
+.page-home .hero h1 { font-size: clamp(1.9rem, 1.2rem + 3vw, 3.2rem); line-height: 1.25; margin: 0 0 .35em; letter-spacing: -.015em; }
+.page-home .hero .lead { font-size: 1.05rem; margin: 0; }
+.page-home .hero-cta { margin: 22px 0 16px; }
+.hero-ticks { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: .92rem; }
+.hero-ticks li { display: flex; align-items: center; gap: 6px; }
+.hero-ticks svg { color: var(--ok); width: 16px; height: 16px; }
+.page-home .hero-visual { position: relative; border-radius: 18px; overflow: hidden; background: #0b0b0d; box-shadow: var(--shadow-lg); perspective: none; }
+.page-home .hero-visual video { width: 100%; aspect-ratio: 16/9; object-fit: cover; }
+.hero-tag { position: absolute; left: 12px; bottom: 12px; font-size: .82rem; font-weight: 700; color: #fff; background: rgba(0,0,0,.62); padding: 4px 12px; border-radius: 999px; }
+
+.page-home .section-head { align-items: center; margin: 40px 0 12px; }
+.page-home .chips.filter { margin-bottom: 16px; }
+.page-home .chips.filter .chip { padding: 8px 18px; font-size: .95rem; }
+
+/* การ์ด: รูปใหญ่ ชื่อ ราคา และปุ่มชัดเจน */
+.page-home .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.card .card-link { display: flex; flex-direction: column; }
+.card-body { display: flex; flex-direction: column; flex: 1; }
+.card-body h3 { font-size: 1.08rem; }
+.card-body .muted { margin: 2px 0 12px; -webkit-line-clamp: 2; }
+.card-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.card-foot .price { font-size: 1.25rem; }
+.card-cta { display: inline-flex; align-items: center; min-height: 40px; padding: 0 16px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: .92rem; }
+.card[data-cat="free"] .card-cta { background: var(--ok); color: #fff; }
+.badge-free, .badge-premium { font-size: .8rem; padding: 4px 12px; }
+.badge-premium { background: #ffd166; animation: none; box-shadow: none; }
+.badge-free { box-shadow: none; }
+
+/* ขั้นตอน: แถวสั้นๆ ไม่ใช่การ์ดใหญ่ */
+.page-home .how, .page-home .editors { margin-top: 48px; }
+.page-home .how h2, .page-home .editors h2 { margin: 0 0 14px; }
+.page-home .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.page-home .steps li { display: flex; gap: 14px; align-items: flex-start; padding: 16px; }
+.page-home .steps .num { margin: 0; flex: none; }
+.page-home .steps p { font-size: .92rem; }
+.editor-chips { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.editor-chips li { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-weight: 700; font-size: .92rem; }
+.page-home .perks { flex-direction: column; gap: 6px; margin-top: 16px; }
+.page-home .cta-band { margin-top: 48px; padding: 28px; background: #1e3a5f; }
+.page-home .cta-band h2 { font-size: 1.4rem; }
+
+/* หน้าสินค้า */
+.back-link { display: inline-flex; align-items: center; min-height: 44px; margin: -6px 0 6px; color: var(--muted); text-decoration: none; font-size: .95rem; }
+.back-link:hover { color: var(--ink); }
+.save-qr { margin: 14px 0 6px; }
+
+@media (max-width: 960px) {
+  .page-home .hero { grid-template-columns: 1fr; gap: 24px; padding-top: 20px; }
+}
+@media (max-width: 900px) {
+  .page-home .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .page-home .steps { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .page-home .hero { padding-top: 12px; }
+  .page-home .hero-cta .btn { flex: 1 1 0; min-height: 52px; }
+  .page-home .grid { grid-template-columns: 1fr; gap: 14px; }
+  .page-home .card-body { padding: 14px 16px 16px; }
+  .page-home .card-body h3 { font-size: 1.12rem; }
+  .card-cta { min-height: 44px; }
+  .page-home .steps li { padding: 14px; }
+  .page-home .cta-band { padding: 22px; flex-direction: column; align-items: stretch; }
+  .page-home .cta-band .btn { width: 100%; }
+  /* ท้ายเว็บ: ลิงก์ 2 คอลัมน์ กดง่าย ไม่ยาวเกิน */
+  .foot-links { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+  .foot-links a { padding: 8px 0; }
+  .preview-head { flex-direction: column; align-items: stretch; gap: 4px; }
+  .preview-head .seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .preview-head .seg .tab { min-height: 44px; }
+}
+.buy-bar .btn { min-width: 128px; }
 /* ใต้คลิปหน้าแก้ซับ: สถานะแปลงคลิป / ปุ่มแปลงเมื่อภาพไม่ขึ้น */
 .sub-fix { margin: 6px 2px 0; text-align: center; color: var(--muted); }
 .sub-fix .error { color: var(--err); }

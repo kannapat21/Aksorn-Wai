@@ -269,7 +269,7 @@
         if (ok) { shown++; c.classList.add('in'); }
       });
       if (empty) empty.hidden = shown !== 0;
-      if (countLabel) countLabel.textContent = shown + ' รายการ' + (shown !== cards.length ? ' จาก ' + cards.length : '');
+      if (countLabel) countLabel.textContent = shown + ' แบบ' + (shown !== cards.length ? ' จาก ' + cards.length : '');
     };
     var sortCards = function () {
       var mode = sortSel ? sortSel.value : 'order';
@@ -308,6 +308,14 @@
       b.addEventListener('click', function () { var v = b.getAttribute('data-view'); setView(v); store.set('view', v); });
     });
     if (store.get('view') === 'list') setView('list');
+
+    // ปุ่ม "ลองแบบฟรี" ในหน้าแรก: เลื่อนลงมาแล้วกรองเฉพาะแบบฟรี
+    document.querySelectorAll('[data-pick]').forEach(function (a) {
+      a.addEventListener('click', function () {
+        var want = a.getAttribute('data-pick');
+        catBtns.forEach(function (x) { if (x.getAttribute('data-cat-btn') === want) x.click(); });
+      });
+    });
 
     var reset = document.querySelector('[data-reset]');
     if (reset) reset.addEventListener('click', function () {

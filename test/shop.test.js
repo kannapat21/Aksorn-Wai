@@ -1431,6 +1431,13 @@ test('manual: ลูกค้ากดยืนยันโอน → รอต�
     // คนอื่นดูหน้า/QR/สถานะของเราไม่ได้
     assert.equal((await bob.req(`/pay/transfer/${id}`)).status, 404);
     assert.equal((await bob.req(`/pay/transfer/${id}/qr`)).status, 404);
+    // ปุ่มบันทึกรูป QR (PNG) สำหรับจ่ายจากมือถือเครื่องเดียวกัน · คนอื่นโหลดไม่ได้
+    assert.ok(page.includes(`/pay/transfer/${id}/qr.png`) && page.includes('บันทึกรูป QR'));
+    const png = await alice.req(`/pay/transfer/${id}/qr.png`);
+    assert.equal(png.status, 200); assert.equal(png.headers.get('content-type'), 'image/png');
+    assert.match(png.headers.get('content-disposition'), /attachment; filename="QR-/);
+    assert.equal(Buffer.from(await png.arrayBuffer()).subarray(1, 4).toString(), 'PNG');
+    assert.equal((await bob.req(`/pay/transfer/${id}/qr.png`)).status, 404);
     assert.equal((await bob.post(`/pay/transfer/${id}/confirm`, { sure: '1' })).status, 404);
     // สั่งซ้ำสินค้าเดิม = ใช้ออเดอร์เดิม (ค้างได้ 1 ออเดอร์ต่อสินค้าต่อบัญชี)
     assert.equal((await alice.post('/checkout', { product: 'order-now' })).headers.get('location'), `/pay/transfer/${id}`);
@@ -1696,6 +1703,12 @@ test('ของฟรี: กดรับ → เข้าคลังทัน�
   const home = await (await anon.req('/')).text();
   assert.match(home, /class="badge-free">ฟรี</);
   assert.match(home, /class="badge-premium">/);
+  // หน้าแรก: กรองฟรี/พรีเมียมได้ การ์ดมีราคาและปุ่มชัด
+  assert.match(home, /data-cat-btn="free">ฟรี</);
+  assert.match(home, /data-cat-btn="premium">พรีเมียม</);
+  assert.match(home, /<span class="card-cta">รับฟรี ›<\/span>/);
+  assert.match(home, /<span class="card-cta">ดูและซื้อ ›<\/span>/);
+  assert.doesNotMatch(home, /class="marquee"|data-type-rotate|class="hero-bg"/, 'ไม่มีแถบวิ่ง ตัวพิมพ์ หรือพื้นหลังเบลอ');
 
   const c = await newUser('free@example.com');
   const page = await (await c.req('/p/follow-now')).text();
