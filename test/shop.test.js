@@ -1457,6 +1457,12 @@ test('manual: ลูกค้ากดยืนยันโอน → รอต�
     assert.equal(cf.headers.get('location'), `/order/${id}`);
     const o1r = ord(id);
     assert.equal(o1r.status, 'review'); assert.ok(!o1r.transfer_time); assert.equal(o1r.paid_at, null);
+    // ร้านได้อีเมลแจ้ง: สินค้า ยอด รหัสอ้างอิง เลขออเดอร์ อีเมลลูกค้า ลิงก์หลังบ้าน
+    await new Promise((r) => setImmediate(r));
+    const shopMail = mctx.mailer.sent.filter((m) => m.to === 'boss@shop.test').at(-1);
+    assert.ok(shopMail, 'ส่งอีเมลแจ้งร้าน');
+    assert.match(shopMail.subject, /^\[แจ้งโอน\]/); assert.ok(shopMail.subject.includes(o1.pay_ref));
+    for (const x of [o1.pay_ref, id, 'alice@example.com', 'http://shop.test/admin/transfers', `฿${(o1.transfer_amount / 100).toFixed(2)}`]) assert.ok(shopMail.text.includes(x), x);
     assert.equal((await alice.req(`/library/${id}`)).status, 404, 'ยังไม่อนุมัติ = ยังไม่มีในคลัง');
     assert.match(await (await alice.req(`/order/${id}`)).text(), /รอร้านตรวจสอบ/);
     // คลังแสดงคำสั่งซื้อที่ยังไม่เสร็จ พร้อมลิงก์กลับไปทำต่อ (ของใครของมัน)
@@ -1529,10 +1535,16 @@ test('manual: ลูกค้ากดยืนยันโอน → รอต�
 
     // กดยืนยันถี่เกิน/ครบจำนวนครั้ง → ถูกจำกัด (ออเดอร์ของ bob)
     const o2id = o2.id;
+    // ระบบอีเมลล่ม (โยน error ทันที / ส่งไม่สำเร็จทีหลัง) ลูกค้ายังกดยืนยันโอนได้ตามปกติ
+    const goodSend = mctx.mailer.send;
+    let fails = 0;
+    mctx.mailer.send = () => { if (fails++ % 2) throw new Error('mail down'); return Promise.reject(new Error('mail down')); };
     for (let i = 0; i < 5; i++) {
       assert.equal((await bob.post(`/pay/transfer/${o2id}/confirm`, { sure: '1' })).status, 303);
       if (i < 4) { await boss.post(`/admin/transfers/${o2id}/reject`, { reason: 'ไม่พบรายการ' }); t += 1000; }
     }
+    assert.ok(fails >= 5);
+    mctx.mailer.send = goodSend;
     await boss.post(`/admin/transfers/${o2id}/reject`, { reason: 'ไม่พบรายการ' });
     const over = await bob.post(`/pay/transfer/${o2id}/confirm`, { sure: '1' });
     assert.ok([400, 429].includes(over.status), 'แจ้งเกินจำนวนครั้งต่อออเดอร์/ต่อชั่วโมงไม่ได้');
@@ -1776,4 +1788,11 @@ test('ไม่มีป๊อปอัปของเบราว์เซอ�
     assert.ok(!/(^|[^.\w])(window\.)?(confirm|alert|prompt)\s*\(/m.test(src), `${f} ยังเรียกป๊อปอัปของเบราว์เซอร์`);
   }
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'app.js'), 'utf8'), /AW\.confirm = function/);
+});
+
+test('SHOP_NOTIFY_EMAIL: หลายอีเมลคั่นด้วย , · ไม่ตั้งใช้ ADMIN_EMAIL · อีเมลผิดรูปแบบถูกข้าม', () => {
+  const base = { NODE_ENV: 'test', DATABASE_FILE: ':memory:', products: testProducts() };
+  assert.deepEqual(loadConfig({ ...base, ADMIN_EMAIL: 'Boss@Shop.test' }).mail.notify, ['boss@shop.test']);
+  assert.deepEqual(loadConfig({ ...base, ADMIN_EMAIL: 'boss@shop.test', SHOP_NOTIFY_EMAIL: ' a@x.test, nope ,B@y.test' }).mail.notify, ['a@x.test', 'b@y.test']);
+  assert.deepEqual(loadConfig({ ...base, ADMIN_EMAIL: '' }).mail.notify, []);
 });

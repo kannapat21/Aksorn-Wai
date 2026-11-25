@@ -194,12 +194,13 @@ if (local) {
   const id = local.getAttribute('data-local-clip');
   const video = $('[data-video]');
   const ask = $('[data-clip-ask]');
-  // แถบใต้คลิป: แจ้งสถานะ + ปุ่ม "ภาพไม่ขึ้น? แปลงคลิป" (เผื่อเครื่องที่ตรวจล่วงหน้าไม่เจอ)
+  // แถบใต้คลิป: แจ้งสถานะตอนแปลงคลิปอัตโนมัติ (ซ่อนไว้ถ้าไม่มีอะไรต้องบอก)
   const fix = document.createElement('div');
   fix.className = 'sub-fix small';
-  fix.innerHTML = '<span data-fix-msg></span> <button type="button" class="linklike" data-fix-go>ภาพไม่ขึ้นหรือเป็นสีดำ? กดแปลงคลิปให้เล่นได้</button>';
+  fix.innerHTML = '<span data-fix-msg></span>';
+  fix.hidden = true;
   local.appendChild(fix);
-  const fixMsg = $('[data-fix-msg]', fix), fixGo = $('[data-fix-go]', fix);
+  const fixMsg = $('[data-fix-msg]', fix);
   if (/\bLine\/|FBAN|FBAV|Instagram|TikTok/i.test(navigator.userAgent)) {
     fix.hidden = false;
     fixMsg.textContent = 'คุณเปิดผ่านแอปแชท/โซเชียล ซึ่งมักเล่นคลิปไม่ได้ แนะนำเปิดลิงก์นี้ใน Chrome หรือ Safari ·';
@@ -207,20 +208,19 @@ if (local) {
   let converting = false, autoTried = false;
   const convert = async (why) => {
     if (converting || !clipFile) return;
-    converting = true; fix.hidden = false; fixGo.hidden = true;
+    converting = true; fix.hidden = false;
     fixMsg.className = '';
     try {
       const pc = await playableClip(clipFile, (p, s) => { fixMsg.textContent = `${why} ${s || 'กำลังแปลงคลิป'} ${p}%`; }, { force: true });
       await keepClip(id, pc.file);
       fixMsg.textContent = 'แปลงคลิปเสร็จแล้ว';
       use(pc.file, true);
-      setTimeout(() => { if (!converting) { fixMsg.textContent = ''; fixGo.hidden = false; } }, 4000);
+      setTimeout(() => { if (!converting) { fixMsg.textContent = ''; fix.hidden = true; } }, 4000);
     } catch (err) {
       fixMsg.textContent = `${err.message || 'แปลงคลิปไม่สำเร็จ'} · ลองส่งออกคลิปเป็น MP4 (H.264) จากแอปกล้องหรือแอปตัดต่อ แล้วเลือกใหม่`;
-      fixMsg.className = 'error'; fixGo.hidden = false;
+      fixMsg.className = 'error';
     } finally { converting = false; }
   };
-  fixGo.addEventListener('click', () => convert('กำลังแปลงคลิป ·'));
   // ตรวจว่าคลิปเล่นภาพได้จริง: เล่นไม่ได้ / ไม่มีภาพ / ดำทั้งเฟรม → แปลงเป็น H.264 อัตโนมัติ (ครั้งเดียว)
   const frameDark = () => {
     try {
@@ -257,14 +257,14 @@ if (local) {
       video.src = URL.createObjectURL(f); video.load();
       check(converted).then((ok) => {
         if (ok || converted || clipFile !== f) return;
-        if (!autoTried) { autoTried = true; convert('เครื่องนี้เล่นภาพคลิปนี้ไม่ได้ กำลังแปลงเป็น MP4 ให้อัตโนมัติ ·'); } else { fix.hidden = false; }
+        if (!autoTried) { autoTried = true; convert('เครื่องนี้เล่นภาพคลิปนี้ไม่ได้ กำลังแปลงเป็น MP4 ให้อัตโนมัติ ·'); } else { fix.hidden = false; fixMsg.className = 'error'; fixMsg.textContent = 'เครื่องนี้ยังเล่นคลิปนี้ไม่ได้ ลองส่งออกคลิปเป็น MP4 จากแอปกล้องหรือแอปตัดต่อ แล้วเลือกใหม่'; }
       });
     }
     if (ask) ask.hidden = true;
     // คลื่นเสียงของไทม์ไลน์ คำนวณจากคลิปในเครื่อง (ร้านไม่มีคลิป)
     if ($('[data-tl-wave]')) wavePeaks(f).then((peaks) => document.dispatchEvent(new CustomEvent('aw:peaks', { detail: peaks }))).catch(() => {});
   };
-  if (video) video.addEventListener('error', () => { if (clipFile && !converting) fix.hidden = false; });
+  if (video) video.addEventListener('error', () => { if (clipFile && !converting && !autoTried) { autoTried = true; convert('เครื่องนี้เล่นคลิปนี้ไม่ได้ กำลังแปลงเป็น MP4 ให้อัตโนมัติ ·'); } });
   if (ask) $('input[type=file]', ask).addEventListener('change', async (e) => {
     const f = e.target.files[0];
     if (!f) return;

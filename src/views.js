@@ -615,15 +615,17 @@ ${cfg.baseUrl}/pay/transfer/${order.id}
 }
 
 function adminTransferEmail({ cfg, order, p }) {
-  return `มีลูกค้าแจ้งโอนเงิน รอตรวจสอบ
+  return `มีลูกค้ากดยืนยันการโอนเงิน รอร้านตรวจสอบ
 
 สินค้า: ${p.title}
 ยอดที่ต้องเจอในแอปธนาคาร: ${bahtExact(order.transfer_amount)}
 รหัสอ้างอิง: ${order.pay_ref}
+เลขออเดอร์: ${order.id}
 ลูกค้า: ${order.email}
-ลูกค้ากดยืนยันโอนเมื่อ: ${thDate(order.confirmed_at || Date.now())}
+กดยืนยันเมื่อ: ${thDate(order.confirmed_at || Date.now())}${order.confirm_count > 1 ? ` (ครั้งที่ ${order.confirm_count})` : ''}
 
-ตรวจและอนุมัติที่: ${cfg.baseUrl}/admin/transfers`;
+เช็กยอดในแอปธนาคาร แล้วกดอนุมัติที่:
+${cfg.baseUrl}/admin/transfers`;
 }
 
 function orderStatus({ cfg, user, csrf, order, p }) {
