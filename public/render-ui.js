@@ -194,13 +194,77 @@ if (local) {
   const id = local.getAttribute('data-local-clip');
   const video = $('[data-video]');
   const ask = $('[data-clip-ask]');
-  const use = (f) => {
+  // แถบใต้คลิป: แจ้งสถานะ + ปุ่ม "ภาพไม่ขึ้น? แปลงคลิป" (เผื่อเครื่องที่ตรวจล่วงหน้าไม่เจอ)
+  const fix = document.createElement('div');
+  fix.className = 'sub-fix small';
+  fix.innerHTML = '<span data-fix-msg></span> <button type="button" class="linklike" data-fix-go>ภาพไม่ขึ้นหรือเป็นสีดำ? กดแปลงคลิปให้เล่นได้</button>';
+  local.appendChild(fix);
+  const fixMsg = $('[data-fix-msg]', fix), fixGo = $('[data-fix-go]', fix);
+  if (/\bLine\/|FBAN|FBAV|Instagram|TikTok/i.test(navigator.userAgent)) {
+    fix.hidden = false;
+    fixMsg.textContent = 'คุณเปิดผ่านแอปแชท/โซเชียล ซึ่งมักเล่นคลิปไม่ได้ แนะนำเปิดลิงก์นี้ใน Chrome หรือ Safari ·';
+  }
+  let converting = false, autoTried = false;
+  const convert = async (why) => {
+    if (converting || !clipFile) return;
+    converting = true; fix.hidden = false; fixGo.hidden = true;
+    fixMsg.className = '';
+    try {
+      const pc = await playableClip(clipFile, (p, s) => { fixMsg.textContent = `${why} ${s || 'กำลังแปลงคลิป'} ${p}%`; }, { force: true });
+      await keepClip(id, pc.file);
+      fixMsg.textContent = 'แปลงคลิปเสร็จแล้ว';
+      use(pc.file, true);
+      setTimeout(() => { if (!converting) { fixMsg.textContent = ''; fixGo.hidden = false; } }, 4000);
+    } catch (err) {
+      fixMsg.textContent = `${err.message || 'แปลงคลิปไม่สำเร็จ'} · ลองส่งออกคลิปเป็น MP4 (H.264) จากแอปกล้องหรือแอปตัดต่อ แล้วเลือกใหม่`;
+      fixMsg.className = 'error'; fixGo.hidden = false;
+    } finally { converting = false; }
+  };
+  fixGo.addEventListener('click', () => convert('กำลังแปลงคลิป ·'));
+  // ตรวจว่าคลิปเล่นภาพได้จริง: เล่นไม่ได้ / ไม่มีภาพ / ดำทั้งเฟรม → แปลงเป็น H.264 อัตโนมัติ (ครั้งเดียว)
+  const frameDark = () => {
+    try {
+      const c = document.createElement('canvas'); c.width = 24; c.height = 24;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(video, 0, 0, 24, 24);
+      const d = g.getImageData(0, 0, 24, 24).data;
+      let max = 0;
+      for (let i = 0; i < d.length; i += 4) max = Math.max(max, d[i], d[i + 1], d[i + 2]);
+      return max < 6;
+    } catch (e) { return false; }
+  };
+  const check = (converted) => new Promise((done) => {
+    let settled = false;
+    const end = (ok) => { if (settled) return; settled = true; clearTimeout(t); video.removeEventListener('error', onErr); video.removeEventListener('loadeddata', onData); done(ok); };
+    const onErr = () => end(false);
+    const onData = () => {
+      if (!video.videoWidth) return end(false); // มีแต่เสียง ภาพถอดรหัสไม่ได้
+      if (!frameDark()) return end(true);
+      // เฟรมแรกดำ (คลิปอาจเริ่มจากจอดำ) ลองดูกลางคลิปก่อนตัดสิน
+      const back = video.currentTime;
+      video.addEventListener('seeked', function once() { video.removeEventListener('seeked', once); const dark = frameDark(); video.currentTime = back; end(!dark); });
+      video.currentTime = Math.min((video.duration || 2) / 2, 5);
+    };
+    video.addEventListener('error', onErr);
+    video.addEventListener('loadeddata', onData);
+    // iPhone ไม่โหลดภาพจนกว่าจะกดเล่น: มีขนาดภาพแล้วถือว่าเล่นได้
+    const t = setTimeout(() => end(video.readyState >= 1 && video.videoWidth > 0), 8000);
+    if (converted) end(true);
+  });
+  const use = (f, converted) => {
     clipFile = f;
-    if (video) { video.src = URL.createObjectURL(f); video.load(); }
+    if (video) {
+      video.src = URL.createObjectURL(f); video.load();
+      check(converted).then((ok) => {
+        if (ok || converted || clipFile !== f) return;
+        if (!autoTried) { autoTried = true; convert('เครื่องนี้เล่นภาพคลิปนี้ไม่ได้ กำลังแปลงเป็น MP4 ให้อัตโนมัติ ·'); } else { fix.hidden = false; }
+      });
+    }
     if (ask) ask.hidden = true;
     // คลื่นเสียงของไทม์ไลน์ คำนวณจากคลิปในเครื่อง (ร้านไม่มีคลิป)
     if ($('[data-tl-wave]')) wavePeaks(f).then((peaks) => document.dispatchEvent(new CustomEvent('aw:peaks', { detail: peaks }))).catch(() => {});
   };
+  if (video) video.addEventListener('error', () => { if (clipFile && !converting) fix.hidden = false; });
   if (ask) $('input[type=file]', ask).addEventListener('change', async (e) => {
     const f = e.target.files[0];
     if (!f) return;

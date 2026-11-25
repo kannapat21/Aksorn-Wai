@@ -103,8 +103,31 @@
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
 
-  back.addEventListener('click', function () { go(cur - 1); });
-  next.addEventListener('click', function () {
+  // มือถือ: ตอนคีย์บอร์ดเปิดอยู่ แตะครั้งแรกเบราว์เซอร์จะปิดคีย์บอร์ดก่อน แถบล่างเลื่อนลง (และปุ่มย้อนกลับโผล่)
+  // click เลยไปตกที่อื่น ต้องแตะซ้ำ → ทำงานตอนยกนิ้ว (ก่อนคีย์บอร์ดยุบ) และกันไม่ให้ปุ่มแย่งโฟกัสจากช่องพิมพ์
+  function tap(btn, fn) {
+    var down = false, doneAt = 0;
+    btn.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'mouse') return;
+      down = true;
+      e.preventDefault(); // ไม่ให้ช่องพิมพ์เสียโฟกัส (คีย์บอร์ดยังไม่ยุบ แถบไม่ขยับ)
+    });
+    btn.addEventListener('pointercancel', function () { down = false; });
+    btn.addEventListener('pointerleave', function () { down = false; });
+    btn.addEventListener('pointerup', function (e) {
+      if (!down || e.pointerType === 'mouse') return;
+      down = false;
+      if (btn.disabled) return;
+      doneAt = Date.now();
+      fn();
+    });
+    btn.addEventListener('click', function () {
+      if (Date.now() - doneAt < 700) return; // ทำไปแล้วตอนยกนิ้ว
+      fn();
+    });
+  }
+  tap(back, function () { go(cur - 1); });
+  tap(next, function () {
     if (cur < steps.length - 1) return go(cur + 1);
     if (!canLeave(0)) { go(0); return; }
     if (renderBtn && !renderBtn.disabled) {

@@ -71,7 +71,7 @@ h3 { font-size: 1.05rem; margin: 0; }
 
 /* ---------- ปุ่ม ---------- */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font: inherit; font-weight: 700; padding: 10px 20px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; cursor: pointer; min-height: 44px; transition: transform .15s var(--ease), box-shadow .2s, background .2s; }
-.btn:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+@media (hover: hover) { .btn:hover { transform: translateY(-1px); box-shadow: var(--shadow); } }
 .btn:active { transform: translateY(0); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .btn.ghost { background: transparent; }
@@ -891,6 +891,7 @@ img[loading="lazy"]:not(.loaded) { opacity: 0; }
   /* ปุ่มหลักติดด้านล่าง (ยกพ้นคีย์บอร์ด) */
   .wiz-bar { position: fixed; left: 0; right: 0; bottom: var(--kb, 0px); z-index: 80; display: flex; gap: 10px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--line); transition: bottom .15s; }
   .wiz-bar[hidden] { display: none; }
+  .wiz-bar .btn { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
   .wiz-bar .btn { min-height: 54px; font-size: 1.05rem; }
   .wiz-bar [data-wiz-back] { flex: 0 0 34%; }
   .wiz-bar [data-wiz-back][hidden] { display: none; }
@@ -1278,3 +1279,7 @@ img[loading="lazy"]:not(.loaded) { opacity: 0; }
 }
 /* หน้าแรกของกล่อง (มีปุ่ม Google) มีหัวข้อของร้านแล้ว ซ่อนหัวข้อของ Clerk · ขั้นถัดไป (กรอกรหัสจากอีเมล) ยังแสดง */
 .ca-mount .cl-card:has(.cl-socialButtonsRoot) .cl-header { display: none; }
+
+/* ใต้คลิปหน้าแก้ซับ: สถานะแปลงคลิป / ปุ่มแปลงเมื่อภาพไม่ขึ้น */
+.sub-fix { margin: 6px 2px 0; text-align: center; color: var(--muted); }
+.sub-fix .error { color: var(--err); }
