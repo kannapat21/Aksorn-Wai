@@ -383,10 +383,22 @@ export async function renderAnimation(spec, onProgress = () => {}, opts = {}) {
 // ---------- คลิป: อ่านข้อมูล / แยกเสียง ----------
 // คลิปที่เบราว์เซอร์นี้เปิดภาพไม่ได้ (เช่น HEVC/H.265 จาก iPhone หรือ Android, HDR 10-bit)
 // → แปลงเป็น MP4 H.264 ในเครื่องลูกค้าด้วย ffmpeg.wasm ครั้งเดียว แล้วใช้ไฟล์ที่แปลงทั้งตัวอย่างและตอนสร้างคลิป
-export async function playableClip(file, onProgress = () => {}) {
+// Safari บน iPhone/iPad/Mac เล่น HEVC และ HDR จากกล้อง iPhone ได้เอง ไม่ต้องแปลง
+const appleWebKit = () => {
+  const ua = navigator.userAgent;
+  return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome|Chromium|Edg|Firefox/.test(ua));
+};
+export function needsConvert(info) {
+  if (!info.canDecode || !info.playable) return true;
+  // HEVC / Dolby Vision / HDR 10-bit นอก Safari: หลายเครื่องเล่นเป็นภาพดำหรือสีเพี้ยน
+  const hevc = /hevc|hvc1|hev1|dvh1|dvhe/i.test(`${info.codec} ${info.codecStr}`);
+  if (!appleWebKit() && (info.hdr || hevc)) return true;
+  return false;
+}
+export async function playableClip(file, onProgress = () => {}, { force = false } = {}) {
   const info = await probeClip(file);
   if (!info.ok) throw new Error('เปิดไฟล์นี้ไม่ได้ ไฟล์อาจเสียหรือไม่ใช่วิดีโอ ลองส่งออกจากแอปตัดต่อเป็น MP4 แล้วเลือกใหม่');
-  if (info.canDecode) return { file, info, converted: false };
+  if (!force && !needsConvert(info)) return { file, info, converted: false };
   const ff = await getFFmpeg((stage, k) => onProgress(Math.round(2 + 13 * k), stage));
   const dir = `/in${++uid}`;
   const out = `conv${uid}.mp4`;
@@ -401,7 +413,7 @@ export async function playableClip(file, onProgress = () => {}) {
     await ff.mount('WORKERFS', { files: [file] }, dir);
     const code = await ff.exec(['-i', `${dir}/${file.name}`, '-map', '0:v:0', '-map', '0:a:0?',
       '-vf', "scale='min(iw,1920)':'min(ih,1920)':force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuv420p",
-      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '17', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', out]);
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '17', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', out]);
     if (code !== 0) throw new Error('แปลงคลิปไม่สำเร็จ: ' + (tail.filter((l) => /error|invalid|not/i.test(l)).pop() || `รหัส ${code}`));
     const data = await ff.readFile(out);
     const conv = new File([data], file.name.replace(/\.[^.]+$/, '') + '.mp4', { type: 'video/mp4' });
@@ -425,7 +437,17 @@ export async function probeClip(file) {
     const a = await input.getPrimaryAudioTrack();
     if (!v) return { ok: false };
     const duration = await input.computeDuration();
-    return { ok: true, width: v.displayWidth, height: v.displayHeight, duration, audio: Boolean(a), canDecode: await v.canDecode() };
+    const codec = v.codec || '';
+    let codecStr = '', hdr = false;
+    try { codecStr = (await v.getCodecParameterString()) || ''; } catch (e) { /* ข้าม */ }
+    try { hdr = Boolean(await v.hasHighDynamicRange()); } catch (e) { /* ข้าม */ }
+    // ตัวเล่นวิดีโอของหน้าเว็บ (<video>) เล่นได้ไหม แยกจาก WebCodecs: บางเครื่องถอดรหัสได้แต่เล่นในหน้าเว็บเป็นภาพดำ
+    let playable = true;
+    if (codecStr) {
+      const el = document.createElement('video');
+      playable = Boolean(el.canPlayType(`video/mp4; codecs="${codecStr}"`) || el.canPlayType(`video/quicktime; codecs="${codecStr}"`));
+    }
+    return { ok: true, width: v.displayWidth, height: v.displayHeight, duration, audio: Boolean(a), canDecode: await v.canDecode(), codec, codecStr, hdr, playable };
   } finally {
     if (input.dispose) input.dispose();
   }
