@@ -25,6 +25,9 @@ services:
       - { key: BASE_URL, sync: false }
       - { key: ADMIN_EMAIL, sync: false }
       - { key: ADMIN_PASSWORD, sync: false }
+      # เข้าสู่ระบบด้วย Clerk (ปุ่ม Google) · ไม่ตั้ง = ใช้อีเมล+รหัสผ่านแบบเดิม (ดู docs/ตั้งค่า-Clerk.md)
+      - { key: CLERK_PUBLISHABLE_KEY, sync: false }
+      - { key: CLERK_SECRET_KEY, sync: false }
       - { key: DATABASE_URL, sync: false }
       - { key: DATABASE_AUTH_TOKEN, sync: false }
       - { key: GROQ_API_KEY, sync: false }

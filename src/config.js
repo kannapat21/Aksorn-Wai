@@ -66,6 +66,13 @@ function loadConfig(overrides = {}) {
     // บัญชีแอดมินสร้าง/ซิงก์จาก .env ทุกครั้งที่เปิดร้าน (ล็อกอินที่หน้าเข้าสู่ระบบปกติ)
     adminEmail: String(env.ADMIN_EMAIL || '').trim().toLowerCase(),
     adminPassword: env.ADMIN_PASSWORD || '',
+    // เข้าสู่ระบบด้วย Clerk (มีปุ่ม Google) · ไม่ตั้ง = ใช้อีเมล+รหัสผ่านของร้านแบบเดิม
+    clerk: (() => {
+      const publishableKey = String(env.CLERK_PUBLISHABLE_KEY || '').trim();
+      const secretKey = String(env.CLERK_SECRET_KEY || '').trim();
+      const frontendApi = require('./clerk').frontendApiFromKey(publishableKey);
+      return { publishableKey, secretKey, frontendApi, enabled: Boolean(publishableKey && secretKey && frontendApi) };
+    })(),
     downloadSecret: env.DOWNLOAD_LINK_SECRET || '',
     // ลิงก์ดาวน์โหลดที่เซ็นแล้ว สร้างใหม่ทุกครั้งที่กดในคลัง ใช้ได้กี่นาที
     linkMinutes: Number(env.DOWNLOAD_LINK_MINUTES || 10),
@@ -183,6 +190,13 @@ function loadConfig(overrides = {}) {
     if (cfg.mail.mode === 'smtp' && (!cfg.mail.host || !cfg.mail.user || !cfg.mail.pass)) problems.push('ตั้ง SMTP_HOST / SMTP_USER / SMTP_PASS ให้ครบ');
     if (!cfg.legal.name || !cfg.legal.contactEmail) problems.push('ตั้ง LEGAL_NAME และ CONTACT_EMAIL สำหรับหน้านโยบาย');
   }
+  const CK = cfg.clerk;
+  if ((CK.publishableKey || CK.secretKey) && !CK.enabled) {
+    if (!CK.frontendApi) problems.push('CLERK_PUBLISHABLE_KEY ไม่ถูกต้อง (ต้องขึ้นต้นด้วย pk_test_ หรือ pk_live_ คัดลอกจากหน้า API keys ของ Clerk)');
+    else problems.push('ตั้ง CLERK_PUBLISHABLE_KEY และ CLERK_SECRET_KEY ให้ครบทั้งสองค่า');
+  }
+  if (CK.secretKey && !/^sk_(test|live)_[A-Za-z0-9]+$/.test(CK.secretKey)) problems.push('CLERK_SECRET_KEY ไม่ถูกต้อง (ต้องขึ้นต้นด้วย sk_test_ หรือ sk_live_)');
+  if (CK.enabled && CK.publishableKey.slice(3, 7) !== CK.secretKey.slice(3, 7)) problems.push('CLERK_PUBLISHABLE_KEY กับ CLERK_SECRET_KEY ต้องมาจากโหมดเดียวกัน (test คู่ test หรือ live คู่ live)');
   const S = cfg.subtitles;
   if (!['auto', 'mlx', 'faster-whisper', 'groq', 'off'].includes(S.engine)) problems.push('SUBTITLE_ENGINE ต้องเป็น auto / mlx / faster-whisper / groq / off');
   if (S.engine === 'groq' && !cfg.groq.apiKey) problems.push('SUBTITLE_ENGINE=groq ต้องตั้ง GROQ_API_KEY (สมัครฟรีที่ console.groq.com)');

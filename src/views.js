@@ -1230,7 +1230,7 @@ function account({ cfg, user, csrf, items = 0 }) {
   });
 }
 
-function authPage({ cfg, user, csrf, mode, form = {}, error, next, notice = '' }) {
+function authPage({ cfg, user, csrf, mode, form = {}, error, next, notice = '', clerk = false }) {
   const signup = mode === 'signup';
   return layout({
     title: signup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-auth', intro: false,
@@ -1264,6 +1264,7 @@ function authPage({ cfg, user, csrf, mode, form = {}, error, next, notice = '' }
     <p class="muted small center">${signup
     ? `มีบัญชีแล้ว? <a href="/login?next=${encodeURIComponent(next || '/library')}">เข้าสู่ระบบ</a>`
     : `ยังไม่มีบัญชี? <a href="/signup?next=${encodeURIComponent(next || '/library')}">สมัครสมาชิกฟรี</a>`}</p>
+    ${clerk ? `<p class="muted small center"><a href="/${signup ? 'signup' : 'login'}?next=${encodeURIComponent(next || '/library')}">กลับไปใช้ปุ่ม Google</a></p>` : ''}
   </div>
 </div>`,
   });
@@ -1413,6 +1414,48 @@ ${url}
 — ${cfg.shopName}`;
 }
 
+// กล่องล็อกอินของ Clerk (มีปุ่ม Google) · สคริปต์ Clerk โหลดจากโดเมน Clerk ของร้าน (ดู src/clerk.js เรื่อง CSP)
+const CLERK_JS = '@clerk/clerk-js@5';
+function clerkScripts(cfg) {
+  return `<script defer crossorigin="anonymous" data-clerk-publishable-key="${esc(cfg.clerk.publishableKey)}" src="https://${esc(cfg.clerk.frontendApi)}/npm/${CLERK_JS}/dist/clerk.browser.js"></script>
+<script type="module" src="/clerk-auth.js?v=${V}"></script>`;
+}
+function clerkAuth({ cfg, user, csrf, mode, next }) {
+  const signup = mode === 'signup';
+  const n = encodeURIComponent(next || '/library');
+  return layout({
+    title: signup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-auth', intro: false,
+    body: `
+<div class="auth">
+  <div class="auth-card clerk-card">
+    ${logoMark(48)}
+    <h1>${signup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</h1>
+    <p class="muted">${signup ? 'กดปุ่ม Google ได้เลย หรือสมัครด้วยอีเมล' : 'ใช้บัญชี Google ได้เลย หรือเข้าด้วยอีเมล'}</p>
+    <p class="error" role="alert" data-clerk-error hidden></p>
+    <div id="clerk-auth" data-clerk-auth data-mode="${signup ? 'signup' : 'login'}" data-next="${esc(next || '/library')}" data-csrf="${esc(csrf)}">
+      <p class="muted center" data-clerk-loading>กำลังโหลด…</p>
+    </div>
+    <noscript><p class="error">ต้องเปิด JavaScript ก่อน หรือใช้ <a href="/login?classic=1&amp;next=${n}">อีเมลและรหัสผ่านแบบเดิม</a></p></noscript>
+    <p class="muted small center">${signup ? 'การสมัครถือว่ายอมรับ <a href="/terms">เงื่อนไขการใช้งาน</a> และ <a href="/privacy">นโยบายความเป็นส่วนตัว</a>' : ''}</p>
+    <p class="muted small center">บัญชีเดิมที่สมัครด้วยรหัสผ่าน: <a href="/${signup ? 'signup' : 'login'}?classic=1&amp;next=${n}">${signup ? 'สมัครแบบเดิม' : 'เข้าด้วยรหัสผ่านแบบเดิม'}</a></p>
+  </div>
+</div>
+${clerkScripts(cfg)}`,
+  });
+}
+function clerkSignedOut({ cfg, user, csrf }) {
+  return layout({
+    title: 'ออกจากระบบ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-auth', intro: false,
+    body: `
+<div class="auth"><div class="auth-card" id="clerk-auth" data-clerk-signout>
+  ${logoMark(48)}
+  <h1>กำลังออกจากระบบ…</h1>
+  <p class="muted"><a href="/">กลับหน้าแรก</a></p>
+</div></div>
+${clerkScripts(cfg)}`,
+  });
+}
+
 const login = (a) => authPage({ ...a, mode: 'login' });
 const signup = (a) => authPage({ ...a, mode: 'signup' });
 
@@ -1511,7 +1554,7 @@ ${cfg.baseUrl}/library/${order.id}
 — ${cfg.shopName} · แอนิเมชันข้อความไทย`;
 }
 
-module.exports = { browserScripts, contactPage, transferPay, adminTransfers, transferReceivedEmail, transferRejectedEmail, adminTransferEmail, bahtExact, omisePay, account, forgot, reset, legalPage, verifyEmailBody, resetEmailBody, home, product, mockPay, orderStatus, library, libraryItem, customize, customStatus, presetsPage, fontsPage, login, signup, licensePage, message, admin, emailBody, esc, baht, LICENSE };
+module.exports = { clerkAuth, clerkSignedOut, browserScripts, contactPage, transferPay, adminTransfers, transferReceivedEmail, transferRejectedEmail, adminTransferEmail, bahtExact, omisePay, account, forgot, reset, legalPage, verifyEmailBody, resetEmailBody, home, product, mockPay, orderStatus, library, libraryItem, customize, customStatus, presetsPage, fontsPage, login, signup, licensePage, message, admin, emailBody, esc, baht, LICENSE };
 // ตัวช่วยสำหรับหน้าซับอัตโนมัติ (src/views-subtitles.js)
 module.exports._h = { browserScripts, layout, esc, ICON, V, fontFaces, fmtBytes, thDate, FILL_SWATCHES, STROKE_SWATCHES };
 Object.assign(module.exports, require('./views-subtitles'));

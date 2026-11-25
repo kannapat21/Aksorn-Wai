@@ -3,6 +3,7 @@
  * คัดลอกไลบรารีฝั่งเบราว์เซอร์ (โหมด serverless) ไปไว้ใน public/vendor/ ให้เว็บเสิร์ฟจากโดเมนร้านเอง
  *   - @ffmpeg/ffmpeg (ตัวคุม ffmpeg.wasm ไม่กี่ KB · ตัวเข้ารหัสจริง ~32 MB โหลดจาก jsDelivr ตอนใช้ครั้งแรก)
  *   - mediabunny (อ่าน/เขียนวิดีโอด้วย WebCodecs)
+ *   - ข้อความภาษาไทยของกล่องล็อกอิน Clerk (@clerk/localizations · ใช้ทุกโหมด)
  * รันเองอัตโนมัติหลัง npm install และตอน build บน Netlify
  */
 const fs = require('fs');
@@ -15,6 +16,12 @@ const OUT = path.join(ROOT, 'public', 'vendor');
 function find(pkgFile) {
   const f = path.join(ROOT, 'node_modules', pkgFile);
   return fs.existsSync(f) ? f : null;
+}
+
+const th = find('@clerk/localizations/dist/th-TH.mjs');
+if (th) {
+  fs.mkdirSync(OUT, { recursive: true });
+  fs.copyFileSync(th, path.join(OUT, 'clerk-th-TH.mjs'));
 }
 
 const ff = find('@ffmpeg/ffmpeg/package.json');
