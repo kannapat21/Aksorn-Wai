@@ -1444,7 +1444,7 @@ function clerkAuth({ cfg, user, csrf, mode, next }) {
         <span class="sk sk-input"></span>
         <span class="sk sk-btn primary"></span>
       </div>
-      <div id="clerk-auth" class="ca-mount" data-clerk-auth data-mode="${signup ? 'signup' : 'login'}" data-next="${esc(next || '/library')}" data-csrf="${esc(csrf)}"></div>
+      <div class="ca-mount" data-clerk-auth data-mode="${signup ? 'signup' : 'login'}" data-next="${esc(next || '/library')}" data-csrf="${esc(csrf)}"><div id="clerk-auth" data-clerk-target></div></div>
       <div class="ca-done" data-clerk-done hidden>
         <svg viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="23"/><path d="M15 27l7 7 15-16"/></svg>
         <p class="ca-done-title">เข้าสู่ระบบแล้ว</p>

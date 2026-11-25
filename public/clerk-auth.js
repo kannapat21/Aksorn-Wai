@@ -2,6 +2,8 @@
 // ล็อกอินกับ Clerk เสร็จ → ขอ session token → ส่งให้ร้านที่ POST /auth/clerk → ร้านเปิดเซสชันของตัวเองแล้วพาไปหน้าถัดไป
 // หน้าตา: สีจากตัวแปร CSS ของร้าน (สลับโหมดมืดแล้ววาดกล่องใหม่) + class ak-* ที่แต่งใน style.css
 const root = document.querySelector('[data-clerk-auth], [data-clerk-signout]');
+// Clerk เขียนทับ class ของกล่องที่ mount ลงไป จึง mount ลงกล่องลูกด้านใน (class ของร้านอยู่ที่กล่องนอก)
+const target = (root && root.querySelector('[data-clerk-target]')) || root;
 const stage = document.querySelector('.ca-stage');
 const errBox = document.querySelector('[data-clerk-error]');
 const doneBox = document.querySelector('[data-clerk-done]');
@@ -132,8 +134,8 @@ async function main() {
     signInUrl: `/login?next=${n}`, signUpUrl: `/signup?next=${n}`,
     appearance: appearance(),
   });
-  const mount = () => (mode === 'signup' ? Clerk.mountSignUp(root, opts()) : Clerk.mountSignIn(root, opts()));
-  const unmount = () => (mode === 'signup' ? Clerk.unmountSignUp(root) : Clerk.unmountSignIn(root));
+  const mount = () => (mode === 'signup' ? Clerk.mountSignUp(target, opts()) : Clerk.mountSignIn(target, opts()));
+  const unmount = () => (mode === 'signup' ? Clerk.unmountSignUp(target) : Clerk.unmountSignIn(target));
   mount();
 
   // ซ่อนโครงกระพริบเมื่อกล่องของ Clerk วาดเสร็จ
