@@ -40,3 +40,23 @@ test('MAIL_MODE=brevo ส่งผ่าน HTTPS API (ไม่ใช้พอ�
   const bad = createMailer(cfg, { fetch: async () => ({ ok: false, status: 401, text: async () => 'unauthorized' }) });
   await assert.rejects(bad.send({ to: 'u@x.co', subject: 's', text: 't' }), /401/);
 });
+
+test('Brevo: ใส่ SMTP key (xsmtpsib-) ผิดช่อง → ไม่ยิง API บอกให้ใช้ API key · error ของ Brevo แปลเป็นสิ่งที่ต้องแก้ และไม่มีคีย์ใน error', async () => {
+  const { mailStatus } = require('../src/mailer');
+  const smtpCfg = loadConfig(prod({ MAIL_MODE: ' Brevo ', BREVO_API_KEY: '"xsmtpsib-abc123-XYZ"', MAIL_FROM: 'shop@gmail.com' }));
+  assert.equal(mailStatus(smtpCfg).keyKind, 'smtp');
+  let called = false;
+  const m1 = createMailer(smtpCfg, { fetch: async () => { called = true; return { ok: true }; } });
+  await assert.rejects(m1.send({ to: 'u@x.co', subject: 's', text: 't' }), /SMTP key.*xkeysib-/);
+  assert.equal(called, false);
+
+  const cfg = loadConfig(prod({ MAIL_MODE: 'brevo', BREVO_API_KEY: ' xkeysib-secret123 ', MAIL_FROM: 'shop@gmail.com' }));
+  assert.equal(mailStatus(cfg).problem, '');
+  const reply = (status, body) => createMailer(cfg, { log: () => {}, fetch: async (url, init) => { assert.equal(init.headers['api-key'], 'xkeysib-secret123'); return { ok: false, status, text: async () => JSON.stringify(body) }; } });
+  const err = async (status, body) => { try { await reply(status, body).send({ to: 'u@x.co', subject: 's', text: 't' }); } catch (e) { return e.message; } return ''; };
+  const ip = await err(401, { code: 'unauthorized', message: 'We have detected you are using an unrecognised IP address 1.2.3.4 with key xkeysib-secret123' });
+  assert.match(ip, /Authorised IPs/); assert.ok(!ip.includes('secret123'));
+  assert.match(await err(401, { code: 'unauthorized', message: 'Key not found' }), /API key ใหม่/);
+  assert.match(await err(400, { code: 'invalid_parameter', message: 'sender is invalid / inactive' }), /Senders/);
+  assert.match(await err(403, { code: 'permission_denied', message: 'Your account is not yet activated' }), /transactional/);
+});

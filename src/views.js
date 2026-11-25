@@ -1468,12 +1468,12 @@ function licensePage({ cfg, user, csrf }) {
 function message({ cfg, user, csrf, title, text, action }) {
   return layout({
     title, shopName: cfg.shopName, user, csrf, noindex: true,
-    body: `<div class="narrow"><h1>${esc(title)}</h1><p>${esc(text)}</p>
+    body: `<div class="narrow"><h1>${esc(title)}</h1><p class="pre-line">${esc(text)}</p>
 <p class="actions">${action ? `<a class="btn primary" href="${esc(action.href)}">${esc(action.label)}</a> ` : ''}<a class="btn" href="/">กลับหน้าร้าน</a></p></div>`,
   });
 }
 
-function admin({ cfg, user, csrf, orders, stats, tools, installHelp = [], reviewCount = 0 }) {
+function admin({ cfg, user, csrf, orders, stats, tools, installHelp = [], reviewCount = 0, mail = null }) {
   const { editors } = cfg.editorsConfig;
   const productTitle = (slug) => (cfg.products.find((p) => p.slug === slug) || {}).title || slug;
   const max = Math.max(1, ...stats.byEditor.map((r) => r.n));
@@ -1504,6 +1504,8 @@ ${cfg.paymentProvider === 'manual' ? `<a class="cz-cta review-cta${reviewCount ?
   <div class="stat"><span>สมาชิก</span><b>${stats.users}</b></div>
 </div>
 ${tools ? `<div class="note${tools.ok ? '' : ' warn'}">${ICON.bolt}<span><b>ระบบปรับแต่ง (เรนเดอร์):</b> ${tools.ok ? `พร้อม · ใช้ ${esc(tools.browser.how)}${tools.browserMode ? '' : ' + ffmpeg'}` : `ยังไม่พร้อม<br>${installHelp.map((l) => esc(l)).join('<br>')}`}</span></div>` : ''}
+${mail ? `<div class="note${mail.problem || mail.notifyProblem ? ' warn' : ''} mail-note">${ICON.mail}<span><b>อีเมลแจ้งร้าน:</b> ${mail.problem || mail.notifyProblem ? esc(mail.problem || mail.notifyProblem) : `พร้อมส่งผ่าน ${esc(mail.mode)} · ผู้ส่ง ${esc(mail.from)}`}<br><span class="small">ส่งถึง: ${mail.notify.length ? esc(mail.notify.join(', ')) : '-'}</span>
+  <form method="post" action="/admin/mail-test"><input type="hidden" name="csrf" value="${esc(csrf)}"><button class="btn small" type="submit">ส่งเมลทดสอบ</button></form></span></div>` : ''}
 <h2>ลูกค้าโหลดไฟล์ไปใช้กับโปรแกรมไหน (นับต่อคำสั่งซื้อ)</h2>
 <div class="bars">${bars}</div>
 <h2>คำสั่งซื้อล่าสุด</h2>

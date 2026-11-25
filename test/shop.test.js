@@ -1796,3 +1796,22 @@ test('SHOP_NOTIFY_EMAIL: หลายอีเมลคั่นด้วย , �
   assert.deepEqual(loadConfig({ ...base, ADMIN_EMAIL: 'boss@shop.test', SHOP_NOTIFY_EMAIL: ' a@x.test, nope ,B@y.test' }).mail.notify, ['a@x.test', 'b@y.test']);
   assert.deepEqual(loadConfig({ ...base, ADMIN_EMAIL: '' }).mail.notify, []);
 });
+
+test('หลังบ้าน: ปุ่มส่งเมลทดสอบ บอกสถานะเมลและสาเหตุที่ส่งไม่ได้ · ลูกค้ากดไม่ได้', async () => {
+  const a = await adminClient();
+  const page = await (await a.req('/admin')).text();
+  assert.match(page, /action="\/admin\/mail-test"/);
+  assert.match(page, /โหมดทดสอบ: เมลพิมพ์ลง log/);
+  const n = ctx.mailer.sent.length;
+  const r = await a.post('/admin/mail-test');
+  assert.equal(r.status, 502, 'โหมด console ไม่ได้ส่งจริง ต้องไม่บอกว่าสำเร็จ');
+  assert.match(await r.text(), /MAIL_MODE=brevo/);
+  assert.equal(ctx.mailer.sent.length, n + 1);
+  assert.equal(ctx.mailer.sent.at(-1).to, cfg.adminEmail);
+  // ส่งจริงไม่สำเร็จ → บอกข้อความ error
+  const keep = ctx.mailer.send;
+  ctx.mailer.send = async () => { throw new Error('Brevo ตอบ 401 → Brevo บล็อก IP'); };
+  try { assert.match(await (await a.post('/admin/mail-test')).text(), /บล็อก IP/); } finally { ctx.mailer.send = keep; }
+  const c = await newUser('notadmin-mail@example.com');
+  assert.notEqual((await c.post('/admin/mail-test')).status, 200);
+});

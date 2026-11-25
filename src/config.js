@@ -110,7 +110,7 @@ function loadConfig(overrides = {}) {
     mockAllowPublic: env.MOCK_ALLOW_PUBLIC === '1',
     mail: {
       // ตั้ง SMTP_HOST แล้วไม่ได้ระบุ MAIL_MODE = ส่งจริงผ่าน SMTP · ไม่ได้ตั้ง = พิมพ์ลงหน้าจอ (โหมดทดสอบ)
-      mode: env.MAIL_MODE || (env.BREVO_API_KEY ? 'brevo' : env.SMTP_HOST ? 'smtp' : 'console'),
+      mode: String(env.MAIL_MODE || '').trim().toLowerCase() || (env.BREVO_API_KEY ? 'brevo' : env.SMTP_HOST ? 'smtp' : 'console'),
       brevoKey: env.BREVO_API_KEY || '',
       // อีเมลร้านที่รับแจ้งเตือน "ลูกค้ากดยืนยันโอน" (คั่นหลายอีเมลด้วย ,) · ไม่ตั้ง = ส่งไป ADMIN_EMAIL
       notify: String(env.SHOP_NOTIFY_EMAIL || env.ADMIN_EMAIL || '').split(',').map((x) => x.trim().toLowerCase()).filter((x) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x)),

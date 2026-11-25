@@ -1379,3 +1379,5 @@ h1 .beta { font-size: .9rem; padding: 2px 10px; vertical-align: .3em; }
 .nav-sub .beta { margin-left: 2px; }
 .tab-ico { position: relative; display: grid; place-items: center; }
 .tab-ico .beta { position: absolute; top: -6px; left: 14px; margin: 0; padding: 0 5px; font-size: .58rem; }
+.pre-line { white-space: pre-line; overflow-wrap: anywhere; }
+.mail-note form { margin-top: 8px; }

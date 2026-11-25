@@ -9,7 +9,7 @@ const links = require('./links');
 const views = require('./views');
 const auth = require('./auth');
 const { createClerk, clerkCsp } = require('./clerk');
-const { createMailer } = require('./mailer');
+const { createMailer, mailStatus } = require('./mailer');
 const { getProvider, WebhookSignatureError } = require('./payments');
 const custom = require('./customizer');
 const renderTools = require('../render/tools');
@@ -1755,7 +1755,30 @@ function createApp(cfg, opts = {}) {
       paid: totals.paid || 0, pending: totals.pending || 0, revenue: totals.revenue || 0,
       users: q.statUsers.get().n, byEditor: q.statEditors.all(),
     };
-    send(req, res, 'admin', { orders: q.listOrders.all(), stats, tools: tools(), installHelp: renderTools.installHelp(tools()), reviewCount: q.reviewCount.get().n });
+    send(req, res, 'admin', { orders: q.listOrders.all(), stats, tools: tools(), installHelp: renderTools.installHelp(tools()), reviewCount: q.reviewCount.get().n, mail: mailStatus(cfg) });
+  });
+
+  // ส่งเมลทดสอบหาอีเมลร้าน (รอผลจริง แล้วบอกว่าสำเร็จ/ติดอะไร) · ไม่ต้องสั่งซื้อเพื่อทดสอบ
+  app.post('/admin/mail-test', adminAuth, requireCsrf, async (req, res) => {
+    const st = mailStatus(cfg);
+    const targets = st.notify.length ? st.notify : [req.user.email];
+    const results = [];
+    for (const to of targets) {
+      try {
+        await mailer.send({ to, subject: `ทดสอบอีเมลแจ้งเตือน – ${cfg.shopName}`, text: `อีเมลนี้ส่งจากปุ่ม "ส่งเมลทดสอบ" ในหลังบ้าน\nถ้าได้รับ แปลว่าเมลแจ้ง "ลูกค้ายืนยันโอน" จะเข้ามาที่อีเมลนี้ด้วย\n\n${cfg.baseUrl}/admin` });
+        results.push({ to, ok: true });
+      } catch (e) {
+        log(`[mail] ทดสอบส่งถึง ${to} ไม่สำเร็จ: ${e.message}`);
+        results.push({ to, ok: false, error: e.message });
+      }
+    }
+    const sentReal = st.mode === 'brevo' || st.mode === 'smtp';
+    const ok = results.every((r) => r.ok) && sentReal;
+    send(req, res, 'message', {
+      title: ok ? 'ส่งเมลทดสอบแล้ว' : 'ส่งเมลทดสอบไม่สำเร็จ',
+      text: results.map((r) => (r.ok ? (sentReal ? `ส่งถึง ${r.to} แล้ว ลองเช็กกล่องจดหมาย (และโฟลเดอร์สแปม)` : `ไม่ได้ส่งจริงถึง ${r.to}: ${st.problem}`) : `ส่งถึง ${r.to} ไม่ได้: ${r.error}`)).join('\n'),
+      action: { href: '/admin', label: 'กลับหลังบ้าน' },
+    }, ok ? 200 : 502);
   });
 
   // คิวตรวจสอบการโอนเงิน: อนุมัติ/ปฏิเสธได้เฉพาะแอดมิน · ทุกครั้งบันทึกใน payment_audit
