@@ -1414,9 +1414,12 @@ ${url}
 }
 
 // กล่องล็อกอินของ Clerk (มีปุ่ม Google) · สคริปต์ Clerk โหลดจากโดเมน Clerk ของร้าน (ดู src/clerk.js เรื่อง CSP)
-const CLERK_JS = '@clerk/clerk-js@5';
+// Clerk รุ่นใหม่ (Core 3): ตัวหลัก clerk-js@6 + หน้าตา @clerk/ui@1 แยกกัน (รุ่น 5 Clerk ปิดการล็อกอินแล้ว)
+const CLERK_JS = '@clerk/clerk-js@6';
+const CLERK_UI = '@clerk/ui@1';
 function clerkScripts(cfg) {
   return `<script defer crossorigin="anonymous" data-clerk-publishable-key="${esc(cfg.clerk.publishableKey)}" src="https://${esc(cfg.clerk.frontendApi)}/npm/${CLERK_JS}/dist/clerk.browser.js"></script>
+<script defer crossorigin="anonymous" src="https://${esc(cfg.clerk.frontendApi)}/npm/${CLERK_UI}/dist/ui.browser.js"></script>
 <script type="module" src="/clerk-auth.js?v=${V}"></script>`;
 }
 function clerkAuth({ cfg, user, csrf, mode, next }) {
