@@ -90,9 +90,10 @@ function clerkCsp(frontendApi) {
   const f = `https://${frontendApi}`;
   return [
     "default-src 'self'",
-    `script-src 'self' ${f} https://challenges.cloudflare.com`,
-    `connect-src 'self' ${f} https://clerk-telemetry.com`,
-    `img-src 'self' data: https://img.clerk.com`,
+    // cdn.protect.clerk.com = ตัวกันบอตของ Clerk (โหลดสคริปต์เพิ่มเองตอนเปิดกล่อง)
+    `script-src 'self' ${f} https://challenges.cloudflare.com https://cdn.protect.clerk.com`,
+    `connect-src 'self' ${f} https://clerk-telemetry.com https://*.clerk.com`,
+    `img-src 'self' data: https://img.clerk.com https://*.clerk.com`,
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
     "worker-src 'self' blob:",
