@@ -18,6 +18,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@clerk/localizations": "3.37.11",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",

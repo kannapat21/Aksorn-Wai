@@ -8,6 +8,7 @@ const { openDb } = require('./db');
 const links = require('./links');
 const views = require('./views');
 const auth = require('./auth');
+const { createClerk, clerkCsp } = require('./clerk');
 const { createMailer } = require('./mailer');
 const { getProvider, WebhookSignatureError } = require('./payments');
 const custom = require('./customizer');
@@ -325,6 +326,7 @@ function createApp(cfg, opts = {}) {
   const limit = {
     signup: limiter('signup', cfg.rateSignupPerHour, HOUR),
     forgot: limiter('forgot', 5, MIN15),
+    clerk: limiter('clerk', 30, MIN15),
     reset: limiter('reset', 10, MIN15),
     verifyResend: limiter('verify-resend', 3, HOUR, byUser),
     checkout: limiter('checkout', 20, MIN15, byUser),
@@ -524,9 +526,76 @@ function createApp(cfg, opts = {}) {
   });
 
   // ---------- สมัคร / เข้าสู่ระบบ / ออกจากระบบ ----------
+  // ---------- เข้าสู่ระบบด้วย Clerk (มีปุ่ม Google) ----------
+  // ตั้ง CLERK_PUBLISHABLE_KEY + CLERK_SECRET_KEY แล้ว หน้า /login และ /signup ใช้กล่องของ Clerk
+  // ฟอร์มอีเมล+รหัสผ่านแบบเดิมยังอยู่ที่ /login?classic=1 (สำรองไว้ เช่น แอดมินเข้าด้วยรหัสจาก .env)
+  const clerk = cfg.clerk.enabled ? (opts.clerk || createClerk(cfg, { fetch: opts.clerkFetch, now })) : null;
+  const CLERK_CSP = clerk ? clerkCsp(cfg.clerk.frontendApi) : '';
+  const classic = (req) => !clerk || req.query.classic === '1';
+  function sendClerk(req, res, mode) {
+    res.set({ 'Content-Security-Policy': CLERK_CSP, 'Cache-Control': 'no-store' });
+    send(req, res, 'clerkAuth', { mode, next: auth.safeNext(req.query.next) });
+  }
+
+  // เบราว์เซอร์ส่ง session token ของ Clerk มา → ตรวจ → จับคู่บัญชีร้านด้วยอีเมล → เปิดเซสชันของร้าน
+  const clerkQ = {
+    markClerk: db.prepare("UPDATE users SET password_hash = 'clerk$', email_verified_at = ? WHERE id = ?"),
+  };
+  app.post('/auth/clerk', limit.clerk, express.json({ limit: '8kb' }), async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!clerk) return res.status(404).json({ error: 'ไม่ได้เปิดใช้ Clerk' });
+    if (!auth.safeEqual(req.body && req.body.csrf, req.csrf)) return res.status(403).json({ error: 'หมดเวลา กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง' });
+    let who, prof;
+    try {
+      who = await clerk.verifyToken(req.body.token);
+    } catch (e) {
+      log(`[auth] token ของ Clerk ใช้ไม่ได้: ${e.message}`);
+      return res.status(401).json({ error: 'เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่' });
+    }
+    try {
+      prof = await clerk.verifiedProfile(who.userId);
+    } catch (e) {
+      log(`[auth] ถาม Clerk ไม่สำเร็จ: ${e.message}`);
+      return res.status(502).json({ error: 'ระบบเข้าสู่ระบบขัดข้องชั่วคราว กรุณาลองใหม่' });
+    }
+    if (!prof || prof.email.length > 200 || !EMAIL_RE.test(prof.email)) {
+      return res.status(403).json({ error: 'ต้องยืนยันอีเมลก่อนเข้าสู่ระบบ' });
+    }
+    let user = q.userByEmail.get(prof.email);
+    if (!user) {
+      const id = crypto.randomBytes(16).toString('hex');
+      try {
+        // บัญชีใหม่จาก Clerk ไม่มีรหัสผ่านของร้าน (ล็อกอินผ่าน Clerk เท่านั้น)
+        q.insertUser.run(id, prof.email, prof.name, 'clerk$', now());
+        tq.verify.run(now(), id);
+        log('[auth] สมัครสมาชิกใหม่ผ่าน Clerk');
+      } catch (e) {
+        if (!/UNIQUE/.test(e.message)) { log(`[auth] สร้างบัญชีจาก Clerk ไม่สำเร็จ: ${e.message}`); return res.status(500).json({ error: 'สร้างบัญชีไม่สำเร็จ กรุณาลองใหม่' }); }
+      }
+      user = q.userByEmail.get(prof.email);
+    } else if (!user.email_verified_at) {
+      // บัญชีเดิมที่ยังไม่เคยยืนยันอีเมล: ใครก็สมัครด้วยอีเมลคนอื่นไว้ก่อนได้ เจ้าของอีเมลตัวจริงมาทาง Clerk แล้ว
+      // → ลบรหัสผ่านเดิมทิ้งและเตะทุกเซสชันออก (กันคนที่สมัครดักไว้แอบใช้บัญชีต่อ)
+      clerkQ.markClerk.run(now(), user.id);
+      q.deleteSessionsOf.run(user.id);
+      user = q.userById.get(user.id);
+    }
+    if (req.sessionRowId) q.deleteSession.run(req.sessionRowId);
+    startSession(res, user.id);
+    res.json({ ok: true, next: auth.safeNext(req.body.next) });
+  });
+
+  // หลังออกจากระบบของร้าน ต้องออกจาก Clerk ในเบราว์เซอร์ด้วย ไม่งั้นเปิดหน้าเข้าสู่ระบบจะเข้าให้อัตโนมัติ
+  app.get('/auth/clerk/signed-out', (req, res) => {
+    if (!clerk) return res.redirect(303, '/');
+    res.set({ 'Content-Security-Policy': CLERK_CSP, 'Cache-Control': 'no-store' });
+    send(req, res, 'clerkSignedOut', {});
+  });
+
   app.get('/signup', (req, res) => {
     if (req.user) return res.redirect(303, auth.safeNext(req.query.next));
-    send(req, res, 'signup', { next: auth.safeNext(req.query.next) });
+    if (!classic(req)) return sendClerk(req, res, 'signup');
+    send(req, res, 'signup', { next: auth.safeNext(req.query.next), clerk: Boolean(clerk) });
   });
 
   app.post('/signup', limit.signup, requireCsrf, async (req, res, next) => {
@@ -560,7 +629,8 @@ function createApp(cfg, opts = {}) {
 
   app.get('/login', (req, res) => {
     if (req.user) return res.redirect(303, auth.safeNext(req.query.next));
-    send(req, res, 'login', { next: auth.safeNext(req.query.next), notice: req.query.reset === '1' ? 'ตั้งรหัสผ่านใหม่แล้ว เข้าสู่ระบบด้วยรหัสผ่านใหม่ได้เลย' : '' });
+    if (!classic(req) && req.query.reset !== '1') return sendClerk(req, res, 'login');
+    send(req, res, 'login', { next: auth.safeNext(req.query.next), clerk: Boolean(clerk), notice: req.query.reset === '1' ? 'ตั้งรหัสผ่านใหม่แล้ว เข้าสู่ระบบด้วยรหัสผ่านใหม่ได้เลย' : '' });
   });
 
   app.post('/login', requireCsrf, async (req, res, next) => {
@@ -588,7 +658,7 @@ function createApp(cfg, opts = {}) {
   app.post('/logout', requireCsrf, (req, res) => {
     if (req.sessionRowId) q.deleteSession.run(req.sessionRowId);
     res.append('Set-Cookie', auth.cookie('sid', '', { secure: secureFor(res), maxAgeSec: 0 }));
-    res.redirect(303, '/');
+    res.redirect(303, clerk ? '/auth/clerk/signed-out' : '/');
   });
 
   // ---------- สั่งซื้อ (ต้องเข้าสู่ระบบ) ----------
