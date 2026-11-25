@@ -317,7 +317,7 @@ function home({ cfg, user, csrf, products, owned = new Set() }) {
   <div class="section-head"><div><p class="eyebrow">ขั้นตอน</p><h2>ซื้อครั้งเดียว อยู่ในคลังตลอดไป</h2></div></div>
   <ol class="steps">
     <li class="reveal"><span class="num">1</span><h3>เลือกแอนิเมชัน</h3><p>ดูตัวอย่างทั้งแนวตั้งและแนวนอนก่อนซื้อ</p></li>
-    <li class="reveal"><span class="num">2</span><h3>เข้าสู่ระบบแล้วจ่ายเงิน</h3><p>สมัครสมาชิกครั้งเดียว ใช้อีเมลกับรหัสผ่าน ไม่ต้องกรอกข้อมูลซ้ำทุกครั้ง</p></li>
+    <li class="reveal"><span class="num">2</span><h3>เข้าสู่ระบบแล้วจ่ายเงิน</h3><p>${cfg.clerk && cfg.clerk.enabled ? 'กดปุ่ม Google ปุ่มเดียวก็เข้าได้ ไม่ต้องจำรหัสผ่าน' : 'สมัครสมาชิกครั้งเดียว ใช้อีเมลกับรหัสผ่าน ไม่ต้องกรอกข้อมูลซ้ำทุกครั้ง'}</p></li>
     <li class="reveal"><span class="num">3</span><h3>เปิดใช้จากคลัง</h3><p>ไฟล์เข้าไปอยู่ในคลังของบัญชีคุณทันที เปิดใช้ได้ทุกเมื่อ ทุกเครื่อง</p></li>
   </ol>
 </section>
@@ -1230,7 +1230,7 @@ function account({ cfg, user, csrf, items = 0 }) {
   });
 }
 
-function authPage({ cfg, user, csrf, mode, form = {}, error, next, notice = '', clerk = false }) {
+function authPage({ cfg, user, csrf, mode, form = {}, error, next, notice = '' }) {
   const signup = mode === 'signup';
   return layout({
     title: signup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-auth', intro: false,
@@ -1264,7 +1264,6 @@ function authPage({ cfg, user, csrf, mode, form = {}, error, next, notice = '', 
     <p class="muted small center">${signup
     ? `มีบัญชีแล้ว? <a href="/login?next=${encodeURIComponent(next || '/library')}">เข้าสู่ระบบ</a>`
     : `ยังไม่มีบัญชี? <a href="/signup?next=${encodeURIComponent(next || '/library')}">สมัครสมาชิกฟรี</a>`}</p>
-    ${clerk ? `<p class="muted small center"><a href="/${signup ? 'signup' : 'login'}?next=${encodeURIComponent(next || '/library')}">กลับไปใช้ปุ่ม Google</a></p>` : ''}
   </div>
 </div>`,
   });
@@ -1423,21 +1422,47 @@ function clerkScripts(cfg) {
 function clerkAuth({ cfg, user, csrf, mode, next }) {
   const signup = mode === 'signup';
   const n = encodeURIComponent(next || '/library');
+  const perk = (icon, text, i) => `<li style="--i:${i}">${icon}<span>${text}</span></li>`;
   return layout({
-    title: signup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-auth', intro: false,
+    title: signup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-auth page-clerk', intro: false,
     body: `
-<div class="auth">
-  <div class="auth-card clerk-card">
-    ${logoMark(48)}
-    <h1>${signup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</h1>
-    <p class="muted">${signup ? 'กดปุ่ม Google ได้เลย หรือสมัครด้วยอีเมล' : 'ใช้บัญชี Google ได้เลย หรือเข้าด้วยอีเมล'}</p>
-    <p class="error" role="alert" data-clerk-error hidden></p>
-    <div id="clerk-auth" data-clerk-auth data-mode="${signup ? 'signup' : 'login'}" data-next="${esc(next || '/library')}" data-csrf="${esc(csrf)}">
-      <p class="muted center" data-clerk-loading>กำลังโหลด…</p>
+<div class="auth clerk-auth">
+  <div class="ca-bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i></div>
+  <div class="auth-card ca-card" data-ca-card>
+    <div class="ca-glow" aria-hidden="true"></div>
+    <div class="ca-head">
+      ${logoMark(56, 'logo-mark big ca-logo')}
+      <nav class="ca-tabs" aria-label="เลือก" style="--x:${signup ? 1 : 0}">
+        <a href="/login?next=${n}" ${signup ? '' : 'aria-current="page"'}>เข้าสู่ระบบ</a>
+        <a href="/signup?next=${n}" ${signup ? 'aria-current="page"' : ''}>สมัครสมาชิก</a>
+        <span class="ca-pill" aria-hidden="true"></span>
+      </nav>
+      <h1 class="ca-title">${signup ? 'เริ่มใช้ฟรี <em>ในคลิกเดียว</em>' : 'ยินดีต้อนรับ<em>กลับมา</em>'}</h1>
+      <p class="muted ca-sub">${signup ? 'ใช้บัญชี Google ไม่ต้องตั้งรหัสผ่าน ของที่ซื้อเก็บในคลังตลอดไป' : 'กดปุ่ม Google แล้วไปต่อที่คลังของคุณได้เลย'}</p>
+      <ul class="ca-perks">
+        ${perk(ICON.check, 'ไม่ต้องจำรหัสผ่าน', 0)}
+        ${perk(ICON.shield, 'ปลอดภัยด้วย Google', 1)}
+        ${perk(ICON.infinity, 'คลังอยู่ครบทุกเครื่อง', 2)}
+      </ul>
     </div>
-    <noscript><p class="error">ต้องเปิด JavaScript ก่อน หรือใช้ <a href="/login?classic=1&amp;next=${n}">อีเมลและรหัสผ่านแบบเดิม</a></p></noscript>
-    <p class="muted small center">${signup ? 'การสมัครถือว่ายอมรับ <a href="/terms">เงื่อนไขการใช้งาน</a> และ <a href="/privacy">นโยบายความเป็นส่วนตัว</a>' : ''}</p>
-    <p class="muted small center">บัญชีเดิมที่สมัครด้วยรหัสผ่าน: <a href="/${signup ? 'signup' : 'login'}?classic=1&amp;next=${n}">${signup ? 'สมัครแบบเดิม' : 'เข้าด้วยรหัสผ่านแบบเดิม'}</a></p>
+    <p class="error ca-error" role="alert" data-clerk-error hidden></p>
+    <div class="ca-stage">
+      <div class="ca-skeleton" data-clerk-loading aria-label="กำลังโหลด" role="status">
+        <span class="sk sk-btn"></span>
+        <span class="sk-or"><i></i><b>หรือ</b><i></i></span>
+        <span class="sk sk-label"></span>
+        <span class="sk sk-input"></span>
+        <span class="sk sk-btn primary"></span>
+      </div>
+      <div id="clerk-auth" class="ca-mount" data-clerk-auth data-mode="${signup ? 'signup' : 'login'}" data-next="${esc(next || '/library')}" data-csrf="${esc(csrf)}"></div>
+      <div class="ca-done" data-clerk-done hidden>
+        <svg viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="23"/><path d="M15 27l7 7 15-16"/></svg>
+        <p class="ca-done-title">เข้าสู่ระบบแล้ว</p>
+        <p class="muted small">กำลังพาไปต่อ…</p>
+      </div>
+    </div>
+    <noscript><p class="error">หน้านี้ต้องเปิด JavaScript ก่อนจึงจะเข้าสู่ระบบได้</p></noscript>
+    <p class="muted small center ca-legal">${signup ? 'การสมัครถือว่ายอมรับ' : 'การเข้าสู่ระบบถือว่ายอมรับ'} <a href="/terms">เงื่อนไขการใช้งาน</a> และ <a href="/privacy">นโยบายความเป็นส่วนตัว</a></p>
   </div>
 </div>
 ${clerkScripts(cfg)}`,

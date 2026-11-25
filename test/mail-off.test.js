@@ -7,6 +7,7 @@ const { createMailer } = require('../src/mailer');
 
 const prod = (extra = {}) => ({
   NODE_ENV: 'production', DATABASE_FILE: ':memory:', BASE_URL: 'https://shop.example.com', ADMIN_EMAIL: 'a@b.co', ADMIN_PASSWORD: 'x'.repeat(14),
+  CLERK_PUBLISHABLE_KEY: `pk_live_${Buffer.from('clerk.shop.example.com$').toString('base64')}`, CLERK_SECRET_KEY: 'sk_live_abc123',
   DOWNLOAD_LINK_SECRET: crypto.randomBytes(32).toString('hex'), PAYMENT_WEBHOOK_SECRET: crypto.randomBytes(32).toString('hex'),
   PAYMENT_PROVIDER: 'manual', PROMPTPAY_ID: '0812345678', PROMPTPAY_NAME: 'ร้าน', LEGAL_NAME: 'ร้านทดสอบ', CONTACT_EMAIL: 'c@d.co', ...extra,
 });

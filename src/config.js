@@ -176,7 +176,9 @@ function loadConfig(overrides = {}) {
     if (T.promptpayId && !require('./promptpay').normalizeId(T.promptpayId)) problems.push('PROMPTPAY_ID ต้องเป็นเบอร์มือถือ 10 หลัก (0xxxxxxxxx) หรือเลข 13 หลัก');
     if (!(T.expireHours >= 1 && T.expireHours <= 720)) problems.push('MANUAL_EXPIRE_HOURS ต้องอยู่ระหว่าง 1–720');
     if (!(T.maxConfirms >= 1 && T.maxConfirms <= 20)) problems.push('MANUAL_MAX_CONFIRMS ต้องอยู่ระหว่าง 1–20');
-    if (!cfg.adminEmail || cfg.adminPassword.length < 12) problems.push('โหมดโอนเงินต้องมีแอดมินไว้อนุมัติ: ตั้ง ADMIN_EMAIL และ ADMIN_PASSWORD (อย่างน้อย 12 ตัวอักษร)');
+    if (cfg.clerk.enabled ? !cfg.adminEmail : (!cfg.adminEmail || cfg.adminPassword.length < 12)) {
+      problems.push(cfg.clerk.enabled ? 'โหมดโอนเงินต้องมีแอดมินไว้อนุมัติ: ตั้ง ADMIN_EMAIL (อีเมลที่ใช้ล็อกอิน Google)' : 'โหมดโอนเงินต้องมีแอดมินไว้อนุมัติ: ตั้ง ADMIN_EMAIL และ ADMIN_PASSWORD (อย่างน้อย 12 ตัวอักษร)');
+    }
   }
   if (cfg.paymentProvider === 'mock' && liveKey) problems.push('มีคีย์ Omise จริงอยู่ใน .env ห้ามใช้ PAYMENT_PROVIDER=mock');
   if (!(O.qrMinutes > 0 && O.qrMinutes <= 24 * 60)) problems.push('OMISE_QR_MINUTES ต้องอยู่ระหว่าง 1–1440');
@@ -189,6 +191,7 @@ function loadConfig(overrides = {}) {
     if (cfg.mail.mode === 'brevo' && (!cfg.mail.brevoKey || !/@/.test(cfg.mail.from) || /@example\.com/.test(cfg.mail.from))) problems.push('ตั้ง BREVO_API_KEY และ MAIL_FROM (อีเมลผู้ส่งที่ยืนยันกับ Brevo แล้ว)');
     if (cfg.mail.mode === 'smtp' && (!cfg.mail.host || !cfg.mail.user || !cfg.mail.pass)) problems.push('ตั้ง SMTP_HOST / SMTP_USER / SMTP_PASS ให้ครบ');
     if (!cfg.legal.name || !cfg.legal.contactEmail) problems.push('ตั้ง LEGAL_NAME และ CONTACT_EMAIL สำหรับหน้านโยบาย');
+    if (!cfg.clerk.enabled) problems.push('ขายจริงต้องตั้ง CLERK_PUBLISHABLE_KEY และ CLERK_SECRET_KEY (ร้านใช้ Clerk เข้าสู่ระบบอย่างเดียว ดู docs/ตั้งค่า-Clerk.md)');
   }
   const CK = cfg.clerk;
   if ((CK.publishableKey || CK.secretKey) && !CK.enabled) {
