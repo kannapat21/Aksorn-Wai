@@ -63,9 +63,8 @@ function appearance() {
       cardBox: { width: '100%', boxShadow: 'none', border: 'none', background: 'transparent', borderRadius: '0' },
       card: { background: 'transparent', boxShadow: 'none', border: 'none', padding: '0', gap: '20px' },
       footer: { background: 'transparent', borderTop: '1px solid var(--line)', marginTop: '2px', paddingTop: '4px' },
-      footerActionLink: { color: 'var(--accent)', fontWeight: '700' },
+      footerAction: { display: 'none' }, // สลับเข้าสู่ระบบ/สมัครใช้แท็บด้านบนแทน
       socialButtonsBlockButton: 'ak-social',
-      dividerRow: 'ak-divider',
       form: 'ak-form',
       formFieldInput: 'ak-input',
       formButtonPrimary: 'ak-primary',
@@ -108,7 +107,7 @@ async function main() {
       if (r.ok && j.ok) {
         // โชว์เครื่องหมายถูกสั้นๆ ก่อนไปต่อ
         if (stage && doneBox) { doneBox.hidden = false; stage.classList.add('ready', 'done'); }
-        const wait = html.classList.contains('calm') ? 150 : 900;
+        const wait = html.classList.contains('calm') ? 150 : 750;
         return setTimeout(() => location.replace(j.next || next || '/library'), wait);
       }
       showError(j.error || 'เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่');

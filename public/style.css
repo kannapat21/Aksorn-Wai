@@ -1218,97 +1218,64 @@ img[loading="lazy"]:not(.loaded) { opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .sub-style-card, .sub-play { transition: none; } }
 
-/* ---------- หน้าเข้าสู่ระบบ (Clerk) ---------- */
-.clerk-auth { position: relative; isolation: isolate; padding: 28px 0 40px; }
-.ca-bg { position: absolute; inset: -40px -16px; z-index: -1; overflow: hidden; pointer-events: none; }
-.ca-bg i { position: absolute; border-radius: 50%; filter: blur(60px); opacity: .55; animation: ca-float 18s ease-in-out infinite alternate; }
-.ca-bg .b1 { width: 340px; height: 340px; left: 8%; top: 4%; background: color-mix(in srgb, var(--accent) 45%, transparent); }
-.ca-bg .b2 { width: 260px; height: 260px; right: 6%; top: 30%; background: color-mix(in srgb, var(--brand) 55%, transparent); animation-duration: 22s; animation-delay: -6s; }
-.ca-bg .b3 { width: 220px; height: 220px; left: 30%; bottom: 0; background: color-mix(in srgb, var(--accent) 25%, var(--brand) 20%); animation-duration: 26s; animation-delay: -12s; }
-@keyframes ca-float { 0% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, -20px) scale(1.08); } 100% { transform: translate(-24px, 18px) scale(.95); } }
-
-.ca-card { position: relative; max-width: 440px; padding: 30px 28px 22px; overflow: hidden;
-  background: color-mix(in srgb, var(--surface) 86%, transparent); backdrop-filter: blur(18px) saturate(1.3); -webkit-backdrop-filter: blur(18px) saturate(1.3);
-  border-radius: 24px; animation: ca-in .7s var(--ease) both; }
-@keyframes ca-in { from { opacity: 0; transform: translateY(18px) scale(.98); } }
-.ca-glow { position: absolute; inset: -1px; border-radius: inherit; pointer-events: none; padding: 1px;
-  background: conic-gradient(from var(--ca-a, 0deg), transparent 0 70%, color-mix(in srgb, var(--brand) 80%, transparent) 80%, color-mix(in srgb, var(--accent) 70%, transparent) 90%, transparent 100%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; animation: ca-spin 6s linear infinite; opacity: .9; }
-@property --ca-a { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
-@keyframes ca-spin { to { --ca-a: 360deg; } }
-
+/* ---------- หน้าเข้าสู่ระบบ (Clerk) · เรียบ สบายตา ---------- */
+.clerk-auth { padding: 28px 0 40px; }
+.ca-card { max-width: 400px; padding: 28px 26px 18px; border-radius: 22px; animation: ca-in .5s var(--ease) both; }
+@keyframes ca-in { from { opacity: 0; transform: translateY(12px); } }
 .ca-head { text-align: center; }
-.ca-logo { margin: 0 auto 14px; display: block; filter: drop-shadow(0 8px 18px color-mix(in srgb, var(--accent) 35%, transparent)); }
-.ca-tabs { position: relative; display: grid; grid-template-columns: 1fr 1fr; padding: 4px; margin: 0 auto 18px; max-width: 280px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 999px; }
-.ca-tabs a { position: relative; z-index: 1; padding: 8px 10px; border-radius: 999px; text-decoration: none; color: var(--muted); font-weight: 700; font-size: .95rem; transition: color .3s var(--ease); }
-.ca-tabs a[aria-current] { color: var(--accent-ink); }
+.ca-logo { margin: 0 auto 18px; display: block; }
+.ca-tabs { position: relative; display: grid; grid-template-columns: 1fr 1fr; padding: 4px; margin: 0 auto; max-width: 260px; background: var(--surface-2); border-radius: 999px; }
+.ca-tabs a { position: relative; z-index: 1; padding: 7px 10px; border-radius: 999px; text-decoration: none; color: var(--muted); font-weight: 700; font-size: .92rem; transition: color .3s var(--ease); }
+.ca-tabs a[aria-current] { color: var(--ink); }
 .ca-tabs a:not([aria-current]):hover { color: var(--ink); }
-.ca-pill { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 999px; background: var(--accent);
-  box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--accent) 80%, transparent); transform: translateX(calc(var(--x) * 100%)); transition: transform .45s cubic-bezier(.5,1.6,.4,1); }
+.ca-pill { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 999px; background: var(--surface);
+  box-shadow: 0 1px 2px rgba(16,24,40,.08), 0 2px 8px rgba(16,24,40,.06); transform: translateX(calc(var(--x) * 100%)); transition: transform .4s var(--ease); }
 .ca-tabs.go .ca-pill { transform: translateX(calc((1 - var(--x)) * 100%)); }
 .ca-tabs.go a[aria-current] { color: var(--muted); }
-.ca-title { margin: 0 0 6px; font-size: clamp(1.55rem, 5.5vw, 1.9rem); line-height: 1.25; }
-.ca-title em { font-style: normal; display: inline-block; margin-left: .25em; background: linear-gradient(100deg, var(--accent), color-mix(in srgb, var(--brand) 85%, var(--accent)) 60%, var(--accent));
-  background-size: 200% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: ca-shine 5s ease-in-out infinite; }
-@keyframes ca-shine { 50% { background-position: 100% 0; } }
-.ca-sub { margin: 0 auto; max-width: 34ch; }
-.ca-perks { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 0; margin: 14px 0 6px; }
-.ca-perks li { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px 4px 7px; font-size: .8rem; border-radius: 999px; color: var(--ink);
-  background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent); animation: ca-pop .5s calc(.35s + var(--i) * .09s) cubic-bezier(.5,1.6,.4,1) both; }
-.ca-perks svg { width: 14px; height: 14px; color: var(--accent); flex: none; }
-@keyframes ca-pop { from { opacity: 0; transform: translateY(6px) scale(.9); } }
 
-.ca-error { margin: 12px 0 0; animation: ca-shake .45s var(--ease); }
-@keyframes ca-shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+.ca-error { margin: 14px 0 0; animation: ca-shake .4s var(--ease); }
+@keyframes ca-shake { 25%, 75% { transform: translateX(-4px); } 50% { transform: translateX(4px); } }
 
-.ca-stage { position: relative; margin-top: 16px; min-height: 236px; }
-.ca-mount { opacity: 0; transform: translateY(8px); transition: opacity .45s var(--ease), transform .45s var(--ease); }
-.ca-stage.ready .ca-mount { opacity: 1; transform: none; }
-.ca-skeleton { position: absolute; inset: 0 0 auto; display: grid; gap: 12px; transition: opacity .3s; }
+.ca-stage { position: relative; margin-top: 22px; min-height: 210px; }
+.ca-mount { opacity: 0; transition: opacity .35s var(--ease); }
+.ca-stage.ready .ca-mount { opacity: 1; }
+.ca-skeleton { position: absolute; inset: 0 0 auto; display: grid; gap: 12px; transition: opacity .25s; }
 .ca-stage.ready .ca-skeleton { opacity: 0; pointer-events: none; }
-.sk { display: block; border-radius: 14px; background: linear-gradient(90deg, var(--surface-2) 0 40%, color-mix(in srgb, var(--surface-2) 40%, var(--surface)) 50%, var(--surface-2) 60% 100%); background-size: 300% 100%; animation: ca-sk 1.4s linear infinite; }
-.sk-btn { height: 52px; } .sk-btn.primary { background-color: var(--accent-soft); } .sk-input { height: 48px; border-radius: 12px; } .sk-label { height: 12px; width: 30%; border-radius: 6px; }
+.sk { display: block; border-radius: 12px; background: var(--surface-2); animation: ca-pulse 1.4s ease-in-out infinite; }
+.sk-btn { height: 48px; } .sk-input { height: 46px; }
 .sk-or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .8rem; } .sk-or i { flex: 1; height: 1px; background: var(--line); }
-@keyframes ca-sk { from { background-position: 100% 0; } to { background-position: -50% 0; } }
+@keyframes ca-pulse { 50% { opacity: .55; } }
 
 /* ปุ่มและช่องกรอกของ Clerk (ตั้ง class เพิ่มใน clerk-auth.js) */
 .ca-mount .cl-rootBox, .ca-mount .cl-cardBox, .ca-mount .cl-card { width: 100%; max-width: none; }
-.ca-mount .ak-social { position: relative; overflow: hidden; min-height: 52px; border-radius: 14px !important; font-weight: 700 !important;
-  box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 6px 18px -10px rgba(16,24,40,.25) !important;
-  transition: transform .2s var(--ease), box-shadow .25s, border-color .25s, background .25s !important; animation: ca-rise .5s .15s var(--ease) both; }
-.ca-mount .ak-social::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.55) 50%, transparent 70%); transform: translateX(-120%); transition: transform .7s var(--ease); pointer-events: none; }
-.ca-mount .ak-social:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)) !important; box-shadow: 0 2px 4px rgba(16,24,40,.06), 0 14px 28px -12px color-mix(in srgb, var(--accent) 55%, transparent) !important; }
-.ca-mount .ak-social:hover::after { transform: translateX(120%); }
-.ca-mount .ak-social:active { transform: translateY(0) scale(.98); }
-.ca-mount .ak-input { min-height: 48px; transition: border-color .2s, box-shadow .2s, background .2s !important; }
-.ca-mount .ak-input:focus { box-shadow: 0 0 0 4px var(--accent-soft) !important; border-color: var(--accent) !important; }
-.ca-mount .ak-primary { position: relative; overflow: hidden; min-height: 50px; border-radius: 14px !important; font-weight: 700 !important; text-transform: none !important;
-  box-shadow: 0 1px 0 rgba(255,255,255,.15) inset, 0 10px 22px -10px color-mix(in srgb, var(--accent) 80%, transparent) !important; transition: transform .2s var(--ease), box-shadow .25s !important; }
-.ca-mount .ak-primary:hover { transform: translateY(-2px); box-shadow: 0 1px 0 rgba(255,255,255,.15) inset, 0 16px 30px -12px color-mix(in srgb, var(--accent) 85%, transparent) !important; }
-.ca-mount .ak-primary:active { transform: scale(.98); }
-.ca-mount .ak-divider, .ca-mount .ak-form { animation: ca-rise .5s .25s var(--ease) both; }
-.ca-mount .ak-form { animation-delay: .32s; }
-@keyframes ca-rise { from { opacity: 0; transform: translateY(8px); } }
+.ca-mount .ak-social { min-height: 48px; border-radius: 12px !important; font-weight: 700 !important; box-shadow: none !important;
+  transition: transform .2s var(--ease), border-color .2s, background .2s !important; }
+.ca-mount .ak-social:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--ink) 25%, var(--line)) !important; }
+.ca-mount .ak-social:active { transform: scale(.985); }
+.ca-mount .ak-input { min-height: 46px; transition: border-color .2s, box-shadow .2s !important; }
+.ca-mount .ak-input:focus { box-shadow: 0 0 0 3px var(--accent-soft) !important; border-color: var(--accent) !important; }
+.ca-mount .ak-primary { min-height: 48px; border-radius: 12px !important; font-weight: 700 !important; text-transform: none !important; box-shadow: none !important; transition: transform .2s var(--ease), filter .2s !important; }
+.ca-mount .ak-primary:hover { transform: translateY(-1px); filter: brightness(1.08); }
+.ca-mount .ak-primary:active { transform: scale(.985); }
 
-/* เข้าสำเร็จ: วงกลม + เครื่องหมายถูกวาดเส้น */
-.ca-done { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; text-align: center; gap: 2px; }
+/* เข้าสำเร็จ: เครื่องหมายถูกวาดเส้น */
+.ca-done { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; text-align: center; gap: 6px; }
 .ca-done[hidden] { display: none; }
-.ca-stage.done .ca-mount, .ca-stage.done .ca-skeleton { opacity: 0; transform: scale(.97); pointer-events: none; }
-.ca-done svg { width: 76px; height: 76px; fill: none; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 8px; animation: ca-pop .5s cubic-bezier(.5,1.6,.4,1) both; }
-.ca-done circle { stroke: var(--ok); stroke-width: 3; stroke-dasharray: 145; stroke-dashoffset: 145; animation: ca-draw .6s .05s var(--ease) forwards; fill: var(--ok-soft); }
-.ca-done path { stroke: var(--ok); stroke-width: 4; stroke-dasharray: 40; stroke-dashoffset: 40; animation: ca-draw .35s .5s var(--ease) forwards; }
-.ca-done-title { margin: 0; font-weight: 700; font-size: 1.2rem; animation: ca-rise .4s .55s var(--ease) both; }
+.ca-stage.done .ca-mount, .ca-stage.done .ca-skeleton { opacity: 0; pointer-events: none; }
+.ca-done svg { width: 60px; height: 60px; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.ca-done circle { stroke: var(--ok); stroke-width: 2.5; stroke-dasharray: 145; stroke-dashoffset: 145; animation: ca-draw .5s var(--ease) forwards; }
+.ca-done path { stroke: var(--ok); stroke-width: 3.5; stroke-dasharray: 40; stroke-dashoffset: 40; animation: ca-draw .3s .4s var(--ease) forwards; }
+.ca-done-title { margin: 0; font-weight: 700; opacity: 0; animation: ca-in .35s .45s var(--ease) forwards; }
 @keyframes ca-draw { to { stroke-dashoffset: 0; } }
-.ca-legal { margin: 18px 0 0; }
+.ca-legal { margin: 14px 0 0; }
 
 @media (max-width: 520px) {
-  .clerk-auth { padding: 8px 0 24px; align-items: start; }
-  .ca-card { padding: 24px 18px 18px; border-radius: 22px; }
-  .ca-bg i { filter: blur(50px); opacity: .45; }
+  .clerk-auth { padding: 12px 0 24px; align-items: start; }
+  .ca-card { padding: 24px 18px 16px; border-radius: 20px; }
 }
-.calm .ca-bg i, .calm .ca-glow, .calm .ca-title em, .calm .sk { animation: none; }
+.calm .sk { animation: none; }
 @media (prefers-reduced-motion: reduce) {
-  .ca-card, .ca-bg i, .ca-glow, .ca-title em, .ca-perks li, .sk, .ca-mount .ak-social, .ca-mount .ak-divider, .ca-mount .ak-form, .ca-done svg, .ca-done-title, .ca-error { animation: none !important; }
+  .ca-card, .sk, .ca-error, .ca-done-title { animation: none !important; opacity: 1; }
   .ca-done circle, .ca-done path { animation: none; stroke-dashoffset: 0; }
   .ca-pill, .ca-mount { transition: none; }
 }
