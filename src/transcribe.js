@@ -93,8 +93,8 @@ function withSpaces(words, segments) {
 }
 
 // บริบทตั้งต้นให้ Whisper: ประโยคไทยสะอาด ไม่มีคำเติม (เอ่อ/อืม) เพื่อให้ถอดออกมาเป็นภาษาเขียนสั้นกระชับ
-// ไม่ต่อข้อความจากท่อนก่อนแล้ว เพราะถ้าท่อนก่อนถอดผิด/วนซ้ำ ความผิดจะลามไปท่อนถัดไป
-const THAI_PROMPT = 'สวัสดีครับ วันนี้เราจะมาเล่าเรื่องนี้ให้ฟังกันนะคะ ใช้ภาษาไทยเป็นหลัก มีคำภาษาอังกฤษปนบ้าง เช่น TikTok, YouTube, Facebook';
+// ร้านไม่ส่งข้อความจากท่อนก่อนแล้ว (asrPrompt ยังรับได้) เพราะถ้าท่อนก่อนถอดผิด/วนซ้ำ ความผิดจะลามไปท่อนถัดไป
+const BASE_PROMPT = 'สวัสดีครับ วันนี้เราจะมาเล่าเรื่องนี้ให้ฟังกันนะคะ ใช้ภาษาไทยเป็นหลัก มีคำภาษาอังกฤษปนบ้าง เช่น TikTok, YouTube, Facebook';
 
 // ประโยคที่ Whisper ชอบแต่งขึ้นเองตอนเงียบ/มีแต่เพลง
 const HALLUCINATION_RE = /^(ขอบคุณ(ที่|สำหรับการ)?รับชม.*|ขอบคุณครับ|ขอบคุณค่ะ|ฝากกด(ไลค์|ติดตาม|subscribe).*|กด(ไลค์|ติดตาม|subscribe|กระดิ่ง).*|(ซับ|คำบรรยาย)(ไตเติ้ล)?(ภาษาไทย)?(โดย|by).*|subtitles? by.*|thank(s| you) for watching.*|\.+|…+)$/iu;
@@ -123,9 +123,11 @@ function cleanSegments(raw) {
   }
   return keep;
 }
+const THAI_PROMPT = BASE_PROMPT;
+const asrPrompt = (prev = '') => (prev ? `${BASE_PROMPT} ${String(prev).replace(/\s+/g, ' ').trim().slice(-120)}` : BASE_PROMPT);
 
 // ถอดเสียงท่อนเดียว (WAV ไม่เกิน 25 MB) → { words: [{text,start,end}], segments }
-async function groqTranscribe(cfg, wavBuf, { offset = 0, fetchImpl = globalThis.fetch } = {}) {
+async function groqTranscribe(cfg, wavBuf, { offset = 0, fetchImpl = globalThis.fetch, prompt = '' } = {}) {
   const G = cfg.groq;
   const form = () => {
     const fd = new FormData();
@@ -136,7 +138,7 @@ async function groqTranscribe(cfg, wavBuf, { offset = 0, fetchImpl = globalThis.
     fd.append('timestamp_granularities[]', 'word');
     fd.append('timestamp_granularities[]', 'segment');
     fd.append('temperature', '0');
-    fd.append('prompt', THAI_PROMPT);
+    fd.append('prompt', asrPrompt(prompt));
     return fd;
   };
   let r;
@@ -230,6 +232,7 @@ function createTranscriber(cfg) {
   async function transcribe(audioFile, { onProgress = () => {}, outFile, timeoutMs }) {
     const args = [SCRIPT, audioFile, '--out', outFile, '--engine', S.engine, '--language', 'th'];
     if (S.model) args.push('--model', S.model);
+    args.push('--prompt', BASE_PROMPT);
     await run(S.python, args, {
       env,
       timeoutMs: timeoutMs || S.asrTimeoutMin * 60 * 1000,
@@ -241,4 +244,4 @@ function createTranscriber(cfg) {
   return { check, transcribe };
 }
 
-module.exports = { createTranscriber, run, groqTranscribe, cleanSegments, THAI_PROMPT, splitWav, parseWav, wavHeader, withSpaces };
+module.exports = { BASE_PROMPT, THAI_PROMPT, asrPrompt, createTranscriber, run, groqTranscribe, cleanSegments, splitWav, parseWav, wavHeader, withSpaces };

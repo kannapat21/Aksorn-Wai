@@ -112,6 +112,8 @@ function loadConfig(overrides = {}) {
       // ตั้ง SMTP_HOST แล้วไม่ได้ระบุ MAIL_MODE = ส่งจริงผ่าน SMTP · ไม่ได้ตั้ง = พิมพ์ลงหน้าจอ (โหมดทดสอบ)
       mode: env.MAIL_MODE || (env.BREVO_API_KEY ? 'brevo' : env.SMTP_HOST ? 'smtp' : 'console'),
       brevoKey: env.BREVO_API_KEY || '',
+      // อีเมลร้านที่รับแจ้งเตือน "ลูกค้ากดยืนยันโอน" (คั่นหลายอีเมลด้วย ,) · ไม่ตั้ง = ส่งไป ADMIN_EMAIL
+      notify: String(env.SHOP_NOTIFY_EMAIL || env.ADMIN_EMAIL || '').split(',').map((x) => x.trim().toLowerCase()).filter((x) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x)),
       from: env.MAIL_FROM || 'no-reply@example.com',
       host: env.SMTP_HOST, port: Number(env.SMTP_PORT || 587), user: env.SMTP_USER, pass: env.SMTP_PASS,
     },

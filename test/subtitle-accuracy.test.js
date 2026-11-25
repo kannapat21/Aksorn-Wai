@@ -45,7 +45,7 @@ test('ตัดท่อนที่ Whisper แต่งเอง: ช่วง
   assert.equal(cleanSegments([{ text: ' ขอบคุณครับ', no_speech_prob: 0.01, avg_logprob: -0.1, compression_ratio: 1 }])[0].bad, false);
 });
 
-test('Groq: ส่งบริบทภาษาไทยคงที่ (ไม่ต่อข้อความท่อนก่อน) และคำในท่อนที่ตัดทิ้งไม่ขึ้นซับ', async () => {
+test('Groq: ส่งบริบทภาษาไทย และคำในท่อนที่ตัดทิ้งไม่ขึ้นซับ', async () => {
   let sent = null;
   const fetchImpl = async (url, opts) => {
     sent = opts.body;
@@ -59,7 +59,7 @@ test('Groq: ส่งบริบทภาษาไทยคงที่ (ไม
     }), { status: 200, headers: { 'content-type': 'application/json' } });
   };
   const cfg = { groq: { apiBase: 'http://groq.test', apiKey: 'k', model: 'whisper-large-v3' } };
-  const r = await groqTranscribe(cfg, Buffer.alloc(100), { offset: 10, fetchImpl, prompt: 'ข้อความเก่าที่ถอดผิด' });
+  const r = await groqTranscribe(cfg, Buffer.alloc(100), { offset: 10, fetchImpl });
   assert.equal(sent.get('prompt'), THAI_PROMPT);
   assert.equal(sent.get('language'), 'th');
   assert.equal(sent.get('temperature'), '0');

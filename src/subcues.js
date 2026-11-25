@@ -37,13 +37,40 @@ function maxCharsFor(width, height) {
 }
 
 /*
+ * คำเติมที่คนพูดแต่ไม่ควรขึ้นซับ: เอ่อ เอ๋อ เอ้อ อ่า อ้า อืม อึม เออ (รวมแบบลากเสียง เช่น เอ่ออออ อ่าาา)
+ * ระวังคำจริงที่หน้าตาคล้ายกัน: อ่าน อ่าว อ่าง อ้าง อ้าว เออร์ → ดูตัวถัดไปก่อนตัด
+ */
+const FILLER_RE = /(?<![\u0E01-\u0E2E\u0E40-\u0E44])(?:เอ[่๋้]อ+(?!ล้น)|อ[่้]า+(?![\u0E31-\u0E3A\u0E47-\u0E4Eนวงยม])|อื+ม+(?![\u0E31-\u0E3A\u0E47-\u0E4E])|อึ+ม+(?![\u0E31-\u0E3A\u0E47-\u0E4E])|เออ+(?![ร\u0E31-\u0E3A\u0E47-\u0E4E]))(?:\s*ๆ)?|\b(?:u+h+|u+m+|e+r+m+|h+m+)\b[,.]?/giu;
+
+function dropFillers(text, times, bounds, ends = []) {
+  const kill = new Uint8Array(text.length);
+  let any = false;
+  for (const m of text.matchAll(FILLER_RE)) { any = true; for (let k = m.index; k < m.index + m[0].length; k++) kill[k] = 1; }
+  if (!any) return { text, times, ends };
+  let t = '';
+  const tt = [], te = [];
+  const nb = new Set();
+  for (let i = 0; i < text.length; i++) {
+    if (bounds.has(i)) nb.add(t.length);
+    if (kill[i]) continue;
+    const ch = text[i];
+    if (ch === ' ' && (!t || t.endsWith(' '))) continue; // ไม่ให้มีช่องว่างซ้อนตรงที่ตัดคำเติม
+    t += ch; tt.push(times[i]); te.push(ends[i]);
+  }
+  if (t.endsWith(' ')) { t = t.slice(0, -1); tt.pop(); te.pop(); }
+  tt.lastEnd = times.lastEnd;
+  bounds.clear(); nb.forEach((b) => bounds.add(b));
+  return { text: t, times: tt, ends: te };
+}
+
+/*
  * ผลถอดเสียง words: [{ text, start, end }] (ชิ้นคำจาก Whisper ภาษาไทยมักเป็นชิ้นย่อยไม่ตรงคำ)
  * → โทเคนคำไทยพร้อมเวลา: ให้เวลาทีละตัวอักษรแบบเฉลี่ยในชิ้น แล้วตัดคำใหม่ด้วย Intl.Segmenter
  */
 function tokensFromWords(words) {
   let text = '';
-  const times = []; // เวลาเริ่มของแต่ละ code unit
-  const ends = []; // เวลาจบของแต่ละ code unit (ใช้หาเวลาจบของคำ ไม่ให้ช่วงเงียบหลังคำถูกนับเป็นเวลาพูด)
+  let times = []; // เวลาเริ่มของแต่ละ code unit
+  let ends = []; // เวลาจบของแต่ละ code unit (ใช้หาเวลาจบของคำ ไม่ให้ช่วงเงียบหลังคำถูกนับเป็นเวลาพูด)
   let prevEnd = 0;
   const bounds = new Set([0]); // จุดต่อระหว่างชิ้นของ Whisper (ตัดบรรทัดตรงนี้ได้สบายใจกว่ากลางชิ้น)
   for (const w of words || []) {
@@ -66,6 +93,8 @@ function tokensFromWords(words) {
     prevEnd = end;
     times.lastEnd = end;
   }
+  // ตัดคำเติม (เอ่อ อ่า อืม) ทิ้ง ทั้งตัวอักษรและเวลา ก่อนตัดคำ
+  ({ text, times, ends } = dropFillers(text, times, bounds, ends));
   // ตัดคำ
   const out = [];
   for (const seg of segW().segment(text)) {
@@ -81,19 +110,20 @@ function tokensFromWords(words) {
 
 /*
  * คำเติม/เสียงลังเล (เอ่อ อืม อ่า …) ไม่ต้องขึ้นซับ
- * ตัดเมื่อเป็นคำเดี่ยว: ข้างใดข้างหนึ่งเป็นช่องว่าง เครื่องหมาย หรือต้น/ท้ายข้อความ
+ * ตัดเมื่อเป็นคำเดี่ยว: ทั้งสองข้างเป็นช่องว่าง เครื่องหมาย หรือต้น/ท้ายข้อความ
  * (คำจริงอย่าง "น้ำเอ่อล้น" ที่ติดกับคำอื่นทั้งสองข้างไม่โดนตัด)
  */
-const FILLER_RE = /^(เอ่อ+|เอ๋อ+|เอ้อ+|เออะ|เอิ่ม+|เอิ้ม+|อ่า+|อ้า+|อืม+|อึม+|อื้ม+|อึ้ม+|ฮึ่ม+|ฮึม+|หืม+|uh+|um+|umm+|hmm+|erm+|ah+|eh+)$/iu;
-const isFiller = (s) => FILLER_RE.test(String(s).replace(/[.,!?…~\-]+$/, ''));
+const FILLER_WORD_RE = /^(เอ่อ+|เอ๋อ+|เอ้อ+|เออะ|เอิ่ม+|เอิ้ม+|อ่า+|อ้า+|อืม+|อึม+|อื้ม+|อึ้ม+|ฮึ่ม+|ฮึม+|หืม+|uh+|um+|umm+|hmm+|erm+|ah+|eh+)$/iu;
+const isFiller = (s) => FILLER_WORD_RE.test(String(s).replace(/[.,!?…~\-]+$/, ''));
 const isPunct = (s) => /^[\s.,!?…~\-–—"“”'‘’()]+$/.test(s);
-function dropFillers(toks) {
+// รอบสอง (ระดับคำ): คำเติมที่หลุดรอบแรก เช่น เอิ่ม ฮึ่ม หืม
+function dropFillerTokens(toks) {
   const out = [];
   for (let i = 0; i < toks.length; i++) {
     const t = toks[i];
     if (!t.space && isFiller(t.text)) {
       const prev = toks[i - 1], next = toks[i + 1];
-      const alone = !prev || prev.space || isPunct(prev.text) || !next || next.space || isPunct(next.text) || isFiller(next.text) || /^[าะ่้๊๋ม]+$/.test(next.text);
+      const alone = (!prev || prev.space || isPunct(prev.text) || isFiller(prev.text)) && (!next || next.space || isPunct(next.text) || isFiller(next.text) || /^[าะ่้๊๋ม]+$/.test(next.text));
       if (alone) {
         // ลากเสียงต่อท้าย (อ่า|าา) และจุลภาคหลังคำเติมก็ตัดด้วย
         while (toks[i + 1] && !toks[i + 1].space && (/^[าะ่้๊๋ม]+$/.test(toks[i + 1].text) || /^[,.…~-]+$/.test(toks[i + 1].text))) i++;
@@ -114,7 +144,7 @@ const isBreakChar = (s) => /[.!?…。]$/.test(s);
  *   - ถ้าบรรทัดยาวเกินครึ่งแล้วเจอช่องว่าง/จบประโยค ตัดตรงนั้น (อ่านง่ายกว่าตัดกลางวลี)
  */
 function buildCues(words, { maxChars = 18, maxDur = 4.2, gap = 0.6, duration = Infinity } = {}) {
-  const toks = dropFillers(tokensFromWords(words));
+  const toks = dropFillerTokens(tokensFromWords(words));
   const cues = [];
   const lenOf = (list) => list.reduce((a, t) => a + (t.sp ? 1 : 0) + glen(t.text), 0);
   const push = (list) => { if (list.length) cues.push({ toks: list, start: list[0].start, end: list[list.length - 1].end }); };
@@ -263,4 +293,4 @@ function toSrt(cues) {
   return cues.map((c, i) => `${i + 1}\r\n${srtTime(c.start)} --> ${srtTime(c.end)}\r\n${c.text}\r\n`).join('\r\n');
 }
 
-module.exports = { buildCues, tokensFromWords, dropFillers, isFiller, validateCues, spreadWords, toSrt, srtTime, maxCharsFor, cleanText, ALLOWED_RE, MAX_CUE_GRAPHEMES, MAX_CUES, graphemes };
+module.exports = { dropFillers, dropFillerTokens, FILLER_RE, buildCues, tokensFromWords, validateCues, spreadWords, toSrt, srtTime, maxCharsFor, cleanText, ALLOWED_RE, MAX_CUE_GRAPHEMES, MAX_CUES, graphemes };
