@@ -4,7 +4,7 @@
  *   - Clerk จำลองในเครื่อง: กุญแจ RSA ของเราเอง + fetch ปลอม (ไม่ออกเน็ต)
  *   - token ถูกต้อง → จับคู่บัญชีเดิมด้วยอีเมล / สร้างบัญชีใหม่ / แอดมินยังเป็นแอดมิน
  *   - token ปลอม หมดอายุ มาจากเว็บอื่น หรืออีเมลยังไม่ยืนยัน → เข้าไม่ได้
- *   - ฟอร์มรหัสผ่านแบบเดิมยังใช้ได้ที่ /login?classic=1
+ *   - ใช้ Clerk อย่างเดียว: ทางรหัสผ่านเดิม (ล็อกอิน/สมัคร/ลืมรหัส) ปิดหมด
  */
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -65,7 +65,6 @@ before(async () => {
     DOWNLOAD_LINK_SECRET: crypto.randomBytes(32).toString('hex'),
     PAYMENT_WEBHOOK_SECRET: crypto.randomBytes(32).toString('hex'),
     ADMIN_EMAIL: ADMIN,
-    ADMIN_PASSWORD: 'test-admin-password-123',
     PAYMENT_PROVIDER: 'mock',
     MAIL_MODE: 'console',
     BASE_URL: BASE,
@@ -132,7 +131,7 @@ test('ตั้งค่าผิด: มีแค่คีย์เดียว
   assert.equal(loadConfig(env({})).clerk.enabled, false);
 });
 
-test('หน้า /login และ /signup ใช้กล่อง Clerk + CSP ที่อนุญาตโดเมน Clerk · ฟอร์มเดิมยังอยู่ที่ ?classic=1', async () => {
+test('หน้า /login และ /signup ใช้กล่อง Clerk + CSP ที่อนุญาตโดเมน Clerk · ไม่มีฟอร์มรหัสผ่านแล้ว', async () => {
   const c = client();
   const r = await c.req('/login?next=/library');
   assert.equal(r.status, 200);
@@ -142,21 +141,43 @@ test('หน้า /login และ /signup ใช้กล่อง Clerk + CSP
   assert.match(html, /data-clerk-publishable-key="pk_test_/);
   assert.ok(!html.includes(SK), 'ห้ามส่ง secret key ไปหน้าเว็บ');
   assert.match(r.headers.get('content-security-policy'), new RegExp(FAPI.replace(/\./g, '\\.')));
-  assert.match(html, /\/login\?classic=1/);
+  assert.ok(!/name="password"|classic=1|ลืมรหัสผ่าน/.test(html), 'ไม่มีฟอร์ม/ลิงก์รหัสผ่านแล้ว');
+  assert.match(html, /class="ca-tabs"[^>]*>[\s\S]*aria-current="page">เข้าสู่ระบบ/);
 
   const s = await c.req('/signup');
-  assert.match(await s.text(), /data-mode="signup"/);
+  const sh = await s.text();
+  assert.match(sh, /data-mode="signup"/);
+  assert.match(sh, /aria-current="page">สมัครสมาชิก/);
 
+  // ?classic=1 ไม่เปิดฟอร์มเดิมแล้ว
   const old = await c.req('/login?classic=1');
-  const oldHtml = await old.text();
-  assert.match(oldHtml, /action="\/login"/);
-  assert.match(oldHtml, /name="password"/);
-  assert.match(oldHtml, /กลับไปใช้ปุ่ม Google/);
-  assert.ok(!/clerk\.accounts\.dev/.test(old.headers.get('content-security-policy')), 'หน้าเดิมไม่ต้องเปิด CSP ให้ Clerk');
+  assert.ok(!/name="password"/.test(await old.text()));
 
-  // หน้าอื่นไม่โหลด Clerk
+  // หน้าอื่นไม่โหลด Clerk · หน้าแรกบอกว่าใช้ปุ่ม Google
   const home = await c.req('/');
   assert.ok(!/clerk\.accounts\.dev/.test(home.headers.get('content-security-policy')));
+  assert.match(await home.text(), /กดปุ่ม Google ปุ่มเดียว/);
+});
+
+test('ทางรหัสผ่านเดิมปิดหมด: POST /login /signup, ลืมรหัส, ตั้งรหัสใหม่, ยืนยันอีเมล → พาไปหน้า Clerk และไม่เปิดเซสชัน', async () => {
+  const c = client();
+  const csrf = await c.csrf();
+  const cases = [
+    ['POST', '/login', { csrf, email: ADMIN, password: 'test-admin-password-123' }, '/login'],
+    ['POST', '/signup', { csrf, email: 'n@x.co', password: 'password123', password2: 'password123' }, '/signup'],
+    ['GET', '/forgot', null, '/login'],
+    ['POST', '/forgot', { csrf, email: ADMIN }, '/login'],
+    ['GET', '/reset?t=abc', null, '/login'],
+    ['POST', '/reset', { csrf, t: 'abc', password: 'x'.repeat(10), password2: 'x'.repeat(10) }, '/login'],
+    ['GET', '/verify-email?t=abc', null, '/login'],
+  ];
+  for (const [method, p, form, to] of cases) {
+    const r = await c.req(p, { method, form: form || undefined });
+    assert.equal(r.status, 303, `${method} ${p}`);
+    assert.equal(r.headers.get('location'), to, `${method} ${p}`);
+  }
+  assert.equal(c.jar.sid, undefined);
+  assert.equal(userRow('n@x.co'), undefined);
 });
 
 test('Google ครั้งแรก → สร้างบัญชีใหม่ (ยืนยันอีเมลแล้ว ไม่มีรหัสผ่านของร้าน) แล้วเข้าคลังได้', async () => {
@@ -176,34 +197,37 @@ test('Google ครั้งแรก → สร้างบัญชีให�
   const c2 = client();
   assert.equal((await c2.clerk(sign({ sub: 'user_new1' }))).status, 200);
   assert.equal(db().prepare('SELECT COUNT(*) n FROM users WHERE email = ?').get('new.person@gmail.com').n, 1);
-  // บัญชีที่ไม่มีรหัสผ่าน เข้าทางฟอร์มรหัสผ่านไม่ได้
-  const c3 = client();
-  const bad = await c3.req('/login', { method: 'POST', form: { csrf: await c3.csrf(), email: 'new.person@gmail.com', password: 'clerk$', next: '/library' } });
-  assert.equal(bad.status, 401);
 });
 
-test('บัญชีเดิม (ยืนยันอีเมลแล้ว) → ได้บัญชีเดิมพร้อมออเดอร์เดิม และรหัสผ่านเดิมยังใช้ได้', async () => {
-  const c = client();
-  const s = await c.req('/signup', { method: 'POST', form: { csrf: await c.csrf(), email: 'old@buyer.co', password: 'oldpassword1', password2: 'oldpassword1', next: '/library' } });
-  assert.equal(s.status, 303);
-  const before = userRow('old@buyer.co');
-  db().prepare('UPDATE users SET email_verified_at = ? WHERE id = ?').run(clock, before.id);
+// บัญชีที่สมัครด้วยรหัสผ่านไว้ก่อนเปลี่ยนมาใช้ Clerk (ใส่ตรงลงฐานข้อมูล เพราะฟอร์มเดิมปิดแล้ว)
+function legacyUser(email, { verified }) {
+  const id = crypto.randomBytes(16).toString('hex');
+  db().prepare('INSERT INTO users (id, email, name, password_hash, created_at, email_verified_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, email, '', 'scrypt$16384$8$1$c2FsdA$aGFzaA', clock, verified ? clock : null);
+  return id;
+}
+function legacySession(c, userId) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  db().prepare('INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
+    .run(crypto.createHash('sha256').update(token).digest('hex'), userId, clock, clock + 30 * 86400000);
+  c.jar.sid = token;
+}
+
+test('บัญชีเดิม (ยืนยันอีเมลแล้ว) → Google ด้วยอีเมลเดิมได้บัญชีเดิม (ออเดอร์/คลังเดิม)', async () => {
+  const id = legacyUser('old@buyer.co', { verified: true });
   addClerkUser('user_old1', 'OLD@buyer.co');
   const g = client();
   assert.equal((await g.clerk(sign({ sub: 'user_old1' }))).status, 200);
   const sess = db().prepare('SELECT user_id FROM sessions ORDER BY created_at DESC, rowid DESC LIMIT 1').get();
-  assert.equal(sess.user_id, before.id);
-  assert.equal(userRow('old@buyer.co').password_hash, before.password_hash);
-  const p = client();
-  const ok = await p.req('/login', { method: 'POST', form: { csrf: await p.csrf(), email: 'old@buyer.co', password: 'oldpassword1', next: '/library' } });
-  assert.equal(ok.status, 303);
+  assert.equal(sess.user_id, id);
+  assert.equal(db().prepare('SELECT COUNT(*) n FROM users WHERE email = ?').get('old@buyer.co').n, 1);
 });
 
 test('บัญชีที่ยังไม่ยืนยันอีเมล: เจ้าของอีเมลตัวจริงมาทาง Google → ลบรหัสที่คนอื่นตั้งดักไว้ และเตะเซสชันเก่าออก', async () => {
+  const id = legacyUser('victim@gmail.com', { verified: false });
   const squatter = client();
-  await squatter.req('/signup', { method: 'POST', form: { csrf: await squatter.csrf(), email: 'victim@gmail.com', password: 'squatpass1', password2: 'squatpass1', next: '/library' } });
+  legacySession(squatter, id);
   assert.ok(await squatter.me());
-  const id = userRow('victim@gmail.com').id;
   addClerkUser('user_victim', 'victim@gmail.com');
   const owner = client();
   assert.equal((await owner.clerk(sign({ sub: 'user_victim' }))).status, 200);
@@ -213,22 +237,18 @@ test('บัญชีที่ยังไม่ยืนยันอีเม�
   assert.ok(u.email_verified_at);
   assert.equal(await squatter.me(), null, 'เซสชันของคนที่สมัครดักไว้ต้องหลุด');
   assert.ok(await owner.me());
-  const again = client();
-  const r = await again.req('/login', { method: 'POST', form: { csrf: await again.csrf(), email: 'victim@gmail.com', password: 'squatpass1', next: '/library' } });
-  assert.equal(r.status, 401);
 });
 
-test('อีเมลแอดมิน (ADMIN_EMAIL) ล็อกอินด้วย Google → ยังเป็นแอดมิน เปิดหลังบ้านได้', async () => {
+test('อีเมลแอดมิน (ADMIN_EMAIL) ล็อกอินด้วย Google → ยังเป็นแอดมิน เปิดหลังบ้านได้ · ลูกค้าทั่วไปเปิดไม่ได้', async () => {
   addClerkUser('user_admin', 'Admin@AksornWai.local');
   const c = client();
   assert.equal((await c.clerk(sign({ sub: 'user_admin' }))).status, 200);
   assert.equal(userRow(ADMIN).role, 'admin');
-  const r = await c.req('/admin');
-  assert.equal(r.status, 200);
-  // รหัสผ่านแอดมินจาก .env ยังใช้ได้ (ทางสำรอง)
-  const p = client();
-  const ok = await p.req('/login', { method: 'POST', form: { csrf: await p.csrf(), email: ADMIN, password: 'test-admin-password-123', next: '/admin' } });
-  assert.equal(ok.status, 303);
+  assert.equal((await c.req('/admin')).status, 200);
+  addClerkUser('user_cust', 'cust@x.co');
+  const k = client();
+  await k.clerk(sign({ sub: 'user_cust' }));
+  assert.equal((await k.req('/admin')).status, 404);
 });
 
 test('token ใช้ไม่ได้ → 401 และไม่เปิดเซสชัน (ปลอม/หมดอายุ/ผิดผู้ออก/มาจากเว็บอื่น/อัลกอริทึมอื่น)', async () => {
@@ -292,4 +312,16 @@ test('กุญแจของ Clerk ถูกเก็บไว้ ไม่ถ
   for (let i = 0; i < 3; i++) await client().clerk(sign({ sub: 'user_cache' }));
   assert.equal(apiCalls.filter((x) => x.url.endsWith('/jwks')).length, before);
   assert.ok(apiCalls.every((x) => x.auth === `Bearer ${SK}`));
+});
+
+test('ขายจริง (production) ต้องตั้ง Clerk · ใช้ Clerk แล้วไม่ต้องมี ADMIN_PASSWORD', () => {
+  const prod = (extra) => ({
+    NODE_ENV: 'production', DATABASE_FILE: ':memory:', BASE_URL: 'https://shop.example.com', ADMIN_EMAIL: 'a@b.co', MAIL_MODE: 'off',
+    DOWNLOAD_LINK_SECRET: 'x'.repeat(64), PAYMENT_WEBHOOK_SECRET: 'y'.repeat(64),
+    PAYMENT_PROVIDER: 'manual', PROMPTPAY_ID: '0812345678', PROMPTPAY_NAME: 'ร้าน', LEGAL_NAME: 'ร้าน', CONTACT_EMAIL: 'c@d.co', ...extra,
+  });
+  assert.throws(() => loadConfig(prod({ ADMIN_PASSWORD: 'z'.repeat(14) })), /CLERK_PUBLISHABLE_KEY/);
+  const live = `pk_live_${Buffer.from('clerk.shop.example.com$').toString('base64')}`;
+  const ok = loadConfig(prod({ CLERK_PUBLISHABLE_KEY: live, CLERK_SECRET_KEY: 'sk_live_abc123' }));
+  assert.equal(ok.clerk.enabled, true);
 });

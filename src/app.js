@@ -183,7 +183,24 @@ function createApp(cfg, opts = {}) {
     setHash: db.prepare('UPDATE users SET password_hash = ? WHERE id = ?'),
     insertAdmin: db.prepare("INSERT INTO users (id, email, name, password_hash, role, email_verified_at, created_at) VALUES (?, ?, 'ผู้ดูแลร้าน', ?, 'admin', ?, ?)"),
   };
+  // ใช้ Clerk: แอดมินล็อกอินด้วย Google/อีเมลเดียวกับ ADMIN_EMAIL ไม่มีรหัสผ่านของร้าน
+  function seedAdminClerk() {
+    if (!cfg.adminEmail || !EMAIL_RE.test(cfg.adminEmail)) {
+      log('[admin] ปิดหลังบ้านอยู่: ตั้ง ADMIN_EMAIL (อีเมลที่ใช้ล็อกอิน Google) ใน .env');
+      return;
+    }
+    let u = q.userByEmail.get(cfg.adminEmail);
+    if (!u) {
+      const id = crypto.randomBytes(16).toString('hex');
+      adminQ.insertAdmin.run(id, cfg.adminEmail, 'clerk$', now(), now());
+      u = q.userById.get(id);
+    } else {
+      adminQ.setRole.run(now(), u.id);
+    }
+    adminQ.demoteOthers.run(u.id);
+  }
   function seedAdmin() {
+    if (cfg.clerk.enabled) return seedAdminClerk();
     if (!cfg.adminEmail || !EMAIL_RE.test(cfg.adminEmail) || cfg.adminPassword.length < 12) {
       log('[admin] ปิดหลังบ้านอยู่: ตั้ง ADMIN_EMAIL และ ADMIN_PASSWORD (อย่างน้อย 12 ตัวอักษร) ใน .env');
       return;
@@ -259,7 +276,8 @@ function createApp(cfg, opts = {}) {
   });
 
   // ปิดอีเมลอยู่ (MAIL_MODE=off): ไม่แสดงแถบ "ยืนยันอีเมล" เพราะส่งลิงก์ให้ไม่ได้
-  const viewUser = (u) => (u && cfg.mail.mode === 'off' ? { ...u, hideVerifyBar: true } : u || null);
+  // ไม่มีอีเมล (MAIL_MODE=off) หรือใช้ Clerk (Clerk ยืนยันอีเมลให้แล้ว): ไม่แสดงแถบ "ยืนยันอีเมล"
+  const viewUser = (u) => (u && (cfg.mail.mode === 'off' || cfg.clerk.enabled) ? { ...u, hideVerifyBar: true } : u || null);
   const page = (req, fn, args = {}) => views[fn]({ cfg, user: viewUser(req.user), csrf: req.csrf, ...args });
   const send = (req, res, fn, args, status = 200) => res.status(status).send(page(req, fn, args));
   const notFound = (req, res, text = '') => send(req, res, 'message', { title: 'ไม่พบหน้านี้', text }, 404);
@@ -363,6 +381,19 @@ function createApp(cfg, opts = {}) {
   async function sendVerifyEmail(user) {
     const token = issueEmailToken(user.id, 'verify');
     await mailer.send({ to: user.email, subject: `ยืนยันอีเมลของคุณ – ${cfg.shopName}`, text: views.verifyEmailBody({ cfg, user, url: `${cfg.baseUrl}/verify-email?t=${token}` }) });
+  }
+
+  // ใช้ Clerk อย่างเดียว: ปิดฟอร์มรหัสผ่าน / ลืมรหัสผ่าน / สมัครแบบเดิมทั้งหมด (Clerk ดูแลให้)
+  // ไม่ได้ตั้งคีย์ Clerk (ทดสอบในเครื่อง) เท่านั้นที่ยังใช้ฟอร์มเดิม · ขายจริงต้องตั้งคีย์ Clerk (ดู config.js)
+  if (cfg.clerk.enabled) {
+    const PASSWORD_ROUTES = new Set(['/forgot', '/reset', '/verify-email', '/verify-email/resend']);
+    app.use((req, res, next) => {
+      const p = req.path;
+      if (PASSWORD_ROUTES.has(p) || (req.method === 'POST' && (p === '/login' || p === '/signup'))) {
+        return res.redirect(303, p === '/signup' ? '/signup' : '/login');
+      }
+      next();
+    });
   }
 
   app.get('/verify-email', (req, res) => {
@@ -527,11 +558,11 @@ function createApp(cfg, opts = {}) {
 
   // ---------- สมัคร / เข้าสู่ระบบ / ออกจากระบบ ----------
   // ---------- เข้าสู่ระบบด้วย Clerk (มีปุ่ม Google) ----------
-  // ตั้ง CLERK_PUBLISHABLE_KEY + CLERK_SECRET_KEY แล้ว หน้า /login และ /signup ใช้กล่องของ Clerk
-  // ฟอร์มอีเมล+รหัสผ่านแบบเดิมยังอยู่ที่ /login?classic=1 (สำรองไว้ เช่น แอดมินเข้าด้วยรหัสจาก .env)
+  // ตั้ง CLERK_PUBLISHABLE_KEY + CLERK_SECRET_KEY แล้ว เข้าสู่ระบบ/สมัครผ่าน Clerk อย่างเดียว
+  // (ฟอร์มรหัสผ่านเดิมเหลือไว้เฉพาะตอนทดสอบในเครื่องที่ไม่ได้ตั้งคีย์)
   const clerk = cfg.clerk.enabled ? (opts.clerk || createClerk(cfg, { fetch: opts.clerkFetch, now })) : null;
   const CLERK_CSP = clerk ? clerkCsp(cfg.clerk.frontendApi) : '';
-  const classic = (req) => !clerk || req.query.classic === '1';
+  const classic = () => !clerk;
   function sendClerk(req, res, mode) {
     res.set({ 'Content-Security-Policy': CLERK_CSP, 'Cache-Control': 'no-store' });
     send(req, res, 'clerkAuth', { mode, next: auth.safeNext(req.query.next) });
@@ -595,7 +626,7 @@ function createApp(cfg, opts = {}) {
   app.get('/signup', (req, res) => {
     if (req.user) return res.redirect(303, auth.safeNext(req.query.next));
     if (!classic(req)) return sendClerk(req, res, 'signup');
-    send(req, res, 'signup', { next: auth.safeNext(req.query.next), clerk: Boolean(clerk) });
+    send(req, res, 'signup', { next: auth.safeNext(req.query.next) });
   });
 
   app.post('/signup', limit.signup, requireCsrf, async (req, res, next) => {
@@ -629,8 +660,8 @@ function createApp(cfg, opts = {}) {
 
   app.get('/login', (req, res) => {
     if (req.user) return res.redirect(303, auth.safeNext(req.query.next));
-    if (!classic(req) && req.query.reset !== '1') return sendClerk(req, res, 'login');
-    send(req, res, 'login', { next: auth.safeNext(req.query.next), clerk: Boolean(clerk), notice: req.query.reset === '1' ? 'ตั้งรหัสผ่านใหม่แล้ว เข้าสู่ระบบด้วยรหัสผ่านใหม่ได้เลย' : '' });
+    if (!classic(req)) return sendClerk(req, res, 'login');
+    send(req, res, 'login', { next: auth.safeNext(req.query.next), notice: req.query.reset === '1' ? 'ตั้งรหัสผ่านใหม่แล้ว เข้าสู่ระบบด้วยรหัสผ่านใหม่ได้เลย' : '' });
   });
 
   app.post('/login', requireCsrf, async (req, res, next) => {
