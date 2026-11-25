@@ -558,3 +558,28 @@ test('ขนาดผลลัพธ์: เบราว์เซอร์คง
   assert.deepEqual(P.outSize(2160, 3840), { w: 1080, h: 1920 });
   assert.deepEqual(P.outSize(1080, 1920, P.MAX_SIDE_BROWSER), { w: 1080, h: 1920 });
 });
+
+test('ซับไม่มีคำเติม (เอ่อ อ่า อืม เออ) แต่คำจริงที่หน้าตาคล้ายยังอยู่', () => {
+  const words = (s) => { let t = 0; return s.split('|').map((x) => { const w = { text: x, start: t, end: t + 0.4 }; t += 0.45; return w; }); };
+  const text = (s) => subcues.buildCues(words(s), { maxChars: 60 }).map((c) => c.text).join(' / ');
+  assert.equal(text('เอ่อ| วันนี้|เราจะมา|อ่า|รีวิว'), 'วันนี้เราจะมารีวิว');
+  assert.equal(text('อืมมม|ก็ดีนะ| เออ| ใช่'), 'ก็ดีนะ ใช่');
+  assert.equal(text('เอ่ออออ'), '');
+  assert.equal(text('อ่าน|หนังสือ|ที่อ่าว|ไทย| อ้างว่า| อ๋อ| เอ่อล้น'), 'อ่านหนังสือที่อ่าวไทย อ้างว่า อ๋อ เอ่อล้น');
+  // เวลาของคำที่เหลือยังตรง: "วันนี้" เริ่มที่ชิ้นที่ 2
+  const c = subcues.buildCues(words('เอ่อ| วันนี้'), { maxChars: 60 });
+  assert.equal(c[0].start, 0.45);
+});
+
+test('Groq: ส่งประโยคนำทางภาษาไทยทุกท่อน (ช่วยให้สะกดถูก ไม่มีคำเติม)', async () => {
+  const { groqTranscribe, BASE_PROMPT, wavHeader } = require('../src/transcribe');
+  const prompts = [];
+  const fetchImpl = async (url, { body }) => { prompts.push(body.get('prompt')); return new Response(JSON.stringify({ text: 'สวัสดี', words: [{ word: 'สวัสดี', start: 0, end: 1 }], segments: [{ start: 0, end: 1, text: 'สวัสดี' }] }), { status: 200 }); };
+  const cfg = { groq: { apiKey: 'k', model: 'whisper-large-v3', apiBase: 'https://groq.test' } };
+  const wav = Buffer.concat([wavHeader(3200, { rate: 16000, channels: 1, bits: 16 }), Buffer.alloc(3200)]);
+  await groqTranscribe(cfg, wav, { fetchImpl });
+  await groqTranscribe(cfg, wav, { fetchImpl, prompt: 'ท่อนก่อนหน้า' });
+  assert.equal(prompts[0], BASE_PROMPT);
+  assert.ok(prompts[1].startsWith(BASE_PROMPT) && prompts[1].endsWith('ท่อนก่อนหน้า'));
+  assert.doesNotMatch(BASE_PROMPT, /เอ่อ|อ่า |ติดตาม|ซับสไครบ์/);
+});

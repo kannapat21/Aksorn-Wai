@@ -941,7 +941,12 @@ function createApp(cfg, opts = {}) {
     if (!order || order.provider !== 'manual') { notFound(req, res, 'ไม่พบคำสั่งซื้อนี้ในบัญชีของคุณ'); return null; }
     return order;
   }
-  const notifyAdmin = (subject, text) => (cfg.adminEmail ? mailer.send({ to: cfg.adminEmail, subject, text }).catch((e) => log(`[mail] ส่งหาแอดมินไม่สำเร็จ: ${e.message}`)) : null);
+  // แจ้งร้านทางอีเมล: ไม่รอผล ส่งไม่สำเร็จแค่บันทึก log (ลูกค้าทำรายการต่อได้เสมอ)
+  const notifyAdmin = (subject, text) => {
+    for (const to of cfg.mail.notify || []) {
+      try { Promise.resolve(mailer.send({ to, subject, text })).catch((e) => log(`[mail] แจ้งร้าน (${to}) ไม่สำเร็จ: ${e.message}`)); } catch (e) { log(`[mail] แจ้งร้าน (${to}) ไม่สำเร็จ: ${e.message}`); }
+    }
+  };
 
   app.get('/pay/transfer/:id', requireUser, (req, res) => {
     const order = transferOrder(req, res);
@@ -992,8 +997,8 @@ function createApp(cfg, opts = {}) {
       }
       const fresh = q.getOrder.get(order.id);
       const p = productsBySlug.get(fresh.product_slug);
-      mailer.send({ to: fresh.email, subject: `รับแจ้งโอนเงินแล้ว รอตรวจสอบ – ${cfg.shopName}`, text: views.transferReceivedEmail({ cfg, order: fresh, p }) }).catch((e) => log(`[mail] ${e.message}`));
-      notifyAdmin(`มีรายการรอตรวจสอบการโอน ${views.baht(fresh.transfer_amount)} (${fresh.pay_ref})`, views.adminTransferEmail({ cfg, order: fresh, p }));
+      try { Promise.resolve(mailer.send({ to: fresh.email, subject: `รับแจ้งโอนเงินแล้ว รอตรวจสอบ – ${cfg.shopName}`, text: views.transferReceivedEmail({ cfg, order: fresh, p }) })).catch((e) => log(`[mail] ${e.message}`)); } catch (e) { log(`[mail] ${e.message}`); }
+      notifyAdmin(`[แจ้งโอน] ${p.title} ${views.bahtExact(fresh.transfer_amount)} · ${fresh.pay_ref}`, views.adminTransferEmail({ cfg, order: fresh, p }));
       res.redirect(303, `/order/${order.id}`);
     } catch (e) { next(e); }
   });

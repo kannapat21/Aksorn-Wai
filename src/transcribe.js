@@ -92,6 +92,11 @@ function withSpaces(words, segments) {
   });
 }
 
+// ประโยคตัวอย่างนำทาง Whisper: ภาษาไทยสะกดถูก เว้นวรรคตามวลี ไม่มีคำเติม (เอ่อ อ่า) → ผลที่ได้เขียนแบบเดียวกัน
+// (ห้ามใส่วลีท้ายคลิป เช่น "กดติดตาม" เพราะ Whisper จะเดาวลีนั้นใส่ตอนเงียบ)
+const BASE_PROMPT = 'สวัสดีครับ วันนี้จะมาเล่าเรื่องร้านอาหารที่ไปมา อร่อยมาก ราคาไม่แพงด้วยค่ะ';
+const asrPrompt = (prev = '') => (prev ? `${BASE_PROMPT} ${String(prev).replace(/\s+/g, ' ').trim().slice(-120)}` : BASE_PROMPT);
+
 // ถอดเสียงท่อนเดียว (WAV ไม่เกิน 25 MB) → { words: [{text,start,end}], segments }
 async function groqTranscribe(cfg, wavBuf, { offset = 0, fetchImpl = globalThis.fetch, prompt = '' } = {}) {
   const G = cfg.groq;
@@ -104,7 +109,7 @@ async function groqTranscribe(cfg, wavBuf, { offset = 0, fetchImpl = globalThis.
     fd.append('timestamp_granularities[]', 'word');
     fd.append('timestamp_granularities[]', 'segment');
     fd.append('temperature', '0');
-    if (prompt) fd.append('prompt', prompt.slice(-200));
+    fd.append('prompt', asrPrompt(prompt));
     return fd;
   };
   let r;
@@ -194,6 +199,7 @@ function createTranscriber(cfg) {
   async function transcribe(audioFile, { onProgress = () => {}, outFile, timeoutMs }) {
     const args = [SCRIPT, audioFile, '--out', outFile, '--engine', S.engine, '--language', 'th'];
     if (S.model) args.push('--model', S.model);
+    args.push('--prompt', BASE_PROMPT);
     await run(S.python, args, {
       env,
       timeoutMs: timeoutMs || S.asrTimeoutMin * 60 * 1000,
@@ -205,4 +211,4 @@ function createTranscriber(cfg) {
   return { check, transcribe };
 }
 
-module.exports = { createTranscriber, run, groqTranscribe, splitWav, parseWav, wavHeader, withSpaces };
+module.exports = { BASE_PROMPT, asrPrompt, createTranscriber, run, groqTranscribe, splitWav, parseWav, wavHeader, withSpaces };
