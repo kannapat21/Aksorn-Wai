@@ -1422,35 +1422,25 @@ function clerkScripts(cfg) {
 function clerkAuth({ cfg, user, csrf, mode, next }) {
   const signup = mode === 'signup';
   const n = encodeURIComponent(next || '/library');
-  const perk = (icon, text, i) => `<li style="--i:${i}">${icon}<span>${text}</span></li>`;
   return layout({
     title: signup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-auth page-clerk', intro: false,
     body: `
 <div class="auth clerk-auth">
-  <div class="ca-bg" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i></div>
   <div class="auth-card ca-card" data-ca-card>
-    <div class="ca-glow" aria-hidden="true"></div>
     <div class="ca-head">
-      ${logoMark(56, 'logo-mark big ca-logo')}
+      ${logoMark(44, 'logo-mark ca-logo')}
+      <h1 class="sr-only">${signup ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</h1>
       <nav class="ca-tabs" aria-label="เลือก" style="--x:${signup ? 1 : 0}">
         <a href="/login?next=${n}" ${signup ? '' : 'aria-current="page"'}>เข้าสู่ระบบ</a>
         <a href="/signup?next=${n}" ${signup ? 'aria-current="page"' : ''}>สมัครสมาชิก</a>
         <span class="ca-pill" aria-hidden="true"></span>
       </nav>
-      <h1 class="ca-title">${signup ? 'เริ่มใช้ฟรี <em>ในคลิกเดียว</em>' : 'ยินดีต้อนรับ<em>กลับมา</em>'}</h1>
-      <p class="muted ca-sub">${signup ? 'ใช้บัญชี Google ไม่ต้องตั้งรหัสผ่าน ของที่ซื้อเก็บในคลังตลอดไป' : 'กดปุ่ม Google แล้วไปต่อที่คลังของคุณได้เลย'}</p>
-      <ul class="ca-perks">
-        ${perk(ICON.check, 'ไม่ต้องจำรหัสผ่าน', 0)}
-        ${perk(ICON.shield, 'ปลอดภัยด้วย Google', 1)}
-        ${perk(ICON.infinity, 'คลังอยู่ครบทุกเครื่อง', 2)}
-      </ul>
     </div>
     <p class="error ca-error" role="alert" data-clerk-error hidden></p>
     <div class="ca-stage">
       <div class="ca-skeleton" data-clerk-loading aria-label="กำลังโหลด" role="status">
         <span class="sk sk-btn"></span>
         <span class="sk-or"><i></i><b>หรือ</b><i></i></span>
-        <span class="sk sk-label"></span>
         <span class="sk sk-input"></span>
         <span class="sk sk-btn primary"></span>
       </div>
@@ -1458,11 +1448,10 @@ function clerkAuth({ cfg, user, csrf, mode, next }) {
       <div class="ca-done" data-clerk-done hidden>
         <svg viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="23"/><path d="M15 27l7 7 15-16"/></svg>
         <p class="ca-done-title">เข้าสู่ระบบแล้ว</p>
-        <p class="muted small">กำลังพาไปต่อ…</p>
       </div>
     </div>
-    <noscript><p class="error">หน้านี้ต้องเปิด JavaScript ก่อนจึงจะเข้าสู่ระบบได้</p></noscript>
-    <p class="muted small center ca-legal">${signup ? 'การสมัครถือว่ายอมรับ' : 'การเข้าสู่ระบบถือว่ายอมรับ'} <a href="/terms">เงื่อนไขการใช้งาน</a> และ <a href="/privacy">นโยบายความเป็นส่วนตัว</a></p>
+    <noscript><p class="error">ต้องเปิด JavaScript ก่อน</p></noscript>
+    <p class="muted small center ca-legal"><a href="/terms">เงื่อนไข</a> · <a href="/privacy">ความเป็นส่วนตัว</a></p>
   </div>
 </div>
 ${clerkScripts(cfg)}`,
