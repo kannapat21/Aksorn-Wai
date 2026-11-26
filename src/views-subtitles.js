@@ -72,7 +72,7 @@ function subtitlesHome({ cfg, user, csrf, owned, jobs, limits, ready, now, picke
     title: 'ใส่ซับอัตโนมัติ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-subtitles', tab: 'subs',
     body: `
 <div class="sub-hero">
-  <h1>ใส่ซับอัตโนมัติ</h1>
+  <h1>ใส่ซับอัตโนมัติ <span class="beta">Beta</span></h1>
   <ol class="sub-flow" aria-label="ขั้นตอน">
     <li><b>1</b>เลือกคลิป</li><li><b>2</b>ตรวจคำ · จัดหน้าตา</li><li><b>3</b>โหลดคลิป</li>
   </ol>
