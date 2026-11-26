@@ -11,6 +11,7 @@ const ROOT = path.resolve(__dirname, '..');
 // ท่าเคลื่อนไหวชุดเดียวกับที่เบราว์เซอร์ใช้ (public/motion.js ลงทะเบียนเป็น globalThis.TTMotion)
 require('../public/motion.js');
 const MOTIONS = globalThis.TTMotion.MOTIONS;
+const PREMIUM_TAG = 'พรีเมียม';
 
 // รันบนโฮสต์แบบ serverless (Netlify/Vercel/AWS Lambda): ไม่มีดิสก์ถาวร ไม่มี Chrome/ffmpeg เขียนได้แค่ /tmp
 function isServerless(env) {
@@ -79,6 +80,13 @@ function loadConfig(overrides = {}) {
     linkMinutes: Number(env.DOWNLOAD_LINK_MINUTES || 10),
     // กันการโหลดผิดปกติ: บัญชีหนึ่งกดดาวน์โหลดได้กี่ไฟล์ต่อ 24 ชั่วโมง
     dailyDownloadLimit: Number(env.DOWNLOAD_DAILY_LIMIT || 60),
+    // แพ็กพรีเมียม: จ่ายครั้งเดียวได้ทุกแอนิเมชันที่มีแท็ก "พรีเมียม" (รวมตัวที่เพิ่มทีหลัง) · หน่วยสตางค์
+    premiumPack: {
+      slug: 'premium-pack',
+      title: 'แพ็กพรีเมียม',
+      pack: true,
+      price: Math.round(Number(env.PREMIUM_PACK_PRICE || 150) * 100),
+    },
     sessionDays: Number(env.SESSION_DAYS || 30),
     // จำกัดคำขอทั้งเว็บต่อ IP ต่อนาที (กันสแปม/บอท) · 0 = ปิด
     rateGlobalPerMin: Number(env.RATE_GLOBAL_PER_MIN || 600),
@@ -164,6 +172,7 @@ function loadConfig(overrides = {}) {
   }
 
   const problems = [];
+  if (!(cfg.premiumPack.price >= 2000 && cfg.premiumPack.price <= 10000000)) problems.push('PREMIUM_PACK_PRICE ต้องเป็นราคาบาท ตั้งแต่ 20 ขึ้นไป (เช่น 150)');
   if (cfg.downloadSecret.length < 32) problems.push('DOWNLOAD_LINK_SECRET ต้องยาวอย่างน้อย 32 ตัวอักษร');
   // Omise: ต้องมีคีย์ครบ · คีย์จริง (ไม่มี _test_) ใช้ได้เฉพาะตอน NODE_ENV=production · มีคีย์จริงอยู่ห้ามใช้ mock
   const O = cfg.omise;
@@ -235,8 +244,11 @@ function loadConfig(overrides = {}) {
     // ราคาเป็นสตางค์ · 0 = ของฟรี (กดรับแล้วเข้าคลังทันที ไม่ผ่านหน้าจ่ายเงิน)
     if (!Number.isInteger(p.price) || p.price < 0) throw new Error(`สินค้า ${p.slug}: price ต้องเป็นจำนวนเต็ม (สตางค์) ตั้งแต่ 0 ขึ้นไป`);
     if (p.price > 0 && p.price < 2000) throw new Error(`สินค้า ${p.slug}: ราคาต่ำสุด ฿20 (หรือ 0 = ฟรี)`);
-    p.free = p.price === 0;
-    p.premium = globalThis.TTMotion.meta(p.motion).premium;
+    // พรีเมียม = มีแท็ก "พรีเมียม" (หรือตั้งราคาไว้) → อยู่ในแพ็กพรีเมียม ซื้อแยกไม่ได้ · ที่เหลือเป็นของฟรี
+    p.tags = Array.isArray(p.tags) ? p.tags : [];
+    p.premium = p.tags.includes(PREMIUM_TAG) || p.price > 0;
+    p.free = !p.premium;
+    p.fancy = globalThis.TTMotion.meta(p.motion).premium; // ท่ามีลูกเล่นวนตลอดช่วงค้าง
   }
   for (const [id, ed] of Object.entries(cfg.editorsConfig.editors)) {
     for (const f of ed.formats) {
@@ -246,4 +258,4 @@ function loadConfig(overrides = {}) {
   return cfg;
 }
 
-module.exports = { loadConfig, ROOT };
+module.exports = { loadConfig, ROOT, PREMIUM_TAG };

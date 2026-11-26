@@ -132,7 +132,9 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     if (!/^#[0-9a-f]{6}$/.test(fill)) return { error: 'สีตัวอักษรไม่ถูกต้อง' };
     if (!(outline in OUTLINES)) return { error: 'ความหนาขอบไม่ถูกต้อง' };
     const size = String(require('../public/subplan').sizePct(String(body.size || 'md')));
-    const position = POSITIONS.includes(body.position) ? body.position : 'bottom';
+    // บน/กลาง/ล่าง หรือ % ความสูงที่ลูกค้าลากซับไปวางเอง (5–95)
+    const pct = require('../public/subplan').posPct(body.position);
+    const position = POSITIONS.includes(body.position) ? body.position : pct !== null ? String(pct) : 'bottom';
     const shadow = body.shadow === true || body.shadow === '1' || body.shadow === 'on' || body.shadow === 1;
     return {
       value: {

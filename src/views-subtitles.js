@@ -49,56 +49,47 @@ function subtitlesHome({ cfg, user, csrf, owned, jobs, limits, ready, now, picke
         <input type="radio" name="order" value="${esc(order.id)}" ${choice && choice.order.id === order.id ? 'checked' : ''} required>
         <span class="sub-style-card">
           <img src="/previews/${esc(p.slug)}_vertical.jpg" alt="" width="540" height="960" loading="lazy">
-          <span class="sub-style-txt"><b>${esc(p.title)}</b><small>${esc(MOTION_NOTE[p.motion] || '')}</small></span>
-          ${p.motion === 'kinetic' ? '<i class="sub-rec">แนะนำสำหรับซับ</i>' : ''}
+          <span class="sub-style-txt"><b>${esc(p.title)}</b></span>
+          ${p.motion === 'kinetic' ? '<i class="sub-rec">แนะนำ</i>' : ''}
         </span>
       </label>`).join('');
   const state = !ready.ok ? `<div class="note warn">${ICON.shield}<span><b>ระบบใส่ซับยังไม่เปิดให้ใช้ชั่วคราว</b> ร้านกำลังเตรียมเครื่อง ลองใหม่ภายหลัง</span></div>`
     : busy ? `<div class="note">${ICON.bolt}<span>มีคลิปที่กำลังทำอยู่ รอให้เสร็จก่อนแล้วค่อยอัปคลิปใหม่ (ดูด้านล่าง)</span></div>`
       : left <= 0 ? `<div class="note warn">${ICON.shield}<span>วันนี้อัปครบ ${esc(limits.maxPerDay)} คลิปแล้ว อัปเพิ่มได้อีกครั้งพรุ่งนี้</span></div>` : '';
   return layout({
-    title: 'ใส่ซับอัตโนมัติ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-subtitles',
+    title: 'ใส่ซับอัตโนมัติ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-subtitles', tab: 'subs',
     body: `
-<nav class="crumb" aria-label="ตำแหน่งหน้า"><a href="/library">คลังของฉัน</a><span>/</span><span aria-current="page">ใส่ซับอัตโนมัติ</span></nav>
 <div class="sub-hero">
-  <p class="eyebrow">ใหม่ · ใช้ได้กับทุกแบบในคลังของคุณ</p>
-  <h1>ใส่ซับอัตโนมัติ <span class="beta">Beta</span></h1>
-  <p class="lead">อัปคลิปที่มีเสียงพูดภาษาไทย ระบบฟังแล้วพิมพ์ซับให้ แก้คำที่ผิดได้ก่อน แล้วได้คลิปพร้อมซับด้วยแบบตัวอักษรที่คุณเลือก</p>
-  <ol class="sub-steps" aria-label="ขั้นตอน">
-    <li><b>1</b><span>เลือกแบบ + อัปคลิป</span></li>
-    <li><b>2</b><span>ระบบฟังเสียง ทำซับให้</span></li>
-    <li><b>3</b><span>ตรวจคำ ปรับหน้าตา</span></li>
-    <li><b>4</b><span>ได้คลิปพร้อมซับ + ไฟล์ .srt</span></li>
+  <h1>ใส่ซับอัตโนมัติ</h1>
+  <ol class="sub-flow" aria-label="ขั้นตอน">
+    <li><b>1</b>เลือกคลิป</li><li><b>2</b>ตรวจคำ · จัดหน้าตา</li><li><b>3</b>โหลดคลิป</li>
   </ol>
 </div>
 ${state}
 ${owned.length ? `
 <form class="sub-new" data-sub-new ${bm ? 'data-browser' : ''} data-csrf="${esc(csrf)}" data-max-mb="${esc(S.maxMb)}" data-max-sec="${esc(S.maxSeconds)}" ${can ? '' : 'data-off'}>
-  <fieldset class="cz-field">
-    <legend>1. เลือกแบบตัวอักษรจากคลัง <span class="muted small">เปลี่ยนฟอนต์ สี และแบบได้อีกทีตอนตรวจคำ</span></legend>
+  <label class="sub-drop big" data-drop>
+    <input type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.m4v,.webm,.mkv" data-file ${can ? '' : 'disabled'}>
+    <span class="sub-drop-icon">${ICON.film}</span>
+    <b data-file-name>แตะเพื่อเลือกคลิป</b>
+    <small class="muted" data-file-info>คลิปที่มีเสียงพูดไทย · ไม่เกิน ${esc(Math.round(S.maxSeconds / 60))} นาที</small>
+  </label>
+  <div class="sub-up" data-up hidden>
+    <div class="job-bar"><i data-up-bar style="width:0%"></i></div>
+    <p class="small"><b data-up-pct>0%</b> · <span data-up-text>กำลังอัปโหลด</span></p>
+  </div>
+  <p class="error small" data-up-err role="alert" hidden></p>
+  <fieldset class="cz-field sub-pick">
+    <legend>แบบซับ <span class="muted small">เปลี่ยนได้ทีหลัง</span></legend>
     <div class="sub-styles">${cards}</div>
   </fieldset>
-  <fieldset class="cz-field">
-    <legend>2. ${bm ? 'เลือกคลิป <span class="muted small">คลิปอยู่ในเครื่องคุณ ไม่ถูกอัปโหลด ร้านรับแค่เสียงพูดไปถอดเป็นข้อความ</span>' : 'อัปโหลดคลิป'}</legend>
-    <label class="sub-drop" data-drop>
-      <input type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.m4v,.webm,.mkv" data-file ${can ? '' : 'disabled'}>
-      <span class="sub-drop-icon">${ICON.film}</span>
-      <b data-file-name>แตะเพื่อเลือกคลิป หรือลากไฟล์มาวาง</b>
-      <small class="muted" data-file-info>MP4 / MOV · ยาวไม่เกิน ${esc(Math.round(S.maxSeconds / 60))} นาที · ไม่เกิน ${esc(S.maxMb)} MB</small>
-    </label>
-    <div class="sub-up" data-up hidden>
-      <div class="job-bar"><i data-up-bar style="width:0%"></i></div>
-      <p class="small"><b data-up-pct>0%</b> · <span data-up-text>กำลังอัปโหลด</span></p>
-    </div>
-    <p class="error small" data-up-err role="alert" hidden></p>
-  </fieldset>
-  <button type="button" class="btn primary block lg" data-start disabled>${ICON.bolt} เริ่มทำซับ</button>
-  <p class="muted small center">${left === Infinity ? 'ใช้ฟรีสำหรับเจ้าของแบบในคลัง' : `วันนี้อัปได้อีก ${esc(left)} คลิป`} · คลิป ซับ และไฟล์ที่ได้จะถูกลบอัตโนมัติหลัง ${esc(S.retentionHours)} ชั่วโมง ร้านไม่นำคลิปของคุณไปใช้ต่อ</p>
+  <div class="sub-start-bar"><button type="button" class="btn primary block lg" data-start disabled>${ICON.bolt} เริ่มทำซับ</button></div>
+  <p class="muted small center">${bm ? 'คลิปอยู่ในเครื่องคุณ ไม่ถูกอัปโหลด · ' : ''}${left === Infinity ? '' : `วันนี้ทำได้อีก ${esc(left)} คลิป · `}ลบอัตโนมัติใน ${esc(S.retentionHours)} ชม.</p>
 </form>` : `
 <div class="empty">
-  <p><b>ต้องมีแบบตัวอักษรในคลังก่อน 1 แบบ</b></p>
-  <p class="muted small">มีแบบฟรีให้กดรับได้เลย หรือเลือกแบบพรีเมียม เช่น "คำเด้งทีละคำ" ที่เด้งตามจังหวะพูด</p>
-  <p><a class="btn primary" href="/#catalog">เลือกแบบตัวอักษร</a></p>
+  <p><b>เลือกแบบซับก่อน 1 แบบ</b></p>
+  <p class="muted small">มีแบบฟรีให้กดรับได้เลย</p>
+  <p><a class="btn primary" href="/#catalog" data-pick="free">ดูแบบฟรี</a></p>
 </div>`}
 ${jobList(jobs, now)}
 <script src="/subtitles.js?v=${V}" defer></script>
@@ -112,7 +103,7 @@ function subtitleJob({ cfg, user, csrf, job, cues, owned, fonts, layoutInfo, pos
   const asr = job.status === 'queued' || job.status === 'transcribing';
   const p = cfg.products.find((x) => x.slug === job.product_slug) || {};
   const head = `
-<nav class="crumb" aria-label="ตำแหน่งหน้า"><a href="/library">คลังของฉัน</a><span>/</span><a href="/subtitles">ใส่ซับอัตโนมัติ</a><span>/</span><span aria-current="page">${esc(job.src_name || 'คลิป')}</span></nav>
+<a class="back-link" href="/subtitles">‹ ใส่ซับอัตโนมัติ</a>
 <div class="sub-head">
   <div><p class="eyebrow">${badge(job)} · ${esc(fmtDur(job.duration))} นาที · ${esc(job.width)}×${esc(job.height)}</p><h1>${esc(job.src_name || 'คลิปของฉัน')}</h1></div>
   <p class="muted small">ลบอัตโนมัติในอีก ${esc(hoursLeft(job, now))}</p>
@@ -217,7 +208,7 @@ ${removeForm(job, csrf)}
   const styleCards = owned.map(({ order, p: pp }) => `<label class="sub-chip"><input type="radio" name="order" value="${esc(order.id)}" ${order.id === job.order_id ? 'checked' : ''}><span>${esc(pp.title)}</span></label>`).join('');
 
   return layout({
-    title: 'ตรวจคำและเลือกแบบ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-subtitles page-sub-edit', wide: true,
+    title: 'ตรวจคำและเลือกแบบ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-subtitles page-sub-edit', wide: true, tab: 'subs',
     body: `
 <style>${fontFaces(fonts)}</style>
 ${head}
@@ -228,11 +219,18 @@ ${!rendering && !cues.length ? `<div class="note">${ICON.shield}<span><b>ระ�
   <div class="sub-player-col">
     <div class="sub-player" data-player style="aspect-ratio:${esc(layoutInfo.w)} / ${esc(layoutInfo.h)}">
       <video ${bm ? '' : `src="/subtitles/${esc(job.id)}/source" `}playsinline preload="metadata" data-video></video>
-      <div class="sub-band" data-band aria-hidden="true"><div class="cz-text sub-text" data-sub-text><span class="fill"></span></div></div>
+      <div class="sub-band" data-band title="ลากขึ้นลงเพื่อย้ายตำแหน่งซับ"><div class="cz-text sub-text" data-sub-text><span class="fill"></span></div></div>
       <button type="button" class="sub-play" data-play aria-label="เล่น/หยุด">${ICON.play}</button>
+      ${rendering ? '' : '<span class="sub-drag-hint" data-drag-hint>↕ ลากซับเพื่อย้ายตำแหน่ง</span>'}
     </div>
     ${bm ? `<div data-local-clip="${esc(job.id)}">${clipAsk('เลือกคลิปเดิมเพื่อดูตัวอย่างและสร้างคลิป')}</div>` : ''}
   </div>
+  <div data-filters></div>
+  <div class="sub-tabs" role="tablist" aria-label="เครื่องมือ">
+    <button type="button" class="sub-tab active" role="tab" aria-selected="true" data-sub-tab="words">${ICON.edit}<span>แก้คำ</span></button>
+    <button type="button" class="sub-tab" role="tab" aria-selected="false" data-sub-tab="look"><span class="sub-tab-aa" aria-hidden="true">Aa</span><span>หน้าตาซับ</span></button>
+  </div>
+  <div class="sub-pane" data-pane="words">
   <div class="sub-tl" data-tl>
     <div class="sub-tl-bar">
       <button type="button" class="sub-mini sub-tl-play" data-tl-play aria-label="เล่น/หยุด">${ICON.play}</button>
@@ -248,16 +246,46 @@ ${!rendering && !cues.length ? `<div class="note">${ICON.shield}<span><b>ระ�
       <canvas class="sub-tl-wave" data-tl-wave aria-hidden="true"></canvas>
     </div>
     <div class="sub-tl-tools" ${rendering ? 'hidden' : ''}>
-      <button type="button" class="sub-tool" data-tl-edit>✎ แก้คำ</button>
       <button type="button" class="sub-tool" data-tl-split title="แบ่งบรรทัดตรงเส้นเวลา (S)">✂ แบ่ง</button>
       <button type="button" class="sub-tool" data-tl-del>🗑 ลบ</button>
-      <button type="button" class="sub-tool" data-add>+ เพิ่ม</button>
+      <button type="button" class="sub-tool" data-add>+ เพิ่มบรรทัด</button>
+      <button type="button" class="sub-tool" data-tl-edit hidden>✎ แก้คำ</button>
     </div>
-    <p class="muted small sub-tl-hint">แตะบล็อกซับเพื่อเลือก แตะซ้ำ (หรือกด ✎) เพื่อพิมพ์แก้ในบล็อกได้เลย · ลากขอบบล็อกเพื่อปรับเวลาเริ่ม/จบ</p>
   </div>
-  <div data-filters></div>
+  <p class="muted small sub-hint">แตะข้อความด้านล่างเพื่อพิมพ์แก้ · ลากขอบบล็อกบนไทม์ไลน์เพื่อปรับเวลา</p>
+  <ol class="sub-lines" data-lines aria-label="ข้อความซับทุกบรรทัด"></ol>
+  </div>
+  <div class="sub-pane" data-pane="look" hidden>
+    <fieldset class="cz-field sub-look-f" ${rendering ? 'disabled' : ''} data-look>
+      <legend class="sr-only">หน้าตาซับ <span data-look-sum></span></legend>
+      <p class="sub-label">แบบ</p>
+      <div class="sub-chips">${styleCards}</div>
+      <p class="muted small" data-motion-note></p>
+      <p class="sub-label" id="sub-font-l">ฟอนต์</p>
+      <div class="font-pick" data-font-pick>
+        <button type="button" class="font-cur" data-font-cur aria-expanded="false" aria-labelledby="sub-font-l"><span data-font-cur-name></span><i aria-hidden="true">▾</i></button>
+        <div class="font-list" data-font-list role="radiogroup" aria-labelledby="sub-font-l" hidden>
+          ${fontOpts}
+          <a class="font-add" href="/library/fonts">+ เพิ่มฟอนต์ของฉัน (.ttf / .otf)</a>
+        </div>
+      </div>
+      <div class="sub-size">
+        <label class="sub-label" for="sub-size">ขนาด <output data-size-out></output></label>
+        <input type="range" id="sub-size" name="size" min="${SIZE_MIN}" max="${SIZE_MAX}" step="5" value="${esc(sizePct(job.size))}" data-size>
+        <div class="sub-size-q"><button type="button" class="sub-mini" data-size-q="80">เล็ก</button><button type="button" class="sub-mini" data-size-q="100">กลาง</button><button type="button" class="sub-mini" data-size-q="125">ใหญ่</button><button type="button" class="sub-mini" data-size-q="150">ใหญ่มาก</button></div>
+      </div>
+      <p class="sub-label">ตำแหน่ง <span class="muted small">หรือลากซับบนวิดีโอ</span></p>
+      ${seg('position', [['top', 'บน'], ['middle', 'กลาง'], ['bottom', 'ล่าง']], job.position)}
+      <p class="sub-label">สีตัวอักษร</p>
+      <div class="swatches">${swatches('fill', FILL_SWATCHES, job.fill)}<label class="swatch-pick"><input type="color" name="fill" value="${esc(job.fill)}" aria-label="เลือกสีเอง"><span>เลือกเอง</span></label></div>
+      <p class="sub-label">ขอบ</p>
+      ${seg('outline', [['none', 'ไม่มี'], ['thin', 'บาง'], ['medium', 'กลาง'], ['thick', 'หนา']], job.outline)}
+      <div class="swatches" data-stroke-row>${swatches('stroke', STROKE_SWATCHES, job.stroke)}<label class="swatch-pick"><input type="color" name="stroke" value="${esc(job.stroke)}" aria-label="เลือกสีขอบเอง"><span>เลือกเอง</span></label></div>
+      <label class="toggle sub-toggle"><input type="checkbox" name="shadow" value="1" ${job.shadow ? 'checked' : ''}><span class="toggle-ui"></span><span>เงาใต้ตัวอักษร</span></label>
+    </fieldset>
+  </div>
   <div class="sub-go">
-    <button type="button" class="btn primary lg block" data-render ${rendering ? 'disabled' : ''}>${ICON.bolt} สร้างคลิปพร้อมซับ</button>
+    <button type="button" class="btn primary lg block" data-render ${rendering ? 'disabled' : ''}>${ICON.download} สร้างคลิปพร้อมซับ</button>
     <p class="small muted sub-save" data-save-state role="status">บันทึกอัตโนมัติ</p>
     <p class="error" data-err role="alert" hidden></p>
 ${bm ? `    <section class="ready-box sub-result" data-burn hidden>
@@ -270,36 +298,6 @@ ${bm ? `    <section class="ready-box sub-result" data-burn hidden>
       <video class="sub-out ${job.height > job.width ? 'v' : 'h'}" data-out-video controls playsinline hidden></video>
     </section>
 ` : ''}  </div>
-  <details class="sub-look">
-    <summary><b>หน้าตาซับ</b><span class="muted small" data-look-sum></span></summary>
-    <fieldset class="cz-field" ${rendering ? 'disabled' : ''} data-look>
-      <legend class="sr-only">หน้าตาซับ</legend>
-      <p class="sub-label">แบบในคลัง</p>
-      <div class="sub-chips">${styleCards}</div>
-      <p class="muted small" data-motion-note></p>
-      <p class="sub-label" id="sub-font-l">ฟอนต์</p>
-      <div class="font-pick" data-font-pick>
-        <button type="button" class="font-cur" data-font-cur aria-expanded="false" aria-labelledby="sub-font-l"><span data-font-cur-name></span><i aria-hidden="true">▾</i></button>
-        <div class="font-list" data-font-list role="radiogroup" aria-labelledby="sub-font-l" hidden>
-          ${fontOpts}
-          <a class="font-add" href="/library/fonts">+ เพิ่มฟอนต์ของฉัน (.ttf / .otf)</a>
-        </div>
-      </div>
-      <div class="sub-size">
-        <label class="sub-label" for="sub-size">ขนาดตัวอักษร <output data-size-out></output></label>
-        <input type="range" id="sub-size" name="size" min="${SIZE_MIN}" max="${SIZE_MAX}" step="5" value="${esc(sizePct(job.size))}" data-size>
-        <div class="sub-size-q"><button type="button" class="sub-mini" data-size-q="80">เล็ก</button><button type="button" class="sub-mini" data-size-q="100">กลาง</button><button type="button" class="sub-mini" data-size-q="125">ใหญ่</button><button type="button" class="sub-mini" data-size-q="150">ใหญ่มาก</button></div>
-      </div>
-      <p class="sub-label">ตำแหน่ง</p>
-      ${seg('position', [['top', 'บน'], ['middle', 'กลาง'], ['bottom', 'ล่าง']], job.position)}
-      <p class="sub-label">สีตัวอักษร</p>
-      <div class="swatches">${swatches('fill', FILL_SWATCHES, job.fill)}<label class="swatch-pick"><input type="color" name="fill" value="${esc(job.fill)}" aria-label="เลือกสีเอง"><span>เลือกเอง</span></label></div>
-      <p class="sub-label">ขอบ</p>
-      ${seg('outline', [['none', 'ไม่มี'], ['thin', 'บาง'], ['medium', 'กลาง'], ['thick', 'หนา']], job.outline)}
-      <div class="swatches" data-stroke-row>${swatches('stroke', STROKE_SWATCHES, job.stroke)}<label class="swatch-pick"><input type="color" name="stroke" value="${esc(job.stroke)}" aria-label="เลือกสีขอบเอง"><span>เลือกเอง</span></label></div>
-      <label class="toggle sub-toggle"><input type="checkbox" name="shadow" value="1" ${job.shadow ? 'checked' : ''}><span class="toggle-ui"></span><span>เงาใต้ตัวอักษร <small class="muted">(อ่านง่ายบนพื้นสว่าง)</small></span></label>
-    </fieldset>
-  </details>
   <p class="sub-more"><a class="btn small ghost" href="/subtitles/${esc(job.id)}/srt" data-srt>${ICON.download} ไฟล์ซับ .srt</a></p>
 </div>
 ${removeForm(job, csrf)}

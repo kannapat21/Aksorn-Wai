@@ -5,7 +5,11 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const baht = (satang) => `฿${(satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 // ยอดโอนต้องมีทศนิยม 2 ตำแหน่งเสมอ (49.50 ไม่ใช่ 49.5) ให้ตรงกับที่แอปธนาคารแสดง
 // ราคาที่แสดงบนหน้าร้าน: 0 = "ฟรี"
-const priceLabel = (p) => (p.price === 0 ? 'ฟรี' : baht(p.price));
+// ราคาที่แสดง: ของฟรี = "ฟรี" · ตัวพรีเมียม = อยู่ในแพ็กพรีเมียม (ซื้อแพ็กเดียวได้ทุกตัว)
+let PACK_PRICE = 15000;
+const priceLabel = (p) => (p.free ? 'ฟรี' : p.pack ? baht(p.price) : `แพ็ก ${baht(PACK_PRICE)}`);
+// หน้าที่ลูกค้ากลับไปดูสินค้า/สั่งใหม่ (แพ็กไปหน้า /premium)
+const productHref = (p) => (p && p.pack ? '/premium' : `/p/${esc(p && p.slug)}`);
 const bahtExact = (satang) => `฿${(satang / 100).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const thDate = (ms) => new Date(ms).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' });
 const thTime = (ms) => new Date(ms).toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' }) + ' น.';
@@ -53,6 +57,7 @@ const ICON = {
   library: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="16" rx="1"/><path d="m17 5 4 1-3 14-4-1"/></svg>',
   edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg>',
   cc: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10.5 10.2a2.4 2.4 0 1 0 0 3.6M17 10.2a2.4 2.4 0 1 0 0 3.6"/></svg>',
+  crown: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>',
   download: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
 };
 
@@ -80,7 +85,7 @@ function brand(shopName) {
   return `<a href="/" class="brand" aria-label="${esc(shopName)} หน้าแรก">${logoMark()}<span class="brand-text"><b>${esc(shopName)}</b><small>แอนิเมชันข้อความไทย</small></span></a>`;
 }
 
-function layout({ title, body, shopName, user = null, csrf = '', noindex = false, wide = false, page = '', intro = true }) {
+function layout({ title, body, shopName, user = null, csrf = '', noindex = false, wide = false, page = '', intro = true, tab = '' }) {
   const account = user ? `
       ${user.role === 'admin' ? `<a href="/admin" class="btn small primary nav-lib">${ICON.shield}<span>หลังบ้าน</span></a>` : `<a href="/library" class="btn small ghost nav-lib">${ICON.library}<span>คลังของฉัน</span></a>`}
       <details class="menu">
@@ -132,10 +137,9 @@ ${intro ? `<div class="loader" data-loader aria-hidden="true">
   <div class="top-in">
     ${brand(shopName)}
     <nav class="nav" aria-label="เมนูหลัก">
-      <a href="/subtitles" class="nav-sub">${ICON.cc}<span>ซับอัตโนมัติ</span><span class="beta">Beta</span></a>
-      <a href="/#catalog">สินค้า</a>
-      <a href="/#kit">ปรับแต่งได้</a>
-      <a href="/#how">วิธีสั่งซื้อ</a>
+      <a href="/subtitles" class="nav-sub">${ICON.cc}<span>ใส่ซับอัตโนมัติ</span></a>
+      <a href="/#catalog">${ICON.film}<span>แอนิเมชัน</span></a>
+      <a href="/premium" class="nav-pack">${ICON.crown}<span>พรีเมียม</span></a>
     </nav>
     <div class="account">${account}</div>
     <button type="button" class="icon-btn" data-theme-toggle aria-label="สลับโหมดสว่าง/มืด">
@@ -153,8 +157,9 @@ ${body}
     <div class="foot-brand">${brand(shopName)}
       <p>แอนิเมชันข้อความภาษาไทยสำหรับคนตัดต่อ ${esc(LICENSE.short)}</p></div>
     <nav class="foot-links" aria-label="ลิงก์ท้ายเว็บ">
-      <a href="/#catalog">สินค้าทั้งหมด</a>
-      <a href="/subtitles">ใส่ซับอัตโนมัติ (Beta)</a>
+      <a href="/#catalog">แอนิเมชันทั้งหมด</a>
+      <a href="/premium">แพ็กพรีเมียม</a>
+      <a href="/subtitles">ใส่ซับอัตโนมัติ</a>
       <a href="/library">คลังของฉัน</a>
       <a href="/license">สิทธิ์การใช้งาน</a>
       <a href="/terms">เงื่อนไขการใช้งาน</a>
@@ -171,11 +176,11 @@ ${body}
 </footer>
 <button type="button" class="to-top" data-to-top aria-label="กลับขึ้นด้านบน" hidden>${ICON.up}</button>
 <nav class="tabbar" aria-label="เมนูแอป" data-tabbar>
-  <a href="/" data-tab="home">${ICON.grid}<span>หน้าแรก</span></a>
-  <a href="/#catalog" data-tab="shop">${ICON.search}<span>สินค้า</span></a>
-  <a href="/subtitles" data-tab="subs" class="tab-sub"><span class="tab-ico">${ICON.cc}<span class="beta">Beta</span></span><span>ใส่ซับ</span></a>
-  <a href="/library" data-tab="library">${ICON.library}<span>คลัง</span></a>
-  <a href="/account" data-tab="account">${ICON.user}<span>${user ? 'บัญชี' : 'เข้าสู่ระบบ'}</span></a>
+  <a href="/" data-tab="home"${tab === 'home' ? ' class="active"' : ''}>${ICON.grid}<span>หน้าแรก</span></a>
+  <a href="/#catalog" data-tab="shop"${tab === 'shop' ? ' class="active"' : ''}>${ICON.film}<span>แอนิเมชัน</span></a>
+  <a href="/subtitles" data-tab="subs" class="tab-sub${tab === 'subs' ? ' active' : ''}"><span class="tab-ico">${ICON.cc}</span><span>ใส่ซับ</span></a>
+  <a href="/library" data-tab="library"${tab === 'library' ? ' class="active"' : ''}>${ICON.library}<span>คลัง</span></a>
+  <a href="/account" data-tab="account"${tab === 'account' ? ' class="active"' : ''}>${ICON.user}<span>${user ? 'บัญชี' : 'เข้าสู่ระบบ'}</span></a>
 </nav>
 <script src="/app.js?v=${V}" defer></script>
 </body>
@@ -200,7 +205,7 @@ function card(p, i, owned) {
           <p class="muted small">${esc(p.subtitle || '')}</p>
           <div class="card-foot">
             <span class="price${p.free ? ' free' : ''}">${priceLabel(p)}</span>
-            <span class="card-cta">${have ? 'เปิดใช้' : p.free ? 'รับฟรี' : 'ดูและซื้อ'} ›</span>
+            <span class="card-cta">${have ? 'เปิดใช้' : p.free ? 'รับฟรี' : 'ดูตัวอย่าง'} ›</span>
           </div>
         </div>
       </a>
@@ -214,94 +219,106 @@ function kitTimeline({ big = false, p = null } = {}) {
   const outSec = tm && tm.fadeStart ? Math.round((p.manifest.duration - tm.fadeStart) * 10) / 10 : 0.5;
   return `<div class="timeline${big ? ' big' : ''}" aria-hidden="true">
     <div class="tl-track">
-      <span class="tl-clip in"><b>${p && p.premium ? 'ท่าเข้า' : 'เด้งเข้า'}</b><small>${inSec} วิ</small></span>
+      <span class="tl-clip in"><b>${p && p.fancy ? 'ท่าเข้า' : 'เด้งเข้า'}</b><small>${inSec} วิ</small></span>
       <span class="tl-clip hold"><b>ข้อความค้าง</b><small>นานเท่าที่เลือก 3–30 วิ</small><i class="tl-handle"></i></span>
-      <span class="tl-clip out"><b>${p && p.premium ? 'ท่าออก' : 'จางออก'}</b><small>${outSec} วิ</small></span>
+      <span class="tl-clip out"><b>${p && p.fancy ? 'ท่าออก' : 'จางออก'}</b><small>${outSec} วิ</small></span>
     </div>
     <div class="tl-track ghost"><span class="tl-clip base">คลิปของคุณ</span></div>
   </div>`;
 }
 
-function home({ cfg, user, csrf, products, owned = new Set() }) {
-  const { editors } = cfg.editorsConfig;
+// กล่องแพ็กพรีเมียม (หน้าแรก / หน้าสินค้า / คลัง): มีแล้ว · รอโอน/รอตรวจ · ปุ่มซื้อ
+function packCta({ pack, user, csrf, big = false }) {
+  if (pack.owned) return `<div class="owned-box">${ICON.check}<span>คุณมีแพ็กพรีเมียมแล้ว ใช้ได้ทุกแบบ</span></div>`;
+  if (pack.open) {
+    const href = pack.open.status === 'review' ? `/order/${esc(pack.open.id)}` : `/pay/transfer/${esc(pack.open.id)}`;
+    return `<a class="btn primary block${big ? ' lg' : ''}" href="${href}">${pack.open.status === 'review' ? 'แจ้งโอนแล้ว · ดูสถานะ' : `ไปหน้าโอนเงิน ${baht(pack.price)}`}</a>`;
+  }
+  if (!user) return `<a class="btn primary block${big ? ' lg' : ''}" href="/login?next=%2Fpremium">ปลดล็อกพรีเมียม ${baht(pack.price)}</a>`;
+  return `<form method="post" action="/checkout" data-checkout id="pack-form">
+    <input type="hidden" name="product" value="${esc(pack.slug)}">
+    <input type="hidden" name="csrf" value="${esc(csrf)}">
+    <button class="btn primary block${big ? ' lg' : ''}" type="submit"><span>ปลดล็อกพรีเมียม ${baht(pack.price)}</span></button>
+  </form>`;
+}
+
+function home({ cfg, user, csrf, products, owned = new Set(), pack }) {
   const cards = products.map((p, i) => card(p, i, owned)).join('');
-  const editorNames = Object.values(editors).filter((e) => !/อื่น/.test(e.label)).map((e) => e.label);
   const freeCount = products.filter((p) => p.free).length;
-  const paid = products.filter((p) => !p.free);
-  const minPaid = paid.length ? Math.min(...paid.map((p) => p.price)) : 0;
-  const lead = products.find((p) => p.premium) || products[0];
+  const premCount = products.length - freeCount;
   return layout({
-    title: 'แอนิเมชันข้อความภาษาไทย', shopName: cfg.shopName, user, csrf, page: 'page-home',
+    title: 'แอนิเมชันข้อความภาษาไทย', shopName: cfg.shopName, user, csrf, page: 'page-home', tab: 'home',
     body: `
-<section class="hero">
-  <div class="hero-copy">
-    <h1>แอนิเมชันข้อความไทย<br><span class="hl">ลากใส่คลิปได้ทันที</span></h1>
-    <p class="lead">พิมพ์ข้อความเอง เลือกฟอนต์และสีได้ ใช้กับ ${esc([...new Set(editorNames.map((n) => n.replace(/\s*(มือถือ|คอม)$/, '')))].slice(0, 3).join(', '))} และโปรแกรมอื่น</p>
-    <div class="hero-cta">
-      <a class="btn primary lg" href="#catalog">เลือกแอนิเมชัน</a>
-      ${freeCount ? `<a class="btn ghost lg" href="#catalog" data-pick="free">ลองแบบฟรี</a>` : ''}
-    </div>
-    <ul class="hero-ticks">
-      ${freeCount ? `<li>${ICON.check} มีแบบฟรี ${freeCount} แบบ</li>` : ''}
-      ${minPaid ? `<li>${ICON.check} พรีเมียมเริ่ม ${baht(minPaid)}</li>` : ''}
-      <li>${ICON.check} จ่ายครั้งเดียว ใช้ได้ตลอด</li>
-    </ul>
+<section class="app-home">
+  <h1 class="app-hello">${user ? `สวัสดี${user.name ? ` ${esc(user.name)}` : ''}` : 'ทำคลิปให้ปังขึ้น'}<small>วันนี้จะทำอะไรดี</small></h1>
+  <div class="tools">
+    <a class="tool tool-main" href="/subtitles">
+      <span class="tool-ico">${ICON.cc}</span>
+      <span class="tool-txt"><b>ใส่ซับอัตโนมัติ</b><small>อัปคลิป ได้ซับไทยพร้อมแอนิเมชัน</small></span>
+      <span class="tool-go" aria-hidden="true">›</span>
+    </a>
+    <a class="tool" href="#catalog">
+      <span class="tool-ico">${ICON.film}</span>
+      <span class="tool-txt"><b>แอนิเมชันข้อความ</b><small>ฟรี ${freeCount} · พรีเมียม ${premCount}</small></span>
+    </a>
+    <a class="tool" href="/library">
+      <span class="tool-ico">${ICON.library}</span>
+      <span class="tool-txt"><b>คลังของฉัน</b><small>ปรับแต่งแล้วโหลด</small></span>
+    </a>
   </div>
-  ${lead ? `<a class="hero-visual" href="/p/${esc(lead.slug)}" aria-label="ดูตัวอย่าง ${esc(lead.title)}">
-    <video src="/previews/${esc(lead.slug)}_horizontal.mp4" poster="/previews/${esc(lead.slug)}_horizontal.jpg" autoplay muted loop playsinline preload="metadata"></video>
-    <span class="hero-tag">${esc(lead.title)} · ${priceLabel(lead)}</span>
+  ${premCount ? `<a class="pack-banner${pack && pack.owned ? ' have' : ''}" href="/premium">
+    <span class="pack-ico">${ICON.crown}</span>
+    <span class="pack-txt"><b>${pack && pack.owned ? 'คุณมีแพ็กพรีเมียมแล้ว' : `แพ็กพรีเมียม ${baht(cfg.premiumPack.price)}`}</b><small>${pack && pack.owned ? `ใช้ได้ทุกแบบ ${premCount} แบบ + แบบใหม่` : `ได้ครบ ${premCount} แบบ + แบบใหม่ในอนาคต จ่ายครั้งเดียว`}</small></span>
+    <span class="pack-go">${pack && pack.owned ? 'ดู' : 'ปลดล็อก'}</span>
   </a>` : ''}
 </section>
 
-<a class="sub-banner" href="/subtitles">
-  <span class="sub-banner-icon">${ICON.cc}</span>
-  <span class="sub-banner-text"><b>ใส่ซับอัตโนมัติ <span class="beta">Beta</span></b><small>อัปคลิปที่มีเสียงพูด ได้ซับไทยพร้อมแอนิเมชัน แก้คำได้</small></span>
-  <span class="btn small primary">ลองเลย</span>
-</a>
-
 <section id="catalog" class="catalog">
   <div class="section-head">
-    <h2>เลือกแอนิเมชัน</h2>
+    <h2>แอนิเมชันข้อความ</h2>
     <p class="muted small" data-count-label aria-live="polite">${products.length} แบบ</p>
   </div>
-  <div class="chips filter" role="group" aria-label="กรองตามราคา">
+  <div class="chips filter" role="group" aria-label="กรอง">
     <button type="button" class="chip active" data-cat-btn="">ทั้งหมด</button>
     ${freeCount ? '<button type="button" class="chip" data-cat-btn="free">ฟรี</button>' : ''}
-    ${paid.length ? '<button type="button" class="chip" data-cat-btn="premium">พรีเมียม</button>' : ''}
+    ${premCount ? '<button type="button" class="chip" data-cat-btn="premium">พรีเมียม</button>' : ''}
   </div>
   <div class="grid" data-grid>${cards}</div>
   <div class="empty" data-empty hidden>
     <p><b>ไม่พบแอนิเมชัน</b></p>
     <p class="muted small"><button type="button" class="linklike" data-reset>ดูทั้งหมด</button></p>
   </div>
-</section>
-
-<section id="how" class="how">
-  <h2>ใช้งานง่าย 3 ขั้น</h2>
-  <ol class="steps">
-    <li><span class="num">1</span><div><h3>เลือกแบบที่ชอบ</h3><p>ดูตัวอย่างได้ทั้งแนวตั้งและแนวนอน</p></div></li>
-    <li><span class="num">2</span><div><h3>เข้าสู่ระบบแล้ว${cfg.paymentProvider === 'manual' ? 'สแกนจ่าย' : 'ชำระเงิน'}</h3><p>${cfg.clerk && cfg.clerk.enabled ? 'กดปุ่ม Google ปุ่มเดียวก็เข้าได้ · ' : ''}แบบฟรีกดรับได้เลย ไม่ต้องจ่าย</p></div></li>
-    <li><span class="num">3</span><div><h3>ปรับข้อความแล้วโหลด</h3><p>พิมพ์ข้อความ เลือกฟอนต์ สี ความยาว 3–30 วินาที</p></div></li>
-  </ol>
-</section>
-
-<section id="kit" class="editors">
-  <h2>ใช้ได้กับโปรแกรมที่คุณถนัด</h2>
-  <ul class="editor-chips">${editorNames.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>
-  <ul class="perks">
-    <li>${ICON.check} ไฟล์พื้นเขียว พื้นดำ และแบบโปร่งใส</li>
-    <li>${ICON.check} แนวตั้ง 9:16 และแนวนอน 16:9</li>
-    <li>${ICON.check} ใช้ในงานลูกค้าและงานโฆษณาได้</li>
-  </ul>
-</section>
-
-<section class="cta-band">
-  <div>
-    <h2>เริ่มจากแบบฟรีก่อนก็ได้</h2>
-    <p>ทุกอย่างที่ได้อยู่ในคลังของคุณตลอด โหลดใหม่ได้ทุกเมื่อ</p>
-  </div>
-  <a class="btn light lg" href="${user ? '/library' : '#catalog'}"${user ? '' : ' data-pick="free"'}>${user ? 'เปิดคลังของฉัน' : 'ดูแบบฟรี'}</a>
 </section>`,
+  });
+}
+
+// หน้าแพ็กพรีเมียม: จ่ายครั้งเดียว ได้ทุกแบบที่มีแท็กพรีเมียม (รวมแบบใหม่ที่เพิ่มทีหลัง)
+function packPage({ cfg, user, csrf, pack, products }) {
+  const manualPay = cfg.paymentProvider === 'manual';
+  return layout({
+    title: 'แพ็กพรีเมียม', shopName: cfg.shopName, user, csrf, page: 'page-pack', tab: 'shop',
+    body: `
+<section class="pack-hero">
+  <span class="pack-ico big">${ICON.crown}</span>
+  <h1>แพ็กพรีเมียม</h1>
+  <p class="price big">${baht(pack.price)} <span class="price-note">จ่ายครั้งเดียว ใช้ได้ตลอด</span></p>
+  <ul class="pack-ticks">
+    <li>${ICON.check} ได้ครบ ${products.length} แบบพรีเมียม</li>
+    <li>${ICON.check} แบบใหม่ที่ร้านเพิ่มทีหลัง ได้ฟรีอัตโนมัติ</li>
+    <li>${ICON.check} ใช้กับซับอัตโนมัติได้ทุกแบบ</li>
+    <li>${ICON.check} ${manualPay ? 'สแกนจ่าย PromptPay เข้าคลังเมื่อร้านยืนยัน' : 'เข้าคลังทันทีหลังจ่าย'}</li>
+  </ul>
+  <div class="pack-buy">${packCta({ pack, user, csrf, big: true })}</div>
+  ${!pack.owned && user ? `<p class="muted small center">การกดซื้อถือว่ายอมรับ <a href="/terms">เงื่อนไขการใช้งาน</a> และ <a href="/refund">นโยบายคืนเงิน</a></p>` : ''}
+</section>
+<section class="catalog">
+  <div class="section-head"><h2>อยู่ในแพ็ก</h2><p class="muted small">${products.length} แบบ</p></div>
+  <div class="grid">${products.map((p, i) => card(p, i, null)).join('')}</div>
+</section>
+<div class="buy-bar" data-buy-bar>
+  <div><b>แพ็กพรีเมียม</b><span class="price">${baht(pack.price)}</span></div>
+  ${pack.owned ? '<a class="btn primary" href="/library">เปิดคลัง</a>' : pack.open ? `<a class="btn primary" href="${pack.open.status === 'review' ? `/order/${esc(pack.open.id)}` : `/pay/transfer/${esc(pack.open.id)}`}">ดูสถานะ</a>` : user ? '<button class="btn primary" type="submit" form="pack-form">ปลดล็อก</button>' : '<a class="btn primary" href="/login?next=%2Fpremium">ปลดล็อก</a>'}
+</div>`,
   });
 }
 
@@ -311,14 +328,14 @@ function editorOptions(editors, selected) {
       <span>${esc(e.label)}</span></label>`).join('');
 }
 
-function product({ cfg, user, csrf, p, owned }) {
+function product({ cfg, user, csrf, p, owned, pack = null }) {
   const manualPay = cfg.paymentProvider === 'manual';
   // โหมดโอนเอง: สินค้าเข้าคลังเมื่อร้านยืนยันยอด (ไม่ใช่ "ทันที")
   const payWhen = (a) => (manualPay ? a.replace('ทันทีหลังชำระเงินสำเร็จ', 'ทันทีที่ร้านยืนยันยอดโอน (ปกติไม่นาน)') : a);
   const faq = (p.faq || []).map((f) => `<details><summary>${esc(f.q)}</summary><p>${esc(payWhen(f.a))}</p></details>`).join('');
   const tags = [p.category, ...(p.tags || [])].filter(Boolean);
   return layout({
-    title: p.title, shopName: cfg.shopName, user, csrf, page: 'page-product',
+    title: p.title, shopName: cfg.shopName, user, csrf, page: 'page-product', tab: 'shop',
     body: `
 <a class="back-link" href="/#catalog">‹ แอนิเมชันทั้งหมด</a>
 <div class="pd">
@@ -349,7 +366,7 @@ function product({ cfg, user, csrf, p, owned }) {
 
     <section class="panel kit-panel">
       <h2>${ICON.stretch} ปรับแต่งเองได้หลังซื้อ</h2>
-      <p class="muted">นอกจากคลิปเต็ม ${esc(p.manifest.duration)} วินาที ยังเปลี่ยนข้อความ ฟอนต์ สี แนว และความยาว (สูงสุด 30 วินาที) ได้เอง ได้เป็นไฟล์เดียวที่ตรงกับโปรแกรมที่ใช้${p.premium ? ' ช่วงค้างมีลูกเล่นวนต่อเนื่องเนียนตลอดความยาวที่เลือก' : ''}</p>
+      <p class="muted">นอกจากคลิปเต็ม ${esc(p.manifest.duration)} วินาที ยังเปลี่ยนข้อความ ฟอนต์ สี แนว และความยาว (สูงสุด 30 วินาที) ได้เอง ได้เป็นไฟล์เดียวที่ตรงกับโปรแกรมที่ใช้${p.fancy ? ' ช่วงค้างมีลูกเล่นวนต่อเนื่องเนียนตลอดความยาวที่เลือก' : ''}</p>
       ${kitTimeline({ p })}
     </section>
 
@@ -375,20 +392,22 @@ function product({ cfg, user, csrf, p, owned }) {
       <p class="eyebrow">${esc(p.category || 'แอนิเมชันข้อความ')}</p>
       <h1>${esc(p.title)}</h1>
       <p class="muted">${esc(p.subtitle || '')}</p>
-      <p class="price big${p.free ? ' free' : ''}">${priceLabel(p)} <span class="price-note">${p.free ? 'ไม่ต้องจ่าย ใช้ได้ตลอด' : 'จ่ายครั้งเดียว ใช้ได้ตลอด'}</span></p>
+      ${p.free ? `<p class="price big free">ฟรี <span class="price-note">ไม่ต้องจ่าย ใช้ได้ตลอด</span></p>` : `<p class="price big"><span class="badge-premium">${ICON.crown} พรีเมียม</span> <span class="price-note">อยู่ในแพ็กพรีเมียม ${baht(cfg.premiumPack.price)} ได้ทุกแบบ</span></p>`}
       ${owned ? `
       <div class="owned-box">${ICON.check}<span>คุณมีแอนิเมชันนี้ในคลังแล้ว</span></div>
-      <a class="btn primary block" href="/library/${esc(owned.id)}">เปิดใช้จากคลัง</a>` : user ? `
+      <a class="btn primary block" href="/library/${esc(owned.id)}">เปิดใช้จากคลัง</a>` : !p.free && pack ? `
+      ${packCta({ pack, user, csrf })}
+      <p class="muted small center"><a href="/premium">ดูทุกแบบในแพ็ก (${esc(pack.count)} แบบ)</a> · แบบใหม่ได้ฟรีอัตโนมัติ</p>` : user ? `
       <form method="post" action="/checkout" data-checkout id="buy-form">
         <input type="hidden" name="product" value="${esc(p.slug)}">
         <input type="hidden" name="csrf" value="${esc(csrf)}">
-        <button class="btn primary block" type="submit"><span>${p.free ? 'รับฟรีเข้าคลัง' : `ซื้อเลย ${baht(p.price)}`}</span></button>
+        <button class="btn primary block" type="submit"><span>รับฟรีเข้าคลัง</span></button>
       </form>
-      <p class="muted small center">ไฟล์จะเข้าไปอยู่ในคลังของ ${esc(user.email)}<br>${p.free ? 'การกดรับ' : 'การกดซื้อ'}ถือว่ายอมรับ <a href="/terms">เงื่อนไขการใช้งาน</a>${p.free ? '' : ` และ <a href="/refund">นโยบายคืนเงิน</a>`}</p>` : `
-      <a class="btn primary block" href="/login?next=${encodeURIComponent('/p/' + p.slug)}">${p.free ? 'เข้าสู่ระบบเพื่อรับฟรี' : 'เข้าสู่ระบบเพื่อซื้อ'}</a>
-      <p class="muted small center">ยังไม่มีบัญชี? <a href="/signup?next=${encodeURIComponent('/p/' + p.slug)}">สมัครสมาชิกฟรี</a> ใช้เวลาไม่ถึงนาที</p>`}
+      <p class="muted small center">การกดรับถือว่ายอมรับ <a href="/terms">เงื่อนไขการใช้งาน</a></p>` : `
+      <a class="btn primary block" href="/login?next=${encodeURIComponent('/p/' + p.slug)}">เข้าสู่ระบบเพื่อรับฟรี</a>
+      <p class="muted small center">ยังไม่มีบัญชี? <a href="/signup?next=${encodeURIComponent('/p/' + p.slug)}">สมัครฟรี</a></p>`}
       <ul class="assure">
-        <li>${ICON.bolt} ${p.free ? 'กดรับแล้วเข้าคลังทันที' : manualPay ? 'สแกนจ่าย PromptPay เข้าคลังเมื่อร้านยืนยันยอด' : 'ได้ไฟล์ทันทีหลังชำระเงิน'}</li>
+        <li>${ICON.bolt} ${p.free ? 'กดรับแล้วเข้าคลังทันที' : manualPay ? 'สแกนจ่ายแพ็กครั้งเดียว เข้าคลังเมื่อร้านยืนยันยอด' : 'ได้ทุกแบบพรีเมียมทันทีหลังชำระเงิน'}</li>
         <li>${ICON.edit} ปรับข้อความ ฟอนต์ สี และความยาวเองได้</li>
         <li>${ICON.infinity} อยู่ในคลังตลอด ใช้งานลูกค้าได้</li>
       </ul>
@@ -398,8 +417,9 @@ function product({ cfg, user, csrf, p, owned }) {
 <div class="buy-bar" data-buy-bar>
   <div><b>${esc(p.title)}</b><span class="price${p.free ? ' free' : ''}">${priceLabel(p)}</span></div>
   ${owned ? `<a class="btn primary" href="/library/${esc(owned.id)}">เปิดในคลัง</a>`
-    : user ? `<button class="btn primary" type="submit" form="buy-form">${p.free ? 'รับฟรี' : 'ซื้อเลย'}</button>`
-      : `<a class="btn primary" href="/login?next=${encodeURIComponent('/p/' + p.slug)}">${p.free ? 'รับฟรี' : 'ซื้อเลย'}</a>`}
+    : !p.free ? (pack && pack.open ? `<a class="btn primary" href="${pack.open.status === 'review' ? `/order/${esc(pack.open.id)}` : `/pay/transfer/${esc(pack.open.id)}`}">ดูสถานะ</a>` : user ? '<button class="btn primary" type="submit" form="pack-form">ปลดล็อกแพ็ก</button>' : '<a class="btn primary" href="/login?next=%2Fpremium">ปลดล็อกแพ็ก</a>')
+      : user ? '<button class="btn primary" type="submit" form="buy-form">รับฟรี</button>'
+        : `<a class="btn primary" href="/login?next=${encodeURIComponent('/p/' + p.slug)}">รับฟรี</a>`}
 </div>`,
   });
 }
@@ -421,7 +441,7 @@ ${allowed ? `<form method="post" action="/pay/mock/${esc(order.id)}/simulate">
   <input type="hidden" name="csrf" value="${esc(csrf)}">
   <button class="btn primary block" type="submit">จำลองจ่ายสำเร็จ</button>
 </form>` : '<div class="note warn"><span><b>ร้านยังไม่เปิดรับชำระเงิน</b> ตอนนี้เป็นโหมดทดสอบ ปุ่มจำลองจ่ายใช้ได้เฉพาะเจ้าของร้าน</span></div>'}
-<p><a href="/p/${esc(p.slug)}">ยกเลิก</a></p>
+<p><a href="${productHref(p)}">ยกเลิก</a></p>
 </div>`,
   });
 }
@@ -469,7 +489,7 @@ function omisePay({ cfg, user, csrf, order, p, publicKey, qr, error }) {
       <button class="btn primary block lg" type="submit">จ่าย ${baht(order.amount)} ด้วยบัตร</button>
     </form>
   </section>`}
-  <p class="muted small center">การชำระเงินดำเนินการโดย Omise (Opn Payments) · <a href="/refund">นโยบายคืนเงิน</a> · <a href="/p/${esc(p.slug)}">ยกเลิก</a></p>
+  <p class="muted small center">การชำระเงินดำเนินการโดย Omise (Opn Payments) · <a href="/refund">นโยบายคืนเงิน</a> · <a href="${productHref(p)}">ยกเลิก</a></p>
 </div>
 <script src="https://cdn.omise.co/omise.js"></script>
 <script src="/pay.js?v=${V}" defer></script>`,
@@ -528,14 +548,14 @@ function transferPay({ cfg, user, csrf, order, p, expiresAt, error }) {
     <button class="btn primary block lg" type="submit">ยืนยันการโอนเงิน</button>
     <p class="muted small center">กดแล้วระบบจะแจ้งร้านให้ตรวจสอบ สินค้าจะเข้าคลังเมื่อร้านอนุมัติ (ไม่ได้เข้าทันที)</p>
   </form>
-  <p class="center"><a href="/p/${esc(p.slug)}">ยกเลิก</a></p>
+  <p class="center"><a href="${productHref(p)}">ยกเลิก</a></p>
 </div>
 <script src="/transfer.js?v=${V}" defer></script>`,
   });
 }
 
 function adminTransfers({ cfg, user, csrf, waiting, recent, audit, done, problem }) {
-  const productTitle = (slug) => (cfg.products.find((p) => p.slug === slug) || {}).title || slug;
+  const productTitle = (slug) => (slug === cfg.premiumPack.slug ? cfg.premiumPack.title : (cfg.products.find((p) => p.slug === slug) || {}).title || slug);
   const msg = done === 'approved' ? ['ok', 'อนุมัติแล้ว สินค้าเข้าคลังของลูกค้าและส่งอีเมลแจ้งแล้ว']
     : done === 'rejected' ? ['ok', 'ปฏิเสธแล้ว ลูกค้าจะเห็นเหตุผลและแจ้งโอนใหม่ได้']
     : problem === 'handled' ? ['bad', 'รายการนี้ถูกดำเนินการไปแล้ว (อนุมัติ/ปฏิเสธซ้ำไม่ได้)']
@@ -636,14 +656,14 @@ function orderStatus({ cfg, user, csrf, order, p }) {
 <div class="narrow">
 <h1>${order.status === 'refunded' ? 'คืนเงินแล้ว' : order.status === 'expired' ? 'QR หมดอายุ' : 'ชำระเงินไม่สำเร็จ'}</h1>
 <p>${order.status === 'refunded' ? 'คำสั่งซื้อนี้คืนเงินแล้ว สินค้าถูกนำออกจากคลัง' : 'ยังไม่มีการตัดเงิน ลองชำระใหม่ได้เลย'}</p>
-${order.status === 'refunded' ? `<p><a class="btn" href="/p/${esc(p.slug)}">ไปหน้าสินค้า</a></p>` : `<p><a class="btn primary" href="/pay/${esc(order.provider)}/${esc(order.id)}">ชำระเงินอีกครั้ง</a></p>`}
+${order.status === 'refunded' ? `<p><a class="btn" href="${productHref(p)}">ไปหน้าสินค้า</a></p>` : `<p><a class="btn primary" href="/pay/${esc(order.provider)}/${esc(order.id)}">ชำระเงินอีกครั้ง</a></p>`}
 <p class="muted small">รหัสคำสั่งซื้อ ${esc(order.id.slice(0, 8))}</p>
 </div>` : paid ? `
 <div class="success narrow">
   <div class="success-mark" data-celebrate="always" aria-hidden="true">${ICON.check}</div>
   <h1>ชำระเงินสำเร็จ</h1>
-  <p>ขอบคุณที่สั่งซื้อ <b>${esc(p.title)}</b> แอนิเมชันนี้อยู่ในคลังของคุณแล้ว</p>
-  <p><a class="btn primary lg" href="/library/${esc(order.id)}">${ICON.library} เปิดใช้จากคลัง</a></p>
+  <p>ขอบคุณที่สั่งซื้อ <b>${esc(p.title)}</b> ${p.pack ? 'แอนิเมชันพรีเมียมทุกแบบเข้าคลังของคุณแล้ว' : 'แอนิเมชันนี้อยู่ในคลังของคุณแล้ว'}</p>
+  <p><a class="btn primary lg" href="${p.pack ? '/library?pack=1' : `/library/${esc(order.id)}`}">${ICON.library} เปิดใช้จากคลัง</a></p>
   <p class="muted small">รหัสคำสั่งซื้อ <b>${esc(order.id.slice(0, 8))}</b> · ส่งใบยืนยันไปที่ ${esc(order.email)} แล้ว</p>
   <div class="note">${ICON.infinity}<span>ซื้อครั้งเดียว ใช้ได้ตลอด เข้าสู่ระบบแล้วโหลดใหม่จากคลังได้ทุกเมื่อ ทุกเครื่อง</span></div>
 </div>` : `
@@ -661,7 +681,7 @@ function manualStatusBody({ order, p }) {
   if (order.status === 'expired') return `
 <div class="narrow"><h1>ออเดอร์หมดอายุ</h1>
 <p>ออเดอร์นี้หมดเวลาแล้ว ยังไม่มีการอนุมัติ ถ้าโอนไปแล้ว กรุณาติดต่อร้านพร้อมรหัสอ้างอิง <b>${esc(order.pay_ref)}</b></p>
-<p><a class="btn primary" href="/p/${esc(p.slug)}">สั่งซื้อใหม่</a></p></div>`;
+<p><a class="btn primary" href="${productHref(p)}">สั่งซื้อใหม่</a></p></div>`;
   if (order.status === 'rejected') return `
 <div class="narrow"><h1>ร้านยังไม่พบรายการโอน</h1>
 <div class="note warn"><span><b>เหตุผล:</b> ${esc(order.review_note || '')}</span></div>
@@ -717,7 +737,7 @@ function versionList(cfg, versions, productsBySlug, fonts = cfg.fonts) {
     </li>`).join('')}</ul>`;
 }
 
-function library({ cfg, user, csrf, items, open = [], customs = [], fonts, limits }) {
+function library({ cfg, user, csrf, items, open = [], customs = [], fonts, limits, pack = null, packJustBought = false }) {
   const openLabel = { pending: 'รอโอนเงิน', review: 'รอร้านตรวจสอบ', rejected: 'ร้านยังไม่พบยอดโอน' };
   const openHref = (o) => (o.provider === 'manual' && o.status !== 'review' ? `/pay/transfer/${o.id}` : `/order/${o.id}`);
   const openList = open.length ? `
@@ -733,7 +753,7 @@ function library({ cfg, user, csrf, items, open = [], customs = [], fonts, limit
       <a href="/library/${esc(order.id)}" class="lib-thumb"><img src="/previews/${esc(p.slug)}_horizontal.jpg" alt="" loading="lazy" width="960" height="540"></a>
       <div class="lib-body">
         <h3>${esc(p.title)}</h3>
-        <p class="muted small">${order.provider === 'free' ? 'รับฟรีเมื่อ' : 'ซื้อเมื่อ'} ${esc(thDate(order.paid_at || order.created_at))} · รหัส ${esc(order.id.slice(0, 8))}</p>
+        <p class="muted small">${order.provider === 'free' ? 'รับฟรีเมื่อ' : order.provider === 'pack' ? 'ได้จากแพ็กพรีเมียม' : 'ซื้อเมื่อ'} ${esc(thDate(order.paid_at || order.created_at))} · รหัส ${esc(order.id.slice(0, 8))}</p>
         <div class="lib-actions">
           <a class="btn primary" href="/library/${esc(order.id)}/customize">${ICON.edit} ปรับแต่งแล้วโหลด</a>
           <a class="btn" href="/library/${esc(order.id)}">${ICON.download} แบบต้นฉบับ</a>
@@ -741,13 +761,15 @@ function library({ cfg, user, csrf, items, open = [], customs = [], fonts, limit
       </div>
     </article>`).join('');
   return layout({
-    title: 'คลังของฉัน', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-library',
+    title: 'คลังของฉัน', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-library', tab: 'library',
     body: `
 <div class="section-head lib-head">
   <div><p class="eyebrow">บัญชี ${esc(user.email)}</p><h1>คลังของฉัน</h1></div>
   <p class="muted small">${items.length} รายการ · ใช้ได้ตลอด</p>
 </div>
+${packJustBought && pack && pack.owned ? `<div class="note ok">${ICON.check}<span><b>แพ็กพรีเมียมพร้อมใช้</b> ทุกแบบพรีเมียมอยู่ในคลังแล้ว</span></div>` : ''}
 ${openList}
+${pack && !pack.owned && !pack.open && pack.count ? `<a class="pack-banner slim" href="/premium"><span class="pack-ico">${ICON.crown}</span><span class="pack-txt"><b>ปลดล็อกพรีเมียมทั้งหมด ${baht(pack.price)}</b><small>${esc(pack.count)} แบบ + แบบใหม่ จ่ายครั้งเดียว</small></span><span class="pack-go">ดู</span></a>` : ''}
 ${items.length ? `<div class="lib-grid">${list}</div>` : `
 <div class="empty">
   <p><b>ยังไม่มีแอนิเมชันในคลัง</b></p>
@@ -792,7 +814,7 @@ ${claimed && order.provider === 'free' ? `<p class="claimed-bar" role="status">$
   <div>
     <p class="eyebrow">อยู่ในคลังของคุณ · ใช้ได้ตลอด</p>
     <h1>${esc(p.title)}</h1>
-    <p class="muted small">${order.provider === 'free' ? 'รับฟรีเมื่อ' : 'ซื้อเมื่อ'} ${esc(thDate(order.paid_at || order.created_at))} · รหัส ${esc(order.id.slice(0, 8))}</p>
+    <p class="muted small">${order.provider === 'free' ? 'รับฟรีเมื่อ' : order.provider === 'pack' ? 'ได้จากแพ็กพรีเมียม' : 'ซื้อเมื่อ'} ${esc(thDate(order.paid_at || order.created_at))} · รหัส ${esc(order.id.slice(0, 8))}</p>
   </div>
 </div>
 <a class="cz-cta" href="/library/${esc(order.id)}/customize">
@@ -1475,7 +1497,7 @@ function message({ cfg, user, csrf, title, text, action }) {
 
 function admin({ cfg, user, csrf, orders, stats, tools, installHelp = [], reviewCount = 0, mail = null }) {
   const { editors } = cfg.editorsConfig;
-  const productTitle = (slug) => (cfg.products.find((p) => p.slug === slug) || {}).title || slug;
+  const productTitle = (slug) => (slug === cfg.premiumPack.slug ? cfg.premiumPack.title : (cfg.products.find((p) => p.slug === slug) || {}).title || slug);
   const max = Math.max(1, ...stats.byEditor.map((r) => r.n));
   const bars = Object.keys(editors).map((id) => {
     const n = (stats.byEditor.find((r) => r.editor === id) || { n: 0 }).n;
@@ -1521,10 +1543,10 @@ function emailBody({ cfg, order, p, user }) {
   return `สวัสดีค่ะ${user && user.name ? ` คุณ${user.name}` : ''}
 
 ขอบคุณที่สั่งซื้อ "${p.title}" (${baht(order.amount)})
-แอนิเมชันนี้อยู่ในคลังของบัญชี ${order.email} แล้ว
+${p.pack ? 'แอนิเมชันพรีเมียมทุกแบบ (รวมแบบใหม่ที่ร้านเพิ่มภายหลัง) อยู่' : 'แอนิเมชันนี้อยู่'}ในคลังของบัญชี ${order.email} แล้ว
 
 เปิดใช้งานได้ที่คลังของคุณ (เข้าสู่ระบบด้วยอีเมลนี้):
-${cfg.baseUrl}/library/${order.id}
+${cfg.baseUrl}/library${p.pack ? '' : `/${order.id}`}
 
 ในคลังเลือกโปรแกรมตัดต่อได้ตลอด แล้วโหลดไฟล์ที่ตรงกับโปรแกรมนั้น ทั้งคลิปเต็ม
 และปรับแต่งข้อความ ฟอนต์ สี แนว และความยาวเองได้ (ได้เป็นไฟล์เดียว)
@@ -1536,7 +1558,7 @@ ${cfg.baseUrl}/library/${order.id}
 — ${cfg.shopName} · แอนิเมชันข้อความไทย`;
 }
 
-module.exports = { clerkAuth, clerkSignedOut, browserScripts, contactPage, transferPay, adminTransfers, transferReceivedEmail, transferRejectedEmail, adminTransferEmail, bahtExact, omisePay, account, forgot, reset, legalPage, verifyEmailBody, resetEmailBody, home, product, mockPay, orderStatus, library, libraryItem, customize, customStatus, presetsPage, fontsPage, login, signup, licensePage, message, admin, emailBody, esc, baht, LICENSE };
+module.exports = { packPage, configure: (cfg) => { PACK_PRICE = cfg.premiumPack.price; }, clerkAuth, clerkSignedOut, browserScripts, contactPage, transferPay, adminTransfers, transferReceivedEmail, transferRejectedEmail, adminTransferEmail, bahtExact, omisePay, account, forgot, reset, legalPage, verifyEmailBody, resetEmailBody, home, product, mockPay, orderStatus, library, libraryItem, customize, customStatus, presetsPage, fontsPage, login, signup, licensePage, message, admin, emailBody, esc, baht, LICENSE };
 // ตัวช่วยสำหรับหน้าซับอัตโนมัติ (src/views-subtitles.js)
 module.exports._h = { browserScripts, layout, esc, ICON, V, fontFaces, fmtBytes, thDate, FILL_SWATCHES, STROKE_SWATCHES };
 Object.assign(module.exports, require('./views-subtitles'));
