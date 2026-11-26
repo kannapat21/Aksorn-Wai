@@ -227,7 +227,7 @@ test('ต้องมีแบบในคลังก่อน: ยังไม
   assert.match(r0.headers.get('location'), /^\/login/);
   const c = await newUser('nosub@example.com');
   const page = await (await c.req('/subtitles')).text();
-  assert.match(page, /ต้องมีแบบตัวอักษรในคลังก่อน/);
+  assert.match(page, /เลือกแบบซับก่อน 1 แบบ[\s\S]*ดูแบบฟรี/);
   const r = await c.upload(fakeClip(), { style: 'whatever' });
   assert.equal(r.status, 400);
   assert.match((await r.json()).error, /เลือกแบบตัวอักษร/);
@@ -313,6 +313,18 @@ test('อัปคลิป → ถอดเสียง → แก้คำ/เ
   for (const [v, want] of [['145', '145'], [80, '80'], ['999', '100'], ['abc', '100']]) {
     assert.equal((await c.json(`/subtitles/${id}/save`, { style: { ...style, size: v } })).status, 200);
     assert.equal(jobOf(id).size, want, String(v));
+  }
+  // ตำแหน่ง: บน/กลาง/ล่าง หรือ % ที่ลากซับไปวางเอง (5–95) · ค่าแปลกๆ กลับเป็นล่าง
+  for (const [v, want] of [['32.5', '32.5'], ['5', '5'], ['top', 'top'], ['99', 'bottom'], ['3', 'bottom'], ['abc', 'bottom'], ['1e1', 'bottom']]) {
+    assert.equal((await c.json(`/subtitles/${id}/save`, { style: { ...style, position: v } })).status, 200);
+    assert.equal(jobOf(id).position, want, String(v));
+  }
+  {
+    const R = require('../public/subplan');
+    const L = R.layoutFor(1080, 1920, { size: '100', position: '25' });
+    assert.equal(L.y + L.band / 2, 1920 * 0.25, 'ซับวางกึ่งกลางที่ 25% ของความสูง ตรงกับตัวอย่างที่ลาก');
+    const top = R.layoutFor(1080, 1920, { size: '100', position: '5' });
+    assert.equal(top.y, 0, 'ลากชิดขอบ ไม่ล้นออกนอกคลิป');
   }
   // แบบที่ไม่ได้เป็นเจ้าของ / ไม่มี CSRF / ข้อความผิด
   const notMine = await c.json(`/subtitles/${id}/save`, { style: { ...style, order: 'someone-else' } });

@@ -164,7 +164,7 @@
   var cur = -1, dirty = true, scale = 1, lay = null;
   function measure() {
     // ขนาดเครื่องเล่นพอดีสัดส่วนคลิป (แถบซับต้องวางตรงตำแหน่งเดียวกับไฟล์จริง)
-    var maxH = innerWidth <= 900 ? Math.max(180, innerHeight * 0.32) : Math.max(260, Math.min(innerHeight * 0.62, 600));
+    var maxH = innerWidth <= 900 ? Math.max(200, innerHeight * 0.38) : Math.max(260, Math.min(innerHeight * 0.62, 600));
     var pw = Math.min(player.parentElement.clientWidth, maxH * D.width / D.height);
     player.style.width = Math.round(pw) + 'px';
     player.style.height = Math.round(pw * D.height / D.width) + 'px';
@@ -191,7 +191,12 @@
     clock.textContent = fmtT(t) + ' / ' + fmtT(D.duration);
     var i = findCue(t);
     if (i !== cur) highlight(i);
-    if (i < 0) { el.style.opacity = '0'; cur = -1; return; }
+    if (i < 0) {
+      // ไม่มีซับตรงจุดนี้: ตอนหยุดเล่นโชว์ซับตัวอย่างจางๆ ให้เห็นตำแหน่งและลากย้ายได้
+      if (video.paused && !disabled && cues.length) { ghost(); return; }
+      band.classList.remove('ghost'); el.style.opacity = '0'; cur = -1; return;
+    }
+    band.classList.remove('ghost');
     var c = cues[i], T = timingOf(c), motion = motionOf();
     if (i !== cur || dirty) {
       var f = fontOf();
@@ -207,6 +212,68 @@
     if (calm) tt = Math.min(Math.max(tt, T.tm.settle + 0.6), T.tm.fadeStart - 0.01); // ลดการเคลื่อนไหว: แสดงท่านิ่ง
     M.setTime(el, tt, T.tm, motion);
   }
+  function ghost() {
+    var c = cues[Math.max(0, sel)] || cues[0], T = timingOf(c), motion = motionOf();
+    if (cur !== -3 || dirty) {
+      var f = fontOf();
+      M.setup(el, {
+        text: c.text || 'ตัวอย่างซับ', words: null,
+        fontFamily: 'tt-' + f.id, weight: f.weight, fill: style.fill, stroke: style.stroke,
+        strokeRatio: OUTLINES[style.outline] || 0, shadow: style.shadow, motion: motion,
+        width: player.clientWidth, height: lay.band * scale, filterId: 'subf', fixedSize: lay.fontPx * scale, maxW: 0.92, maxH: 0.92,
+      });
+      cur = -3; dirty = false;
+    }
+    M.setTime(el, Math.min(T.tm.settle + 0.6, T.tm.fadeStart - 0.01), T.tm, motion);
+    band.classList.add('ghost');
+  }
+
+  // ---------- ลากซับบนวิดีโอเพื่อย้ายตำแหน่ง (ขึ้น-ลง) ใช้ตำแหน่งเดียวกันตอนสร้างคลิป ----------
+  var P = window.TTSubPlan;
+  var bandDrag = null;
+  function setPos(pct) {
+    pct = Math.round(Math.max(P.POS_MIN, Math.min(P.POS_MAX, pct)) * 10) / 10;
+    if (Math.abs(pct - 50) < 1.5) pct = 50; // ดูดเข้ากึ่งกลางจอ
+    style.position = String(pct);
+    $$('input[name="position"]', look).forEach(function (r) { r.checked = false; });
+    measure(); draw();
+  }
+  function curPct() { return ((lay.y + lay.band / 2) / D.height) * 100; }
+  if (!disabled) {
+    band.tabIndex = 0;
+    band.setAttribute('role', 'slider');
+    band.setAttribute('aria-label', 'ตำแหน่งซับ ลากหรือกดลูกศรขึ้นลง');
+    band.addEventListener('pointerdown', function (e) {
+      if (e.button > 0) return;
+      e.stopPropagation(); e.preventDefault();
+      bandDrag = { y0: e.clientY, p0: curPct(), moved: false };
+      try { band.setPointerCapture(e.pointerId); } catch (err) { /* ข้าม */ }
+      player.classList.add('dragging');
+    });
+    band.addEventListener('pointermove', function (e) {
+      if (!bandDrag) return;
+      var dy = e.clientY - bandDrag.y0;
+      if (!bandDrag.moved && Math.abs(dy) < 3) return;
+      bandDrag.moved = true;
+      setPos(bandDrag.p0 + (dy / player.clientHeight) * 100);
+    });
+    var bandUp = function () {
+      if (!bandDrag) return;
+      var moved = bandDrag.moved;
+      bandDrag = null;
+      player.classList.remove('dragging');
+      if (moved) { changed(); var hint = $('[data-drag-hint]'); if (hint) hint.hidden = true; }
+    };
+    band.addEventListener('pointerup', bandUp);
+    band.addEventListener('pointercancel', bandUp);
+    band.addEventListener('click', function (e) { e.stopPropagation(); });
+    band.addEventListener('keydown', function (e) {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault(); e.stopPropagation();
+      setPos(curPct() + (e.key === 'ArrowUp' ? -2 : 2)); changed();
+    });
+  }
+
   var raf = 0;
   function loop() { draw(); raf = video.paused ? 0 : requestAnimationFrame(loop); }
   function kick() { if (!raf) raf = requestAnimationFrame(loop); }
@@ -227,7 +294,14 @@
   video.addEventListener('play', function () { player.classList.add('playing'); kick(); });
   video.addEventListener('pause', function () { player.classList.remove('playing'); draw(); });
   video.addEventListener('seeked', draw);
-  video.addEventListener('loadedmetadata', draw);
+  video.addEventListener('loadedmetadata', function () {
+    // เปิดหน้ามา: ไปที่ซับบรรทัดแรกตอนแสดงเต็ม ให้เห็นหน้าตาและลากย้ายได้ทันที
+    if (!video.currentTime && cues.length) {
+      var c0 = cues[0], T0 = timingOf(c0);
+      seek(Math.min(c0.start + T0.tm.settle + 0.2, c0.end - 0.05));
+    }
+    draw();
+  });
   video.addEventListener('timeupdate', function () { if (video.paused) draw(); });
   var toggle = function () { if (video.paused) { var p = video.play(); if (p && p.catch) p.catch(function () {}); } else video.pause(); };
   playBtn.addEventListener('click', function (e) { e.stopPropagation(); toggle(); });
@@ -338,6 +412,7 @@
   }
   function tlUpdate(i) {
     var b = tlCues.children[i], c = cues[i];
+    lineUpdate(i);
     if (!b || !c) return;
     b.style.left = (c.start * pps) + 'px';
     b.style.width = Math.max(4, (c.end - c.start) * pps) + 'px';
@@ -514,10 +589,94 @@
   function renderList() {
     closeEdit(true);
     tlRender();
+    renderLines();
     renderBtn.disabled = disabled;
     cur = -2; draw();
   }
-  function highlight(i) { tlActive(i); }
+  function highlight(i) {
+    tlActive(i);
+    if (!linesEl) return;
+    $$('.sub-line.on', linesEl).forEach(function (li) { li.classList.remove('on'); });
+    var li = i >= 0 && linesEl.children[i];
+    if (li) {
+      li.classList.add('on');
+      if (!video.paused && !typingLine()) { var top = li.offsetTop; if (top < linesEl.scrollTop || top > linesEl.scrollTop + linesEl.clientHeight - li.offsetHeight) linesEl.scrollTop = Math.max(0, top - 8); }
+    }
+  }
+
+  // ---------- รายการข้อความซับ (แตะแล้วพิมพ์แก้ได้ทันที) ----------
+  var linesEl = $('[data-lines]'), lineSnap = false;
+  function typingLine() { return Boolean(linesEl && document.activeElement && linesEl.contains(document.activeElement)); }
+  function renderLines() {
+    if (!linesEl) return;
+    linesEl.innerHTML = '';
+    cues.forEach(function (c, i) {
+      var li = document.createElement('li');
+      li.className = 'sub-line';
+      li.innerHTML = '<button type="button" class="sub-line-t" data-line-seek tabindex="-1"></button><input type="text" class="sub-line-in" maxlength="120" enterkeyhint="next" placeholder="พิมพ์ข้อความซับ">';
+      li.firstChild.textContent = fmtT(c.start);
+      var inp = li.lastChild;
+      inp.value = c.text; inp.disabled = disabled; inp.setAttribute('aria-label', 'ซับบรรทัดที่ ' + (i + 1));
+      linesEl.appendChild(li);
+    });
+    if (!cues.length) linesEl.innerHTML = '<li class="sub-line-empty muted small">ยังไม่มีซับ เล่นคลิปถึงจุดที่มีคนพูด แล้วกด "+ เพิ่มบรรทัด"</li>';
+  }
+  function lineUpdate(i) {
+    var li = linesEl && linesEl.children[i], c = cues[i];
+    if (!li || !c || !li.lastChild || li.lastChild.tagName !== 'INPUT') return;
+    li.firstChild.textContent = fmtT(c.start);
+    if (document.activeElement !== li.lastChild) li.lastChild.value = c.text;
+  }
+  var lineIndex = function (node) { var li = node.closest('.sub-line'); return li ? Array.prototype.indexOf.call(linesEl.children, li) : -1; };
+  if (linesEl) {
+    linesEl.addEventListener('focusin', function (e) {
+      if (!e.target.classList.contains('sub-line-in')) return;
+      var i = lineIndex(e.target), c = cues[i];
+      if (!c) return;
+      lineSnap = false; hist.typingFocus = true;
+      if (edIn) closeEdit();
+      select(i, true);
+      if (video.paused && findCue(video.currentTime || 0) !== i) seek(c.start + Math.min(0.6, (c.end - c.start) / 2));
+    });
+    linesEl.addEventListener('input', function (e) {
+      var i = lineIndex(e.target), c = cues[i];
+      if (!c) return;
+      if (!lineSnap) { snap(); lineSnap = true; }
+      c.text = e.target.value.replace(/\s+/g, ' '); c.w = null;
+      tlUpdate(i); dirty = true; draw(); changed();
+    });
+    linesEl.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' || !e.target.classList.contains('sub-line-in')) return;
+      e.preventDefault();
+      var li = e.target.closest('.sub-line').nextElementSibling;
+      if (li && li.lastChild && li.lastChild.focus) li.lastChild.focus(); else e.target.blur();
+    });
+    linesEl.addEventListener('focusout', function (e) {
+      if (!e.target.classList.contains('sub-line-in')) return;
+      hist.typingFocus = false;
+      var i = lineIndex(e.target), c = cues[i];
+      if (!c) return;
+      c.text = c.text.trim();
+      if (!c.text) { cues.splice(i, 1); sel = -1; renderList(); changed(); return; } // ลบข้อความหมด = ลบบรรทัด
+      e.target.value = c.text;
+      tlUpdate(i);
+    });
+    linesEl.addEventListener('click', function (e) {
+      if (!e.target.closest('[data-line-seek]')) return;
+      var i = lineIndex(e.target);
+      if (cues[i]) { select(i, true); seek(cues[i].start + 0.01); }
+    });
+  }
+
+  // ---------- แท็บ แก้คำ / หน้าตาซับ ----------
+  $$('[data-sub-tab]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var k = b.getAttribute('data-sub-tab');
+      $$('[data-sub-tab]').forEach(function (x) { var on = x === b; x.classList.toggle('active', on); x.setAttribute('aria-selected', on ? 'true' : 'false'); });
+      $$('[data-sub-editor] [data-pane]').forEach(function (p) { p.hidden = p.getAttribute('data-pane') !== k; });
+      if (k === 'words') { tlSize(); drawWave(); }
+    });
+  });
   function openEdit(i) {
     if (disabled || !cues[i]) return;
     closeEdit();
@@ -657,7 +816,7 @@
       if (!pending && sentFor.length === cues.length && res.j.cues) {
         var same = res.j.cues.length === cues.length && res.j.cues.every(function (s, i) { return s.text === cues[i].text.trim(); });
         if (same) res.j.cues.forEach(function (s, i) { cues[i].id = s.id; cues[i].w = s.w; cues[i].start = s.start; cues[i].end = s.end; });
-        else if (!edIn) { cues = res.j.cues.map(function (c) { return { id: c.id, start: c.start, end: c.end, text: c.text, w: c.w }; }); renderList(); }
+        else if (!edIn && !typingLine()) { cues = res.j.cues.map(function (c) { return { id: c.id, start: c.start, end: c.end, text: c.text, w: c.w }; }); renderList(); }
       }
       if (!pending) saveState.textContent = 'บันทึกแล้ว';
       dirty = true; draw();

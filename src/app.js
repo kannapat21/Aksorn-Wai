@@ -51,6 +51,10 @@ function createApp(cfg, opts = {}) {
   }
 
   const productsBySlug = new Map(cfg.products.map((p) => [p.slug, p]));
+  views.configure(cfg);
+  // แพ็กพรีเมียม: ไม่ใช่สินค้าในคลัง แต่จ่ายเงิน/อนุมัติ/ส่งอีเมลเหมือนสินค้าปกติ
+  const PACK = { ...cfg.premiumPack, items: () => cfg.products.filter((p) => p.premium) };
+  const productOf = (slug) => productsBySlug.get(slug) || (slug === PACK.slug ? PACK : undefined);
 
   // ความพร้อมของเครื่องมือเรนเดอร์ (ตรวจซ้ำทุก 1 นาทีถ้ายังไม่พร้อม เผื่อเพิ่งติดตั้ง ffmpeg)
   let toolsCache = null;
@@ -138,6 +142,9 @@ function createApp(cfg, opts = {}) {
     libraryOrders: db.prepare("SELECT * FROM orders WHERE user_id = ? AND status = 'paid' ORDER BY paid_at DESC"),
     openOrders: db.prepare("SELECT * FROM orders WHERE user_id = ? AND status IN ('pending','review','rejected') ORDER BY created_at DESC LIMIT 10"),
     ownedPaid: db.prepare("SELECT * FROM orders WHERE user_id = ? AND product_slug = ? AND status = 'paid' LIMIT 1"),
+    // แพ็กพรีเมียม: ของในแพ็กเป็นรายการ provider='pack' ราคา 0 (สร้างให้อัตโนมัติ รวมตัวที่เพิ่มทีหลัง)
+    packChildren: db.prepare("SELECT product_slug FROM orders WHERE user_id = ? AND status = 'paid'"),
+    revokePack: db.prepare("UPDATE orders SET status = 'refunded' WHERE user_id = ? AND provider = 'pack' AND status = 'paid'"),
     logDownload: db.prepare('INSERT INTO download_log (user_id, order_id, file, editor, at) VALUES (?, ?, ?, ?, ?)'),
     downloadsSince: db.prepare('SELECT COUNT(*) AS n FROM download_log WHERE user_id = ? AND at > ?'),
     // หลังบ้าน
@@ -484,6 +491,7 @@ function createApp(cfg, opts = {}) {
     }
     if (ev.type === 'payment.refunded') {
       const upd = q.markRefunded.run(order.id);
+      if (upd.changes && order.product_slug === PACK.slug && order.user_id) q.revokePack.run(order.user_id);
       return { result: upd.changes ? 'refunded' : 'ignored', order: q.getOrder.get(order.id) };
     }
     const upd = q.markPaid.run(now(), ev.paymentRef || null, order.id);
@@ -495,12 +503,13 @@ function createApp(cfg, opts = {}) {
   function applyAndNotify(ev, source) {
     const r = applyPaymentEvent(ev);
     log(`[payment] ${source} ${ev.eventId} ${ev.type} order=${ev.orderId} → ${r.result}`);
+    if (r.result === 'paid' && r.order.user_id) syncPack(r.order.user_id);
     if (r.result === 'paid') sendReceipt(r.order).catch((e) => log(`[mail] ส่งไม่สำเร็จ: ${e.message}`));
     return r;
   }
 
   async function sendReceipt(order) {
-    const p = productsBySlug.get(order.product_slug);
+    const p = productOf(order.product_slug);
     const user = order.user_id ? q.userById.get(order.user_id) : null;
     await mailer.send({
       to: order.email,
@@ -537,16 +546,33 @@ function createApp(cfg, opts = {}) {
   app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 
   // ---------- หน้าร้าน ----------
+  // สถานะแพ็กของลูกค้า: มีแพ็กแล้ว / รอโอน-รอตรวจ / ยังไม่มี
+  function packState(user) {
+    if (!user) return { owned: false, open: null };
+    syncPack(user.id);
+    const owned = Boolean(q.ownedPaid.get(user.id, PACK.slug));
+    const open = owned ? null : q.openTransfer.get(user.id, PACK.slug) || null;
+    return { owned, open };
+  }
+  const packInfo = (user) => ({ ...PACK, count: PACK.items().length, ...packState(user) });
+
   app.get('/', (req, res) => {
+    const pack = packInfo(req.user);
     const owned = new Set(req.user ? q.libraryOrders.all(req.user.id).map((o) => o.product_slug) : []);
-    send(req, res, 'home', { products: cfg.products, owned });
+    send(req, res, 'home', { products: cfg.products, owned, pack });
+  });
+
+  app.get('/premium', (req, res) => {
+    const pack = packInfo(req.user);
+    send(req, res, 'packPage', { pack, products: PACK.items() });
   });
 
   app.get('/p/:slug', (req, res) => {
     const p = productsBySlug.get(req.params.slug);
     if (!p) return send(req, res, 'message', { title: 'ไม่พบสินค้า', text: 'สินค้านี้ไม่มีอยู่หรือถูกนำออกแล้ว' }, 404);
+    const pack = packInfo(req.user);
     const owned = req.user ? q.ownedPaid.get(req.user.id, p.slug) : null;
-    send(req, res, 'product', { p, owned });
+    send(req, res, 'product', { p, owned, pack });
   });
 
   app.get('/license', (req, res) => send(req, res, 'licensePage'));
@@ -695,16 +721,19 @@ function createApp(cfg, opts = {}) {
   // ---------- สั่งซื้อ (ต้องเข้าสู่ระบบ) ----------
   app.post('/checkout', limit.checkout, (req, res, next) => {
     if (!req.user) {
-      const p = productsBySlug.get(String(req.body.product || ''));
-      return res.redirect(303, `/login?next=${encodeURIComponent(p ? `/p/${p.slug}` : '/')}`);
+      const p = productOf(String(req.body.product || ''));
+      return res.redirect(303, `/login?next=${encodeURIComponent(p ? (p.pack ? '/premium' : `/p/${p.slug}`) : '/')}`);
     }
     next();
   }, requireCsrf, async (req, res, next) => {
     try {
-      const p = productsBySlug.get(String(req.body.product || ''));
+      let p = productOf(String(req.body.product || ''));
       if (!p) return send(req, res, 'message', { title: 'ไม่พบสินค้า', text: 'กรุณาเลือกสินค้าใหม่' }, 404);
+      syncPack(req.user.id);
       const owned = q.ownedPaid.get(req.user.id, p.slug);
+      if (owned && p.pack) return res.redirect(303, '/library?pack=1'); // มีแพ็กแล้ว
       if (owned) return res.redirect(303, `/library/${owned.id}`); // มีในคลังแล้ว ไม่ต้องซื้อซ้ำ
+      if (p.premium) p = PACK; // ตัวพรีเมียมซื้อแยกไม่ได้ ซื้อเป็นแพ็กเดียวได้ทุกตัว
       if (p.free) {
         // ของฟรี: ไม่ผ่านหน้าจ่ายเงิน สร้างรายการที่ "ได้แล้ว" แล้วพาเข้าคลังทันที
         const id = claimFree(req.user, p);
@@ -751,6 +780,25 @@ function createApp(cfg, opts = {}) {
     return id;
   });
 
+  // ลูกค้าที่มีแพ็กพรีเมียม: ใส่ตัวพรีเมียมที่ยังไม่มีเข้าคลัง (รวมตัวที่ร้านเพิ่มทีหลัง) คืนจำนวนที่เพิ่ม
+  const syncPack = db.transaction((userId) => {
+    if (!userId || !q.ownedPaid.get(userId, PACK.slug)) return 0;
+    const have = new Set(q.packChildren.all(userId).map((r) => r.product_slug));
+    const missing = PACK.items().filter((p) => !have.has(p.slug));
+    if (!missing.length) return 0;
+    const user = q.userById.get(userId);
+    if (!user) return 0;
+    for (const p of missing) {
+      const id = crypto.randomBytes(16).toString('hex');
+      q.insertOrder.run({
+        id, product_slug: p.slug, editor: user.editor || '', email: user.email, amount: 0, provider: 'pack',
+        created_at: now(), user_id: user.id, transfer_amount: null, pay_ref: null,
+      });
+      q.markPaid.run(now(), null, id);
+    }
+    return missing.length;
+  });
+
   // คำสั่งซื้อของบัญชีที่ล็อกอินอยู่เท่านั้น (ของคนอื่นตอบเหมือนไม่มี)
   function ownOrder(req) {
     const order = q.getOrder.get(String(req.params.id || req.params.orderId || ''));
@@ -766,7 +814,7 @@ function createApp(cfg, opts = {}) {
     const order = ownOrder(req);
     if (!order) return notFound(req, res);
     if (order.status === 'paid') return res.redirect(303, `/order/${order.id}`);
-    send(req, res, 'mockPay', { order, p: productsBySlug.get(order.product_slug), allowed: canMock(req) });
+    send(req, res, 'mockPay', { order, p: productOf(order.product_slug), allowed: canMock(req) });
   });
 
   app.post('/pay/mock/:id/simulate', requireUser, requireCsrf, async (req, res, next) => {
@@ -813,7 +861,7 @@ function createApp(cfg, opts = {}) {
         const ch = await provider.api(cfg).getCharge(order.payment_ref).catch(() => null);
         if (ch && ch.status === 'pending' && ch.source && ch.source.type === 'promptpay') qr = { expiresAt: ch.expires_at };
       }
-      send(req, res, 'omisePay', { order, p: productsBySlug.get(order.product_slug), publicKey: cfg.omise.publicKey, qr, error: req.query.error ? String(req.query.error).slice(0, 200) : '' });
+      send(req, res, 'omisePay', { order, p: productOf(order.product_slug), publicKey: cfg.omise.publicKey, qr, error: req.query.error ? String(req.query.error).slice(0, 200) : '' });
     } catch (e) { next(e); }
   });
 
@@ -822,7 +870,7 @@ function createApp(cfg, opts = {}) {
       const order = payableOrder(req, res);
       if (!order) return;
       reopen.run(order.id);
-      const ch = await provider.createPromptPay({ order, product: productsBySlug.get(order.product_slug), cfg });
+      const ch = await provider.createPromptPay({ order, product: productOf(order.product_slug), cfg });
       if (Number(ch.amount) !== order.amount) throw new Error('ยอด charge ไม่ตรงกับคำสั่งซื้อ');
       q.setRefOnly.run(ch.id, order.id);
       res.redirect(303, `/pay/omise/${order.id}?method=promptpay`);
@@ -853,7 +901,7 @@ function createApp(cfg, opts = {}) {
       const order = payableOrder(req, res);
       if (!order) return;
       reopen.run(order.id);
-      const ch = await provider.createCardCharge({ order, product: productsBySlug.get(order.product_slug), cfg, token: String(req.body.omiseToken || '') });
+      const ch = await provider.createCardCharge({ order, product: productOf(order.product_slug), cfg, token: String(req.body.omiseToken || '') });
       q.setRefOnly.run(ch.id, order.id);
       if (ch.status === 'pending' && ch.authorize_uri && /^https:\/\/[a-z0-9.-]*omise\.co\//.test(ch.authorize_uri)) return res.redirect(303, ch.authorize_uri);
       // ยืนยันผลด้วยการดึง charge จาก Omise อีกครั้ง (ไม่เชื่อผลจากคำขอนี้อย่างเดียว)
@@ -953,7 +1001,7 @@ function createApp(cfg, opts = {}) {
     if (!order) return;
     res.set('Cache-Control', 'no-store');
     if (order.status !== 'pending' && order.status !== 'rejected') return res.redirect(303, `/order/${order.id}`);
-    send(req, res, 'transferPay', { order, p: productsBySlug.get(order.product_slug), expiresAt: (order.status === 'rejected' ? order.reviewed_at : order.created_at) + cfg.transfer.expireHours * HOUR, error: req.query.error ? String(req.query.error).slice(0, 200) : '' });
+    send(req, res, 'transferPay', { order, p: productOf(order.product_slug), expiresAt: (order.status === 'rejected' ? order.reviewed_at : order.created_at) + cfg.transfer.expireHours * HOUR, error: req.query.error ? String(req.query.error).slice(0, 200) : '' });
   });
 
   // รูป QR PromptPay (สร้างในเซิร์ฟเวอร์ ยอดตรงกับออเดอร์ · เฉพาะเจ้าของออเดอร์)
@@ -996,7 +1044,7 @@ function createApp(cfg, opts = {}) {
         return send(req, res, 'message', { title: 'แจ้งโอนไม่ได้', text: msg, action: { href: `/order/${order.id}`, label: 'ดูสถานะ' } }, 400);
       }
       const fresh = q.getOrder.get(order.id);
-      const p = productsBySlug.get(fresh.product_slug);
+      const p = productOf(fresh.product_slug);
       try { Promise.resolve(mailer.send({ to: fresh.email, subject: `รับแจ้งโอนเงินแล้ว รอตรวจสอบ – ${cfg.shopName}`, text: views.transferReceivedEmail({ cfg, order: fresh, p }) })).catch((e) => log(`[mail] ${e.message}`)); } catch (e) { log(`[mail] ${e.message}`); }
       notifyAdmin(`[แจ้งโอน] ${p.title} ${views.bahtExact(fresh.transfer_amount)} · ${fresh.pay_ref}`, views.adminTransferEmail({ cfg, order: fresh, p }));
       res.redirect(303, `/order/${order.id}`);
@@ -1009,7 +1057,7 @@ function createApp(cfg, opts = {}) {
     const order = ownOrder(req);
     if (!order) return notFound(req, res, 'ไม่พบคำสั่งซื้อนี้ในบัญชีของคุณ');
     res.set('Cache-Control', 'no-store');
-    send(req, res, 'orderStatus', { order, p: productsBySlug.get(order.product_slug) });
+    send(req, res, 'orderStatus', { order, p: productOf(order.product_slug) });
   });
 
   app.get('/order/:id/status', async (req, res, next) => {
@@ -1032,20 +1080,22 @@ function createApp(cfg, opts = {}) {
   // หน้าบัญชี (แท็บ "บัญชี" บนมือถือ)
   app.get('/account', (req, res) => {
     res.set('Cache-Control', 'no-store');
-    send(req, res, 'account', { items: req.user ? q.libraryOrders.all(req.user.id).length : 0 });
+    if (req.user) syncPack(req.user.id);
+    send(req, res, 'account', { items: req.user ? ownedItems(req.user.id).length : 0 });
   });
 
   app.get('/library', requireUser, (req, res) => {
     res.set('Cache-Control', 'no-store');
     if (isManual()) expireStale();
+    const pack = packInfo(req.user);
     // ออเดอร์ที่ยังไม่เสร็จ (รอโอน / รอร้านตรวจ / ร้านยังไม่พบยอด) ให้ลูกค้ากลับไปทำต่อได้จากคลัง
     const open = q.openOrders.all(req.user.id)
-      .map((o) => ({ order: o, p: productsBySlug.get(o.product_slug) }))
+      .map((o) => ({ order: o, p: productOf(o.product_slug) }))
       .filter((x) => x.p);
     const items = q.libraryOrders.all(req.user.id)
       .map((o) => ({ order: o, p: productsBySlug.get(o.product_slug) }))
       .filter((x) => x.p);
-    send(req, res, 'library', { items, open, customs: customizer.byUser(req.user.id), fonts: customizer.fontsFor(req.user.id), limits: customizer.limits(req.user.id) });
+    send(req, res, 'library', { items, open, pack, packJustBought: req.query.pack === '1', customs: customizer.byUser(req.user.id), fonts: customizer.fontsFor(req.user.id), limits: customizer.limits(req.user.id) });
   });
 
   // ---------- ปรับแต่งแอนิเมชัน (เวอร์ชันของฉัน) ----------
@@ -1321,7 +1371,7 @@ function createApp(cfg, opts = {}) {
         await storage.put(customizer.userFonts.key(row), buf, `font/${row.format}`);
       }
       log('[fonts] ลูกค้าอัปโหลดฟอนต์');
-      const latest = q.libraryOrders.all(req.user.id)[0];
+      const latest = (ownedItems(req.user.id)[0] || {}).order;
       res.json({
         ok: true, id: f.id, fontId: `u-${f.id}`, name: f.name, thai: f.thai, format: f.format, chars: f.chars,
         url: `/library/fonts/${f.id}/file`, customizeUrl: latest ? `/library/${latest.id}/customize?font=u-${f.id}` : null,
@@ -1803,6 +1853,7 @@ function createApp(cfg, opts = {}) {
       if (!result) return notFound(req, res);
       if (result === 'noop') return res.redirect(303, '/admin/transfers?problem=handled');
       const order = q.getOrder.get(id);
+      if (order.user_id) syncPack(order.user_id); // แพ็กพรีเมียม: ใส่ทุกตัวเข้าคลังทันที
       log(`[payment] manual approve ${id} by ${req.user.email}`);
       sendReceipt(order).catch((e) => log(`[mail] ส่งไม่สำเร็จ: ${e.message}`));
       res.redirect(303, `/admin/transfers?done=approved`);
@@ -1826,7 +1877,7 @@ function createApp(cfg, opts = {}) {
       if (!result) return notFound(req, res);
       if (result === 'noop') return res.redirect(303, '/admin/transfers?problem=handled');
       const order = q.getOrder.get(id);
-      mailer.send({ to: order.email, subject: `ยังไม่พบรายการโอน – ${cfg.shopName}`, text: views.transferRejectedEmail({ cfg, order, p: productsBySlug.get(order.product_slug), reason }) }).catch((e) => log(`[mail] ${e.message}`));
+      mailer.send({ to: order.email, subject: `ยังไม่พบรายการโอน – ${cfg.shopName}`, text: views.transferRejectedEmail({ cfg, order, p: productOf(order.product_slug), reason }) }).catch((e) => log(`[mail] ${e.message}`));
       res.redirect(303, `/admin/transfers?done=rejected`);
     } catch (e) { next(e); }
   });

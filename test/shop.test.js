@@ -141,11 +141,13 @@ async function checkout(c, product = 'order-now') {
   return { location: loc, orderId: loc.split('/').pop() };
 }
 
+// ซื้อแพ็กพรีเมียม (order-now ในเทสต์ตั้งราคาไว้ = พรีเมียม) แล้วคืนรายการ order-now ในคลัง
 async function buy(c) {
   const { orderId } = await checkout(c);
   const r = await sendWebhook(mock.buildEvent(order(orderId)));
   assert.equal((await r.json()).result, 'paid');
-  return orderId;
+  const o = order(orderId);
+  return ctx.db.prepare("SELECT id FROM orders WHERE user_id = ? AND product_slug = 'order-now' AND status = 'paid'").get(o.user_id).id;
 }
 
 const manifest = () => cfg.products[0].manifest;
@@ -237,7 +239,8 @@ test('ซื้อต้องเข้าสู่ระบบ: ไม่ล็
   assert.equal(r.headers.get('location'), '/login?next=%2Fp%2Forder-now');
   assert.equal(count('SELECT COUNT(*) n FROM orders'), n);
   const page = await (await anon.req('/p/order-now')).text();
-  assert.match(page, /เข้าสู่ระบบเพื่อซื้อ/);
+  assert.match(page, /ปลดล็อกพรีเมียม/); // ตัวพรีเมียมขายเป็นแพ็กเดียว
+  assert.match(page, /href="\/login\?next=%2Fpremium"/);
 });
 
 test('ซื้อ: คำสั่งซื้อผูกกับบัญชี ใช้อีเมลบัญชี ราคาจากเซิร์ฟเวอร์ และต้องมี CSRF', async () => {
@@ -250,7 +253,9 @@ test('ซื้อ: คำสั่งซื้อผูกกับบัญช
   assert.equal(o.status, 'pending');
   assert.equal(o.user_id, user('buyer@example.com').id);
   assert.equal(o.email, 'buyer@example.com');
-  assert.equal(o.amount, cfg.products[0].price);
+  assert.equal(o.product_slug, 'premium-pack'); // ตัวพรีเมียมซื้อแยกไม่ได้ → ซื้อเป็นแพ็ก
+  assert.equal(o.amount, cfg.premiumPack.price);
+  assert.equal(o.amount, 15000);
   // ยังไม่จ่าย → ไม่อยู่ในคลัง
   assert.doesNotMatch(await (await c.req('/library')).text(), new RegExp(`/library/${orderId}`));
   assert.equal((await c.req(`/library/${orderId}`)).status, 404);
@@ -265,18 +270,25 @@ test('จ่ายเงิน (ปุ่มจำลอง) → อยู่ใ
   assert.equal(r.status, 303);
   assert.equal(order(orderId).status, 'paid');
   const done = await (await c.req(`/order/${orderId}`)).text();
-  assert.match(done, new RegExp(`/library/${orderId}`));
+  assert.match(done, /href="\/library\?pack=1"/);
+  assert.match(done, /แอนิเมชันพรีเมียมทุกแบบเข้าคลังของคุณแล้ว/);
+  const child = ctx.db.prepare("SELECT * FROM orders WHERE user_id = ? AND product_slug = 'order-now' AND status = 'paid'").get(order(orderId).user_id);
+  assert.equal(child.provider, 'pack');
+  assert.equal(child.amount, 0);
   await new Promise((res) => setTimeout(res, 20));
   const mail = ctx.mailer.sent.filter((m) => m.to === 'sim@example.com').at(-1);
   assert.ok(mail);
-  assert.match(mail.text, /http:\/\/shop\.test\/library\//);
+  assert.match(mail.text, /http:\/\/shop\.test\/library\n/);
+  assert.match(mail.text, /แพ็กพรีเมียม/);
   assert.doesNotMatch(mail.text, /\/d\//);
   const lib = await (await c.req('/library')).text();
-  assert.match(lib, new RegExp(`/library/${orderId}`));
+  assert.match(lib, new RegExp(`/library/${child.id}`));
+  assert.doesNotMatch(lib, new RegExp(`/library/${orderId}`)); // แพ็กเองไม่ใช่รายการในคลัง
   // ซื้อซ้ำ → พาไปคลัง ไม่สร้างคำสั่งซื้อใหม่
   const n = count('SELECT COUNT(*) n FROM orders');
   const again = await c.post('/checkout', { product: 'order-now' });
-  assert.equal(again.headers.get('location'), `/library/${orderId}`);
+  assert.equal(again.headers.get('location'), `/library/${child.id}`);
+  assert.equal((await c.post('/checkout', { product: 'premium-pack' })).headers.get('location'), '/library?pack=1');
   assert.equal(count('SELECT COUNT(*) n FROM orders'), n);
   assert.match(await (await c.req('/p/order-now')).text(), /อยู่ในคลังแล้ว|มีแอนิเมชันนี้ในคลังแล้ว/);
 });
@@ -1072,7 +1084,7 @@ test('หน้านโยบาย: เงื่อนไข / คืนเง
   assert.match(home, /href="\/terms"/);
   assert.match(home, /href="\/privacy"/);
   const c = await newUser('legal@example.com');
-  assert.match(await (await c.req('/p/order-now')).text(), /การกดซื้อถือว่ายอมรับ <a href="\/terms">/);
+  assert.match(await (await c.req('/premium')).text(), /การกดซื้อถือว่ายอมรับ <a href="\/terms">/);
 });
 
 // ---------- แอปบนมือถือ (PWA) ----------
@@ -1114,7 +1126,7 @@ test('แท็บบัญชี: ยังไม่ล็อกอินเห
   assert.equal(page.headers.get('cache-control'), 'no-store');
   const html = await page.text();
   assert.match(html, /acct@example\.com/);
-  assert.match(html, /คลังของฉัน[\s\S]*1 รายการ/);
+  assert.match(html, new RegExp(`คลังของฉัน[\\s\\S]*${cfg.products.filter((p) => p.premium).length} รายการ`)); // แพ็กพรีเมียม = ทุกตัวพรีเมียม
   assert.match(html, /href="\/library\/styles"/);
   assert.match(html, /action="\/logout"/);
   assert.doesNotMatch(html, /href="\/admin"/);
@@ -1275,7 +1287,8 @@ test('Omise: PromptPay QR → webhook ที่เซ็นแล้ว + ดึ
     assert.equal((await (await webhook({ object: 'event', id: 'evnt_test_ok1', key: 'charge.complete', data: { id: chId } })).json()).result, 'duplicate');
     await new Promise((r) => setTimeout(r, 20));
     assert.equal(octx.mailer.sent.filter((m) => /ยืนยันการสั่งซื้อ/.test(m.subject)).length, 1);
-    assert.match(await (await c.req('/library')).text(), new RegExp(`/library/${id1}`));
+    const kid1 = octx.db.prepare("SELECT id FROM orders WHERE user_id = ? AND product_slug = 'order-now' AND provider = 'pack' AND status = 'paid'").get(ord(id1).user_id).id;
+    assert.match(await (await c.req('/library')).text(), new RegExp(`/library/${kid1}`));
 
     // ----- บัตร: ไม่สำเร็จ แล้วลองใหม่สำเร็จ -----
     const c2 = mk();
@@ -1320,6 +1333,9 @@ test('Omise: PromptPay QR → webhook ที่เซ็นแล้ว + ดึ
     assert.equal((await rf.json()).result, 'refunded');
     assert.equal(ord(id2).status, 'refunded');
     assert.equal((await c2.req(`/library/${id2}`)).status, 404);
+    // คืนเงินแพ็ก → ทุกตัวในแพ็กออกจากคลังด้วย
+    assert.equal(octx.db.prepare("SELECT COUNT(*) AS n FROM orders WHERE user_id = ? AND provider = 'pack' AND status = 'paid'").get(ord(id2).user_id).n, 0);
+    assert.doesNotMatch(await (await c2.req('/library')).text(), /ได้จากแพ็กพรีเมียม/);
 
     // คนอื่นดูหน้า/QR ของคำสั่งซื้อเราไม่ได้ และปุ่มจำลองจ่ายไม่มีในโหมด Omise
     assert.equal((await c2.req(`/pay/omise/${id1}`)).status, 404);
@@ -1515,7 +1531,9 @@ test('manual: ลูกค้ากดยืนยันโอน → รอต�
     assert.match((await boss.post(`/admin/transfers/${id}/approve`)).headers.get('location'), /done=approved/);
     const done = ord(id);
     assert.equal(done.status, 'paid'); assert.ok(done.paid_at); assert.ok(done.reviewed_by);
-    assert.equal((await alice.req(`/library/${id}`)).status, 200, 'อนุมัติแล้วเข้าคลัง');
+    const kid = mctx.db.prepare("SELECT id FROM orders WHERE user_id = ? AND product_slug = 'order-now' AND provider = 'pack' AND status = 'paid'").get(done.user_id).id;
+    assert.equal((await alice.req(`/library/${kid}`)).status, 200, 'อนุมัติแล้ว ทุกตัวในแพ็กเข้าคลัง');
+    assert.equal((await alice.req(`/library/${id}`)).status, 404, 'แพ็กเองไม่ใช่รายการในคลัง');
     assert.match(await (await alice.req(`/order/${id}`)).text(), /ชำระเงินสำเร็จ/);
     assert.ok(mctx.mailer.sent.slice(sentBefore).some((m) => m.to === 'alice@example.com' && /ยืนยันการสั่งซื้อ/.test(m.subject)), 'ส่งใบยืนยันตอนอนุมัติ');
     // อนุมัติซ้ำ (กดสองครั้ง/สองแท็บ) ไม่ทำอะไรเพิ่ม ไม่ส่งอีเมลซ้ำ
@@ -1524,9 +1542,9 @@ test('manual: ลูกค้ากดยืนยันโอน → รอต�
     assert.equal(mctx.mailer.sent.length, sentAfter);
     assert.equal(ord(id).paid_at, done.paid_at);
     // ซื้อสินค้าที่มีแล้ว → ไปที่คลังเลย
-    assert.equal((await alice.post('/checkout', { product: 'order-now' })).headers.get('location'), `/library/${id}`);
+    assert.equal((await alice.post('/checkout', { product: 'order-now' })).headers.get('location'), `/library/${kid}`);
     // ลูกค้าอื่นเข้าคลังของเราไม่ได้
-    assert.equal((await bob.req(`/library/${id}`)).status, 404);
+    assert.equal((await bob.req(`/library/${kid}`)).status, 404);
 
     // audit log: ใครทำอะไรเมื่อไหร่
     const log = mctx.db.prepare('SELECT action, actor_email FROM payment_audit WHERE order_id = ? ORDER BY id').all(id).map((r) => `${r.action}:${r.actor_email}`);
@@ -1631,13 +1649,13 @@ test('manual (ค่าเริ่มต้น ไม่บวกสตาง�
     await boss.post('/login', { email: 'boss@shop.test', password: 'boss-password-12345', next: '/admin' });
     const ida = (await a.post('/checkout', { product: 'order-now' })).headers.get('location').split('/').pop();
     const idb = (await b.post('/checkout', { product: 'order-now' })).headers.get('location').split('/').pop();
-    assert.equal(ord(ida).transfer_amount, 4900); assert.equal(ord(idb).transfer_amount, 4900);
+    assert.equal(ord(ida).transfer_amount, 15000); assert.equal(ord(idb).transfer_amount, 15000); // แพ็กพรีเมียม ฿150
     assert.notEqual(ord(ida).pay_ref, ord(idb).pay_ref);
     const page = await (await a.req(`/pay/transfer/${ida}`)).text();
-    assert.match(page, /฿49\.00/); assert.ok(!/name="transfer_time"/.test(page), 'ไม่ต้องกรอกเวลาโอน');
-    // QR ที่ลูกค้าสแกน: ถอดรหัสจากรูปแล้วยอดต้องเป็น 49.00
+    assert.match(page, /฿150\.00/); assert.ok(!/name="transfer_time"/.test(page), 'ไม่ต้องกรอกเวลาโอน');
+    // QR ที่ลูกค้าสแกน: ถอดรหัสจากรูปแล้วยอดต้องเป็น 150.00 (ราคาแพ็ก)
     const qr = await (await a.req(`/pay/transfer/${ida}/qr`)).text();
-    assert.equal(tlvParse(decodeQrSvg(qr))['54'], '49.00');
+    assert.equal(tlvParse(decodeQrSvg(qr))['54'], '150.00');
     // กดปุ่มยืนยันอย่างเดียว (ไม่กรอกเวลา) → รอตรวจสอบ
     t += 60000; assert.equal((await a.post(`/pay/transfer/${ida}/confirm`)).headers.get('location'), `/order/${ida}`);
     assert.equal(ord(ida).status, 'review');
@@ -1718,15 +1736,17 @@ test('ของฟรี: กดรับ → เข้าคลังทัน�
   const home = await (await anon.req('/')).text();
   assert.match(home, /class="badge-free">ฟรี</);
   assert.match(home, /class="badge-premium">/);
-  // ซับอัตโนมัติหาง่าย: แถบบน แถบล่างมือถือ และหน้าแรก มีป้าย Beta
-  assert.match(home, /<a href="\/subtitles" class="nav-sub">[\s\S]*?<span class="beta">Beta<\/span><\/a>/);
+  // หน้าแรกแบบแอป: ใส่ซับเป็นปุ่มหลัก มีในแถบบน แถบล่างมือถือ และแถบแพ็กพรีเมียม
+  assert.match(home, /<a href="\/subtitles" class="nav-sub">/);
   assert.match(home, /<a href="\/subtitles" data-tab="subs"/);
-  assert.match(home, /class="sub-banner" href="\/subtitles"/);
+  assert.match(home, /class="tool tool-main" href="\/subtitles"/);
+  assert.match(home, /class="pack-banner" href="\/premium"[\s\S]*?แพ็กพรีเมียม ฿150/);
   // หน้าแรก: กรองฟรี/พรีเมียมได้ การ์ดมีราคาและปุ่มชัด
   assert.match(home, /data-cat-btn="free">ฟรี</);
   assert.match(home, /data-cat-btn="premium">พรีเมียม</);
   assert.match(home, /<span class="card-cta">รับฟรี ›<\/span>/);
-  assert.match(home, /<span class="card-cta">ดูและซื้อ ›<\/span>/);
+  assert.match(home, /<span class="card-cta">ดูตัวอย่าง ›<\/span>/);
+  assert.match(home, /<span class="price">แพ็ก ฿150<\/span>/);
   assert.doesNotMatch(home, /class="marquee"|data-type-rotate|class="hero-bg"/, 'ไม่มีแถบวิ่ง ตัวพิมพ์ หรือพื้นหลังเบลอ');
 
   const c = await newUser('free@example.com');
@@ -1766,6 +1786,56 @@ test('ราคาใน config: ติดลบหรือไม่ใช่�
   assert.throws(() => loadConfig({ ...env, products: one(49.5) }), /price/);
   assert.throws(() => loadConfig({ ...env, products: one(500) }), /ราคาต่ำสุด/);
   assert.equal(loadConfig({ ...env, products: one(0) }).products[0].free, true);
+});
+
+test('แพ็กพรีเมียม: แท็ก "พรีเมียม" = อยู่ในแพ็ก · ราคาแพ็กตั้งได้ (ค่าเริ่มต้น ฿150)', () => {
+  const env = { NODE_ENV: 'test', DATABASE_FILE: ':memory:', PAYMENT_PROVIDER: 'mock', MAIL_MODE: 'console', BASE_URL: 'http://x.test',
+    DOWNLOAD_LINK_SECRET: 'a'.repeat(64), PAYMENT_WEBHOOK_SECRET: 'b'.repeat(64) };
+  const base = REAL_PRODUCTS.find((p) => p.slug === 'order-now');
+  const list = [{ ...base, price: 0, tags: ['พรีเมียม'] }, { ...base, slug: 'follow-now', price: 0, tags: [] }];
+  const c1 = loadConfig({ ...env, products: JSON.parse(JSON.stringify(list)) });
+  assert.equal(c1.products[0].premium, true); assert.equal(c1.products[0].free, false);
+  assert.equal(c1.products[1].premium, false); assert.equal(c1.products[1].free, true);
+  assert.equal(c1.premiumPack.price, 15000);
+  assert.equal(loadConfig({ ...env, PREMIUM_PACK_PRICE: '199', products: JSON.parse(JSON.stringify(list)) }).premiumPack.price, 19900);
+  assert.throws(() => loadConfig({ ...env, PREMIUM_PACK_PRICE: '5', products: JSON.parse(JSON.stringify(list)) }), /PREMIUM_PACK_PRICE/);
+  // ร้านจริง: ตัวที่มีแท็กพรีเมียมทั้งหมดอยู่ในแพ็ก ตัวที่ไม่มีแท็กเป็นของฟรี
+  for (const p of REAL_PRODUCTS) assert.equal((p.tags || []).includes('พรีเมียม'), p.price > 0, `${p.slug}: แท็กพรีเมียมต้องตรงกับราคา`);
+});
+
+test('แพ็กพรีเมียม: ซื้อครั้งเดียวได้ทุกตัวพรีเมียม รวมตัวที่ร้านเพิ่มทีหลัง · ของฟรียังกดรับได้ · หน้า /premium', async () => {
+  const anon = await (await client().req('/premium')).text();
+  assert.match(anon, /แพ็กพรีเมียม/);
+  assert.match(anon, /฿150/);
+  for (const p of cfg.products.filter((x) => x.premium)) assert.match(anon, new RegExp(`/p/${p.slug}"`));
+  for (const p of cfg.products.filter((x) => x.free)) assert.doesNotMatch(anon, new RegExp(`/p/${p.slug}"`));
+  const c = await newUser('pack@example.com');
+  const kid = await buy(c);
+  const uid = user('pack@example.com').id;
+  const kids = () => ctx.db.prepare("SELECT product_slug FROM orders WHERE user_id = ? AND provider = 'pack' AND status = 'paid'").all(uid).map((r) => r.product_slug).sort();
+  const premium = cfg.products.filter((p) => p.premium).map((p) => p.slug).sort();
+  assert.deepEqual(kids(), premium);
+  // ร้านเพิ่มแบบพรีเมียมใหม่ (จำลอง: ลูกค้ายังไม่มีตัวนี้) → เปิดคลัง/หน้าแรกแล้วได้อัตโนมัติ
+  ctx.db.prepare("DELETE FROM orders WHERE user_id = ? AND product_slug = 'cinema-title'").run(uid);
+  assert.ok(!kids().includes('cinema-title'));
+  const lib = await (await c.req('/library')).text();
+  assert.ok(kids().includes('cinema-title'), 'ตัวใหม่เข้าคลังอัตโนมัติ');
+  assert.match(lib, /ได้จากแพ็กพรีเมียม/);
+  assert.doesNotMatch(lib, /ปลดล็อกพรีเมียมทั้งหมด/);
+  assert.match(await (await c.req('/premium')).text(), /คุณมีแพ็กพรีเมียมแล้ว/);
+  assert.match(await (await c.req('/p/neon-sign')).text(), /มีแอนิเมชันนี้ในคลังแล้ว/);
+  assert.match(await (await c.req('/')).text(), /คุณมีแพ็กพรีเมียมแล้ว/);
+  // เปิดหลายครั้งไม่สร้างซ้ำ
+  await c.req('/library'); await c.req('/');
+  assert.equal(kids().length, premium.length);
+  assert.ok(kid);
+  // ของฟรียังกดรับได้ตามปกติ
+  const r = await c.post('/checkout', { product: 'follow-now' });
+  assert.match(r.headers.get('location'), /\?claimed=1$/);
+  // ไม่มีแพ็ก: หน้าสินค้าพรีเมียมชวนซื้อแพ็ก คลังมีแถบแพ็ก
+  const d = await newUser('nopack@example.com');
+  assert.match(await (await d.req('/p/neon-sign')).text(), /ปลดล็อกพรีเมียม ฿150/);
+  assert.match(await (await d.req('/library')).text(), /ปลดล็อกพรีเมียมทั้งหมด ฿150/);
 });
 
 test('ท่าพรีเมียม: เวลาเข้า/ค้าง/ออก และช่วงท้ายของรอบค้างนิ่ง (ต่อเข้าท่าออกได้เนียนทุกความยาว)', () => {

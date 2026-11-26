@@ -19,6 +19,16 @@
   }
   var POS_Y = { bottom: { v: 0.70, h: 0.85 }, middle: { v: 0.5, h: 0.5 }, top: { v: 0.2, h: 0.16 } };
 
+  // ตำแหน่งที่ลูกค้าลากเอง: '5'..'95' = จุดกึ่งกลางซับอยู่ที่กี่ % ของความสูงคลิป (null = ใช้ บน/กลาง/ล่าง)
+  var POS_MIN = 5, POS_MAX = 95;
+  function posPct(v) {
+    if (v === null || v === undefined || POS_Y[v]) return null;
+    var s = String(v).trim();
+    if (!/^\d{1,2}(\.\d)?$/.test(s)) return null;
+    var n = Number(s);
+    return n >= POS_MIN && n <= POS_MAX ? n : null;
+  }
+
   // ขนาดไฟล์ผลลัพธ์ (เลขคู่ ด้านยาวไม่เกิน MAX_SIDE)
   function outSize(w, h, max) {
     var k = Math.min(1, (max || MAX_SIDE) / Math.max(w, h));
@@ -32,7 +42,8 @@
     var fontPx = Math.round(Math.min(w, h) * SIZE_K.md * sizePct(o.size || 'md') / 100);
     var band = Math.min(h, Math.round((fontPx * 3.6) / 2) * 2);
     var vertical = h > w;
-    var cy = h * (POS_Y[o.position] || POS_Y.bottom)[vertical ? 'v' : 'h'];
+    var py = posPct(o.position);
+    var cy = py !== null ? h * py / 100 : h * (POS_Y[o.position] || POS_Y.bottom)[vertical ? 'v' : 'h'];
     var y = Math.max(0, Math.min(h - band, Math.round(cy - band / 2)));
     return { fontPx: fontPx, band: band, y: y };
   }
@@ -66,7 +77,7 @@
     return { total: total, frames: frames, shots: shots };
   }
 
-  var api = { FPS: FPS, MAX_SIDE: MAX_SIDE, MAX_SIDE_BROWSER: MAX_SIDE_BROWSER, SIZE_K: SIZE_K, SIZE_MIN: SIZE_MIN, SIZE_MAX: SIZE_MAX, sizePct: sizePct, POS_Y: POS_Y, outSize: outSize, layoutFor: layoutFor, planFrames: planFrames };
+  var api = { FPS: FPS, MAX_SIDE: MAX_SIDE, MAX_SIDE_BROWSER: MAX_SIDE_BROWSER, SIZE_K: SIZE_K, SIZE_MIN: SIZE_MIN, SIZE_MAX: SIZE_MAX, sizePct: sizePct, POS_Y: POS_Y, posPct: posPct, POS_MIN: POS_MIN, POS_MAX: POS_MAX, outSize: outSize, layoutFor: layoutFor, planFrames: planFrames };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   g.TTSubPlan = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

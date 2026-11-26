@@ -155,10 +155,10 @@ test('หน้า /login และ /signup ใช้กล่อง Clerk + CSP
   const old = await c.req('/login?classic=1');
   assert.ok(!/name="password"/.test(await old.text()));
 
-  // หน้าอื่นไม่โหลด Clerk · หน้าแรกบอกว่าใช้ปุ่ม Google
+  // หน้าอื่นไม่โหลด Clerk · หน้าแรก (แบบแอป) มีปุ่มเข้าสู่ระบบในแถบล่าง
   const home = await c.req('/');
   assert.ok(!/clerk\.accounts\.dev/.test(home.headers.get('content-security-policy')));
-  assert.match(await home.text(), /กดปุ่ม Google ปุ่มเดียว/);
+  assert.match(await home.text(), /data-tab="account"[^>]*>[\s\S]*?เข้าสู่ระบบ/);
 });
 
 test('ทางรหัสผ่านเดิมปิดหมด: POST /login /signup, ลืมรหัส, ตั้งรหัสใหม่, ยืนยันอีเมล → พาไปหน้า Clerk และไม่เปิดเซสชัน', async () => {
