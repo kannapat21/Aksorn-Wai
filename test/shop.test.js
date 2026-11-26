@@ -1747,7 +1747,9 @@ test('ของฟรี: กดรับ → เข้าคลังทัน�
   assert.match(home, /<span class="card-cta">รับฟรี ›<\/span>/);
   assert.match(home, /<span class="card-cta">ดูตัวอย่าง ›<\/span>/);
   assert.match(home, /<span class="price">แพ็ก ฿150<\/span>/);
-  assert.doesNotMatch(home, /class="marquee"|data-type-rotate|class="hero-bg"/, 'ไม่มีแถบวิ่ง ตัวพิมพ์ หรือพื้นหลังเบลอ');
+  assert.doesNotMatch(home, /class="marquee"|class="hero-bg"/, 'ไม่มีแถบวิ่ง หรือพื้นหลังเบลอ');
+  // หัวเว็บเดิม (ข้อความพิมพ์วน) อยู่บนสุด แล้วตามด้วยปุ่มแบบแอป
+  assert.ok(home.indexOf('data-type-rotate') > 0 && home.indexOf('data-type-rotate') < home.indexOf('class="tool tool-main"'), 'หัวเว็บพิมพ์ข้อความอยู่เหนือปุ่มแบบแอป');
 
   const c = await newUser('free@example.com');
   const page = await (await c.req('/p/follow-now')).text();

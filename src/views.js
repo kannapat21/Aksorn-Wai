@@ -246,9 +246,40 @@ function home({ cfg, user, csrf, products, owned = new Set(), pack }) {
   const cards = products.map((p, i) => card(p, i, owned)).join('');
   const freeCount = products.filter((p) => p.free).length;
   const premCount = products.length - freeCount;
+  const lead = products.find((p) => p.premium) || products[0];
+  const phrases = ['ลากใส่คลิปได้ทันที', 'ใส่ซับอัตโนมัติในคลิก', 'ยืดความยาวได้ตามใจ', 'ซื้อครั้งเดียว ใช้ได้ตลอด'];
+  const editorCount = Object.values(cfg.editorsConfig.editors).filter((e) => !/อื่น/.test(e.label)).length;
   return layout({
     title: 'แอนิเมชันข้อความภาษาไทย', shopName: cfg.shopName, user, csrf, page: 'page-home', tab: 'home',
     body: `
+<section class="hero">
+  <div class="hero-copy">
+    <p class="eyebrow pill"><span class="dot"></span> ร้านแอนิเมชันข้อความภาษาไทย สำหรับคนตัดต่อ</p>
+    <h1 class="type" aria-label="ข้อความเคลื่อนไหวพร้อมใช้ ${esc(phrases[0])}">
+      <span class="type-line" data-type-static aria-hidden="true">ข้อความเคลื่อนไหวพร้อมใช้</span>
+      <span class="type-line hl-line" aria-hidden="true"><span class="hl" data-type-rotate="${esc(JSON.stringify(phrases))}">${esc(phrases[0])}</span><span class="caret"></span></span>
+    </h1>
+    <p class="lead">เลือกแอนิเมชัน พิมพ์ข้อความเอง เปลี่ยนฟอนต์ สี ความยาวได้ แล้วโหลดไฟล์ที่ตรงกับโปรแกรมตัดต่อของคุณ</p>
+    <div class="hero-cta">
+      <a class="btn primary lg" href="#catalog">ดูแอนิเมชันทั้งหมด</a>
+      <a class="btn ghost lg" href="/subtitles">ใส่ซับอัตโนมัติ</a>
+    </div>
+    <ul class="facts">
+      <li><b>${products.length}</b><span>แอนิเมชัน</span></li>
+      <li><b>${freeCount}</b><span>แบบฟรี</span></li>
+      <li><b>${baht(cfg.premiumPack.price)}</b><span>ได้พรีเมียมทุกแบบ</span></li>
+      <li><b>${editorCount}+</b><span>โปรแกรมตัดต่อ</span></li>
+    </ul>
+  </div>
+  ${lead ? `<a class="hero-visual" href="/p/${esc(lead.slug)}" aria-label="ดูตัวอย่าง ${esc(lead.title)}" data-tilt>
+    <div class="window">
+      <div class="window-bar"><i></i><i></i><i></i><span>ตัวอย่าง · ${esc(lead.title)}</span></div>
+      <video src="/previews/${esc(lead.slug)}_horizontal.mp4" poster="/previews/${esc(lead.slug)}_horizontal.jpg" autoplay muted loop playsinline preload="metadata"></video>
+      ${kitTimeline({ p: lead })}
+    </div>
+  </a>` : ''}
+</section>
+
 <section class="app-home">
   <h1 class="app-hello">${user ? `สวัสดี${user.name ? ` ${esc(user.name)}` : ''}` : 'ทำคลิปให้ปังขึ้น'}<small>วันนี้จะทำอะไรดี</small></h1>
   <div class="tools">
