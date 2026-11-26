@@ -221,28 +221,25 @@
     reveals.forEach(function (el) { el.classList.add('in'); });
   }
 
-  // ---------- การ์ด: ชี้แล้วเล่นตัวอย่าง (โหลดวิดีโอเมื่อจำเป็นเท่านั้น) ----------
-  var canHover = window.matchMedia && matchMedia('(hover: hover)').matches;
+  // ---------- การ์ด: ตัวอย่างเล่นวนเองเมื่อเห็นบนจอ ทั้งคอมและมือถือ (ไม่ต้องชี้เมาส์) ----------
+  // โหลดวิดีโอเฉพาะการ์ดที่เลื่อนมาถึง และหยุดเมื่อเลื่อนพ้นจอ เพื่อไม่กินเน็ตและแบต
   document.querySelectorAll('[data-hover-play]').forEach(function (thumb) {
     var v = thumb.querySelector('video');
     if (!v) return;
+    v.muted = true; v.loop = true; v.setAttribute('playsinline', '');
     function play() {
       if (!v.src) v.src = v.getAttribute('data-src');
       var p = v.play();
       if (p && p.then) p.then(function () { thumb.classList.add('playing'); }).catch(function () {});
+      else thumb.classList.add('playing');
     }
-    function stop() { thumb.classList.remove('playing'); v.pause(); }
-    if (canHover) {
-      var card = thumb.closest('.card') || thumb;
-      card.addEventListener('mouseenter', play);
-      card.addEventListener('mouseleave', stop);
-      card.addEventListener('focusin', play);
-      card.addEventListener('focusout', stop);
-    } else if ('IntersectionObserver' in window && !reduceMotion) {
-      // มือถือ: เล่นเองเมื่อการ์ดอยู่กลางจอ
+    function stop() { v.pause(); }
+    if ('IntersectionObserver' in window) {
       new IntersectionObserver(function (es) {
         es.forEach(function (e) { if (e.isIntersecting) play(); else stop(); });
-      }, { threshold: 0.75 }).observe(thumb);
+      }, { threshold: 0.2 }).observe(thumb);
+    } else {
+      play();
     }
   });
 

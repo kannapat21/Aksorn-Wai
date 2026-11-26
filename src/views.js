@@ -147,7 +147,7 @@ ${intro ? `<div class="loader" data-loader aria-hidden="true">
   <div class="top-in">
     ${brand(shopName)}
     <nav class="nav" aria-label="เมนูหลัก">
-      <a href="/subtitles" class="nav-sub">${ICON.cc}<span>ใส่ซับอัตโนมัติ</span></a>
+      <a href="/subtitles" class="nav-sub">${ICON.cc}<span>ใส่ซับอัตโนมัติ</span><span class="beta">Beta</span></a>
       <a href="/#catalog">${ICON.film}<span>แอนิเมชัน</span></a>
       <a href="/premium" class="nav-pack">${ICON.crown}<span>พรีเมียม</span></a>
     </nav>
@@ -169,7 +169,7 @@ ${body}
     <nav class="foot-links" aria-label="ลิงก์ท้ายเว็บ">
       <a href="/#catalog">แอนิเมชันทั้งหมด</a>
       <a href="/premium">แพ็กพรีเมียม</a>
-      <a href="/subtitles">ใส่ซับอัตโนมัติ</a>
+      <a href="/subtitles">ใส่ซับอัตโนมัติ (Beta)</a>
       <a href="/library">คลังของฉัน</a>
       <a href="/license">สิทธิ์การใช้งาน</a>
       <a href="/terms">เงื่อนไขการใช้งาน</a>
@@ -188,7 +188,7 @@ ${body}
 <nav class="tabbar" aria-label="เมนูแอป" data-tabbar>
   <a href="/" data-tab="home"${tab === 'home' ? ' class="active"' : ''}>${ICON.grid}<span>หน้าแรก</span></a>
   <a href="/#catalog" data-tab="shop"${tab === 'shop' ? ' class="active"' : ''}>${ICON.film}<span>แอนิเมชัน</span></a>
-  <a href="/subtitles" data-tab="subs" class="tab-sub${tab === 'subs' ? ' active' : ''}"><span class="tab-ico">${ICON.cc}</span><span>ใส่ซับ</span></a>
+  <a href="/subtitles" data-tab="subs" class="tab-sub${tab === 'subs' ? ' active' : ''}"><span class="tab-ico">${ICON.cc}<span class="beta">Beta</span></span><span>ใส่ซับ</span></a>
   <a href="/library" data-tab="library"${tab === 'library' ? ' class="active"' : ''}>${ICON.library}<span>คลัง</span></a>
   <a href="/account" data-tab="account"${tab === 'account' ? ' class="active"' : ''}>${ICON.user}<span>${user ? 'บัญชี' : 'เข้าสู่ระบบ'}</span></a>
 </nav>
@@ -206,7 +206,6 @@ function card(p, i, owned) {
         <div class="thumb" data-hover-play>
           <img src="/previews/${esc(p.slug)}_horizontal.jpg" alt="" loading="lazy" width="960" height="540">
           <video data-src="/previews/${esc(p.slug)}_horizontal.mp4" muted loop playsinline preload="none"></video>
-          <span class="play-hint">${ICON.play} ชี้เพื่อดูตัวอย่าง</span>
           ${p.free ? '<span class="badge-free">ฟรี</span>' : '<span class="badge-premium">พรีเมียม</span>'}
           ${have ? '<span class="dur owned">อยู่ในคลังแล้ว</span>' : ''}
         </div>
@@ -294,7 +293,7 @@ function home({ cfg, user, csrf, products, owned = new Set(), pack }) {
   <div class="tools">
     <a class="tool tool-main" href="/subtitles">
       <span class="tool-ico">${ICON.cc}</span>
-      <span class="tool-txt"><b>ใส่ซับอัตโนมัติ</b><small>อัปคลิป ได้ซับไทยพร้อมแอนิเมชัน</small></span>
+      <span class="tool-txt"><b>ใส่ซับอัตโนมัติ <span class="beta">Beta</span></b><small>อัปคลิป ได้ซับไทยพร้อมแอนิเมชัน</small></span>
       <span class="tool-go" aria-hidden="true">›</span>
     </a>
     <a class="tool" href="#catalog">
