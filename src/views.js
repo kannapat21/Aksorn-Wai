@@ -252,7 +252,7 @@ function home({ cfg, user, csrf, products, owned = new Set(), pack }) {
   return layout({
     title: 'แอนิเมชันข้อความภาษาไทย', shopName: cfg.shopName, user, csrf, page: 'page-home', tab: 'home',
     body: `
-<section class="hero">
+<section class="hero"><div class="hero-grid" aria-hidden="true"></div>
   <div class="hero-copy">
     <p class="eyebrow pill"><span class="dot"></span> ร้านแอนิเมชันข้อความภาษาไทย สำหรับคนตัดต่อ</p>
     <h1 class="type" aria-label="ข้อความเคลื่อนไหวพร้อมใช้ ${esc(phrases[0])}">
