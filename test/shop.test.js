@@ -1698,7 +1698,10 @@ test('ร้านจริง: "สั่งซื้อเลย" กับ "�
     assert.equal(mf.motion, p.motion);
     assert.equal(mf.fps, 60);
     for (const size of ['vertical', 'horizontal']) {
-      for (const fmt of ['mp4_green', 'mp4_black', 'prores4444', 'webm_alpha', 'still_png']) {
+      // แบบที่เรนเดอร์ด้วย --no-prores ไม่มี ProRes สำเร็จรูป (ลูกค้าได้ ProRes จากหน้าปรับแต่ง) · แบบเดิม 3 แบบต้องมีครบ
+      const light = !mf.files.some((x) => x.format === 'prores4444');
+      assert.ok(!light || !['cinema-title', 'neon-sign', 'word-pop'].includes(p.slug), `${p.slug} ต้องมี ProRes`);
+      for (const fmt of ['mp4_green', 'mp4_black', 'prores4444', 'webm_alpha', 'still_png'].filter((x) => !light || x !== 'prores4444')) {
         const f = mf.files.find((x) => x.format === fmt && x.size === size);
         assert.ok(f && fs.statSync(path.join(cfg.storageDir, p.slug, f.file)).size === f.bytes, `${p.slug} ${fmt} ${size}`);
       }
@@ -1814,4 +1817,15 @@ test('หลังบ้าน: ปุ่มส่งเมลทดสอบ �
   try { assert.match(await (await a.post('/admin/mail-test')).text(), /บล็อก IP/); } finally { ctx.mailer.send = keep; }
   const c = await newUser('notadmin-mail@example.com');
   assert.notEqual((await c.post('/admin/mail-test')).status, 200);
+});
+
+test('แบบที่ไม่มี ProRes สำเร็จรูป: คลังของ Premiere ให้ MP4 และพาไปสร้าง MOV โปร่งใสที่หน้าปรับแต่ง', async () => {
+  const c = await newUser('noprores@example.com');
+  const loc = (await c.post('/checkout', { product: 'type-on' })).headers.get('location');
+  const id = loc.match(/\/library\/([^/?]+)/)[1];
+  const page = await (await c.req(`/library/${id}?editor=premiere&size=vertical`)).text();
+  assert.match(page, new RegExp(`href="/library/${id}/customize">ต้องการ MOV โปร่งใส \\(ProRes\\)\\?`));
+  assert.match(page, /filetype=alt/, 'ยังมีปุ่ม MP4 พื้นเขียว');
+  const capcut = await (await c.req(`/library/${id}?editor=capcut_mobile&size=vertical`)).text();
+  assert.doesNotMatch(capcut, /ต้องการ MP4/);
 });

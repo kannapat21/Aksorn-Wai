@@ -51,13 +51,13 @@ const TT = globalThis.TTMotion;
 
 // เวลาและชุด 3 ส่วนของคลิปเต็ม 3 วินาที ตามท่า
 function timingOf(motion) {
-  if (!TT.meta(motion).premium) return TIMING; // ท่าฟรีใช้ค่าเดิมทุกอย่าง
+  if (!TT.meta(motion).timed) return TIMING; // ท่าฟรีรุ่นแรก (pop/drop) ใช้ค่าเดิมทุกอย่าง
   return TT.timingFor(motion, DURATION, FPS);
 }
 function partsOf(motion) {
   const m = TT.meta(motion);
-  if (!m.premium) return PARTS;
-  // ท่าพรีเมียม: ส่วนเข้าจบตรงจุดที่ตัวอักษรนิ่ง · ภาพนิ่ง = เฟรมนั้น (ยังไม่มีแสงวิ่ง) · ส่วนออกเริ่มตอนเริ่มจาง
+  if (!m.timed) return PARTS;
+  // ท่าอื่นๆ: ส่วนเข้าจบตรงจุดที่ตัวอักษรนิ่ง · ภาพนิ่ง = เฟรมนั้น (ยังไม่มีแสงวิ่ง) · ส่วนออกเริ่มตอนเริ่มจาง
   const introFrames = Math.round(m.intro * FPS);
   return { introFrames, holdFrame: introFrames, outroStart: Math.round((DURATION - m.outro) * FPS) };
 }
@@ -331,6 +331,9 @@ async function main() {
   const motion = args.motion || 'pop';
   if (!TT.MOTIONS.includes(motion)) { console.error(`--motion ต้องเป็น ${TT.MOTIONS.join(' / ')}`); process.exit(1); }
   const outDir = path.resolve(args['out-dir'] || path.join(ROOT, 'storage', 'products', slug));
+  // --no-prores: ไม่ทำไฟล์ ProRes สำเร็จรูป (ไฟล์ละ 10–60 MB ทำให้ repo บวม) ลูกค้าที่ใช้ Premiere/DaVinci/Final Cut
+  // กด "ปรับแต่ง" แล้วได้ MOV ProRes โปร่งใสตามความยาวที่เลือกแทน
+  const want = args['no-prores'] ? Object.keys(FORMATS).filter((f) => f !== 'prores4444' && f !== 'parts_prores') : null;
   const previewDir = path.resolve(args['preview-dir'] || path.join(ROOT, 'public', 'previews'));
   fs.mkdirSync(outDir, { recursive: true });
   fs.mkdirSync(previewDir, { recursive: true });
@@ -345,7 +348,7 @@ async function main() {
       const t0 = Date.now();
       const r = await renderFrames(browser, { text, fill, stroke, motion, w: s.w, h: s.h, dir: framesDir });
       console.log(`[${s.id}] เรนเดอร์ ${r.frames} เฟรม (ฟอนต์ ${r.fontSize}px) ใน ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-      allFiles.push(...encodeAll({ framesDir, w: s.w, h: s.h, outDir, base: slug, sizeId: s.id, motion }));
+      allFiles.push(...encodeAll({ framesDir, w: s.w, h: s.h, outDir, base: slug, sizeId: s.id, motion, want }));
       console.log(`[${s.id}] เข้ารหัสครบ 4 ฟอร์แมต + ชุด 3 ส่วน`);
 
       if (s.id === 'horizontal' || s.id === 'vertical') {
@@ -439,7 +442,7 @@ async function renderSingle(opts) {
       await page.evaluate((o) => window.setup(o), { text, fill, stroke, strokeRatio, shadow, weight: font.weight || 700, motion });
       const unique = [];
       for (let i = 0; i < inN; i++) unique.push({ name: `in${i}`, t: i / FPS });
-      for (let k = 0; k < loopN; k++) unique.push({ name: `hold${k}`, t: timing.settle + k / FPS });
+      for (let k = 0; k < loopN; k++) unique.push({ name: `hold${k}`, t: timing.settle + (timing.holdOff || 0) + k / FPS });
       for (let k = 0; k < outN; k++) unique.push({ name: `out${k}`, t: timing.fadeStart + k / FPS });
       for (let i = 0; i < unique.length; i++) {
         await page.evaluate(([tt, tm, mo]) => window.setTime(tt, tm, mo), [unique[i].t, timing, motion]);
@@ -453,7 +456,7 @@ async function renderSingle(opts) {
     const seq = path.join(work, 'seq');
     fs.mkdirSync(seq);
     for (let i = 0; i < total; i++) {
-      const src = i < inN ? `in${i}` : i >= total - outN ? `out${i - (total - outN)}` : `hold${(i - inN) % loopN}`;
+      const src = i < inN ? `in${i}` : i >= total - outN ? `out${i - (total - outN)}` : `hold${TT.holdIndex(i - inN, total - inN - outN, loopN)}`;
       fs.linkSync(path.join(work, `${src}.png`), path.join(seq, `f${String(i).padStart(5, '0')}.png`));
     }
     onProgress(65, 'กำลังเข้ารหัสวิดีโอ');

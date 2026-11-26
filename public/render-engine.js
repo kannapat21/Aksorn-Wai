@@ -214,7 +214,7 @@ async function renderWithFFmpeg(spec, onProgress, signal) {
     // 1) วาดเฉพาะเฟรมที่ไม่ซ้ำ
     const unique = [];
     for (let i = 0; i < inN; i++) unique.push({ name: `in${i}.png`, t: i / FPS });
-    for (let k = 0; k < loopN; k++) unique.push({ name: `hold${k}.png`, t: timing.settle + k / FPS });
+    for (let k = 0; k < loopN; k++) unique.push({ name: `hold${k}.png`, t: timing.settle + (timing.holdOff || 0) + k / FPS });
     for (let k = 0; k < outN; k++) unique.push({ name: `out${k}.png`, t: timing.fadeStart + k / FPS });
     for (let i = 0; i < unique.length; i++) {
       checkAbort(signal);
@@ -225,7 +225,7 @@ async function renderWithFFmpeg(spec, onProgress, signal) {
     }
     // 2) ลำดับเฟรมเต็มความยาว (อ้างไฟล์เดิมซ้ำ ไม่คัดลอก)
     const seq = [];
-    for (let i = 0; i < total; i++) seq.push(i < inN ? `in${i}.png` : i >= total - outN ? `out${i - (total - outN)}.png` : `hold${(i - inN) % loopN}.png`);
+    for (let i = 0; i < total; i++) seq.push(i < inN ? `in${i}.png` : i >= total - outN ? `out${i - (total - outN)}.png` : `hold${TT.holdIndex(i - inN, total - inN - outN, loopN)}.png`);
     const dur = (1 / FPS).toFixed(6);
     const list = `ffconcat version 1.0\n${seq.map((f) => `file '${f}'\nduration ${dur}`).join('\n')}\nfile '${seq[seq.length - 1]}'\n`;
     await ff.writeFile('list.txt', new TextEncoder().encode(list));
@@ -309,7 +309,8 @@ async function renderFast(spec, plan, onProgress, signal) {
     painter.setup({ text: spec.text, fill: spec.fill, stroke: spec.stroke, strokeRatio: spec.strokeRatio, shadow: spec.shadow, motion: spec.motion });
     await output.start();
     // เฟรมที่ i เป็นเฟรมแบบไหน: intro → in, ท้าย → out, กลาง → วนซ้ำ loopN เฟรม (ไม่มีลูป = ภาพเดียวค้าง)
-    const kindOf = (i) => (i < inN ? ['in', i, i / FPS] : i >= total - outN ? ['out', i - (total - outN), timing.fadeStart + (i - (total - outN)) / FPS] : ['hold', (i - inN) % loopN, timing.settle + ((i - inN) % loopN) / FPS]);
+    const holdAt = (i) => TT.holdIndex(i - inN, total - inN - outN, loopN); // รอบสุดท้ายจบพอดีตอนเริ่มท่าออก
+    const kindOf = (i) => (i < inN ? ['in', i, i / FPS] : i >= total - outN ? ['out', i - (total - outN), timing.fadeStart + (i - (total - outN)) / FPS] : ['hold', holdAt(i), timing.settle + (timing.holdOff || 0) + holdAt(i) / FPS]);
     const holdCache = new Map(); // เฟรมกลางที่วาดแล้ว (เก็บเฉพาะลูปสั้นๆ กันกินแรม)
     const keepHold = loopN <= 36;
     // น้ำหนักงานจริง: เฟรมที่ต้องวาดใหม่หนัก เฟรมที่ใช้ภาพเดิมเบา → เปอร์เซ็นต์และเวลาที่เหลือตรงกับเวลาจริง
