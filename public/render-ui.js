@@ -107,19 +107,45 @@ if (job) {
 async function transcribeClip(id, file, csrf, ui) {
   ui.set(3, 'กำลังแยกเสียงพูดจากคลิป (ทำในเครื่องคุณ)');
   const parts = await extractSpeech(file, (p) => ui.set(3 + 22 * p, 'กำลังแยกเสียงพูดจากคลิป (ทำในเครื่องคุณ)'));
-  for (let i = 0; i < parts.length; i++) {
-    ui.set(25 + 73 * (i / parts.length), `กำลังฟังเสียงพูด ${parts.length > 1 ? `(ท่อน ${i + 1}/${parts.length})` : ''}`);
-    let tries = 0;
-    for (;;) {
-      const r = await fetch(`/subtitles/${id}/audio?i=${i}&n=${parts.length}&start=${parts[i].start.toFixed(3)}`, {
-        method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'audio/wav', 'x-csrf-token': csrf }, body: parts[i].blob,
-      });
-      let j = {};
-      try { j = await r.json(); } catch (e) { j = {}; }
-      if (r.ok) break;
-      if (r.status >= 500 && tries++ < 1) { await new Promise((ok) => setTimeout(ok, 2500)); continue; }
-      throw new Error(j.error || 'ฟังเสียงไม่สำเร็จ ลองใหม่อีกครั้ง');
+  const n = parts.length;
+  const t0 = Date.now();
+  let done = 0;
+  // ความคืบหน้าตามจริง: ท่อนที่ถอดเสร็จแล้ว + เวลาที่ผ่านไป (ไม่ค้างเงียบๆ ที่เลขเดิม)
+  const show = () => {
+    const s = Math.floor((Date.now() - t0) / 1000);
+    ui.set(25 + 73 * (done / n), `กำลังฟังเสียงพูด${n > 1 ? ` (เสร็จ ${done}/${n} ท่อน)` : ''} · ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
+  };
+  show();
+  const ticker = setInterval(show, 1000);
+  // ส่งทีละท่อน · หมดเวลา 2 นาทีต่อครั้ง · เน็ตหลุด/ร้านยุ่ง/โควตาเต็มชั่วคราว ลองใหม่เองสูงสุด 4 ครั้ง
+  const send = async (i) => {
+    const waits = [2, 5, 10, 20];
+    for (let attempt = 0; ; attempt++) {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 120000);
+      let r = null, j = {}, netErr = false;
+      try {
+        r = await fetch(`/subtitles/${id}/audio?i=${i}&n=${n}&start=${parts[i].start.toFixed(3)}`, {
+          method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'audio/wav', 'x-csrf-token': csrf }, body: parts[i].blob, signal: ctl.signal,
+        });
+        try { j = await r.json(); } catch (e) { j = {}; }
+      } catch (e) { netErr = true; } finally { clearTimeout(timer); }
+      if (r && r.ok) return;
+      const again = netErr || r.status >= 500 || r.status === 429 || r.status === 408;
+      if (!again || attempt >= waits.length) {
+        throw new Error((r && j.error) || 'การเชื่อมต่อขาดระหว่างฟังเสียง ลองใหม่อีกครั้ง (แนะนำใช้ Wi-Fi)');
+      }
+      const ra = r && Number(r.headers.get('retry-after'));
+      await new Promise((ok) => setTimeout(ok, 1000 * Math.min(30, ra > 0 ? ra : waits[attempt])));
     }
+  };
+  try {
+    // ส่งพร้อมกัน 2 ท่อน (เร็วขึ้น แต่ไม่ชนเพดานจำนวนครั้งต่อนาทีของ Groq)
+    let next = 0;
+    const worker = async () => { while (next < n) { const i = next++; await send(i); done++; show(); } };
+    await Promise.all([worker(), worker()].slice(0, Math.min(2, n)));
+  } finally {
+    clearInterval(ticker);
   }
   ui.set(100, 'เรียบร้อย กำลังเปิดหน้าตรวจคำ…');
 }

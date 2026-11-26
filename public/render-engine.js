@@ -9,6 +9,8 @@
  *  ซับ     : Mediabunny + WebCodecs (ฮาร์ดแวร์ของเครื่องลูกค้า) อ่านคลิป → วางแถบซับทีละเฟรม → MP4 H.264 + เสียงเดิม
  *  เสียง   : แยกเสียงเป็น WAV 16 kHz โมโน ส่งให้ร้านทีละท่อน (ร้านส่งต่อให้ Groq ถอดเสียง) คลิปไม่ถูกอัปโหลด
  */
+import { cutSpeech, wavBytes } from './speechcut.mjs';
+
 const TT = window.TTMotion;
 const PLAN = window.TTSubPlan;
 const CORE_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm/';
@@ -458,8 +460,31 @@ async function toWav(file, sampleRate, onProgress = () => {}) {
   return new Uint8Array(output.target.buffer);
 }
 
+// เสียงพูด → ท่อนละไม่เกิน ~28 วินาที ตัดตรงช่วงเงียบ (ไม่ตัดกลางคำ) · ท่อนที่เงียบสนิทไม่ต้องส่ง
 export async function extractSpeech(file, onProgress = () => {}) {
-  return splitWav(await toWav(file, 16000, onProgress));
+  const { rate, pcm } = wavPcm(await toWav(file, 16000, onProgress));
+  const all = cutSpeech(pcm, rate);
+  const loud = all.filter((p) => !p.silent);
+  return (loud.length ? loud : all).map((p) => ({ start: p.start, end: p.end, blob: new Blob([wavBytes(pcm.subarray(p.a, p.b), rate)], { type: 'audio/wav' }) }));
+}
+
+// WAV 16-bit โมโน → { rate, pcm: Int16Array }
+function wavPcm(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const str = (o) => String.fromCharCode(bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]);
+  let off = 12, rate = 0, bits = 0, ch = 0;
+  while (off + 8 <= bytes.length) {
+    const id = str(off), size = dv.getUint32(off + 4, true);
+    if (id === 'fmt ') { ch = dv.getUint16(off + 10, true); rate = dv.getUint32(off + 12, true); bits = dv.getUint16(off + 22, true); }
+    if (id === 'data') {
+      if (!rate || bits !== 16 || ch !== 1) break;
+      const end = Math.min(bytes.length, off + 8 + (size || bytes.length));
+      const raw = bytes.slice(off + 8, end - ((end - off - 8) % 2)); // คัดลอกให้ตำแหน่งเป็นเลขคู่ (Int16Array ต้องการ)
+      return { rate, pcm: new Int16Array(raw.buffer, raw.byteOffset, raw.byteLength / 2) };
+    }
+    off += 8 + size + (size % 2);
+  }
+  throw new Error('แยกเสียงไม่สำเร็จ');
 }
 
 // คลื่นเสียงสำหรับไทม์ไลน์ (รูปแบบเดียวกับ render/subtitles.js peaks ของเซิร์ฟเวอร์)
