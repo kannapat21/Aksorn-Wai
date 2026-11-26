@@ -467,6 +467,12 @@ html, body { overflow-x: clip; }
 .menu-pop a, .menu-pop .linklike { display: block; text-align: left; text-decoration: none; color: var(--ink); padding: 8px; border-radius: 8px; width: 100%; font-size: .95rem; }
 .menu-pop a:hover, .menu-pop .linklike:hover { background: var(--surface-2); }
 .menu-pop .linklike { color: var(--err); }
+.menu-pop a { display: flex; align-items: center; gap: 10px; }
+.menu-pop a svg { width: 18px; height: 18px; flex: none; color: var(--muted); }
+.menu-pop hr { border: 0; border-top: 1px solid var(--line); margin: 6px 4px; }
+.menu-pop { max-height: calc(100vh - 90px); overflow-y: auto; }
+.menu summary.icon-btn:hover { transform: none; background: var(--surface-2); }
+.menu summary.icon-btn svg { width: 20px; height: 20px; display: block; }
 @media (max-width: 720px) {
   .brand-text small { display: none; }
   .account { margin-left: auto; }
@@ -1251,10 +1257,9 @@ img[loading="lazy"]:not(.loaded) { opacity: 0; }
 
 /* ปุ่มและช่องกรอกของ Clerk (ตั้ง class เพิ่มใน clerk-auth.js) */
 .ca-mount .cl-rootBox, .ca-mount .cl-cardBox, .ca-mount .cl-card { width: 100%; max-width: none; }
-.ca-mount .ak-social { min-height: 50px; border-radius: 12px !important; font-weight: 700 !important; background: var(--surface) !important; color: var(--ink) !important;
-  border: 1.5px solid color-mix(in srgb, var(--ink) 38%, var(--line)) !important; box-shadow: 0 1px 2px rgba(16,24,40,.06) !important;
-  transition: border-color .2s, background .2s !important; }
-.ca-mount .ak-social:hover { border-color: var(--ink) !important; background: var(--surface-2) !important; }
+.ca-mount .ak-social { min-height: 50px; border-radius: 12px !important; font-weight: 700 !important; background: var(--surface-2) !important; color: var(--ink) !important;
+  border: none !important; outline: none; box-shadow: none !important; transition: background .2s !important; }
+.ca-mount .ak-social:hover { background: color-mix(in srgb, var(--ink) 9%, var(--surface-2)) !important; }
 .ca-mount .ak-social:focus-visible { outline: 3px solid var(--accent-soft); outline-offset: 2px; }
 .ca-mount .ak-input { min-height: 46px; transition: border-color .2s, box-shadow .2s !important; }
 .ca-mount .ak-input:focus { box-shadow: 0 0 0 3px var(--accent-soft) !important; border-color: var(--accent) !important; }
@@ -1363,6 +1368,7 @@ img[loading="lazy"]:not(.loaded) { opacity: 0; }
 .nav a.nav-sub { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-weight: 700; background: var(--accent-soft); }
 .nav a.nav-sub svg { width: 17px; height: 17px; }
 .tabbar a.tab-sub svg { color: var(--accent); }
+.tabbar a.tab-sub .tab-ico svg { color: inherit; } /* ไอคอนในปุ่มกลางใช้สีตัวอักษรของปุ่ม ไม่งั้นกลืนกับพื้น */
 .sub-banner { display: flex; align-items: center; gap: 14px; margin: 8px 0 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); text-decoration: none; color: var(--ink); transition: border-color .2s; }
 .sub-banner:hover { border-color: var(--accent); }
 .sub-banner-icon { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 12px; background: var(--accent-soft); color: var(--accent); }
