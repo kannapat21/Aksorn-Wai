@@ -92,8 +92,18 @@ function layout({ title, body, shopName, user = null, csrf = '', noindex = false
         <summary class="icon-btn" aria-label="บัญชี">${ICON.user}</summary>
         <div class="menu-pop">
           <p class="muted small">${esc(user.name || user.email)}<br>${user.name ? esc(user.email) : ''}</p>
-          <a href="/library">คลังของฉัน</a>
-          ${user.role === 'admin' ? '<a href="/admin">หลังบ้าน</a>' : ''}
+          <a href="/account">${ICON.user}<span>บัญชีของฉัน</span></a>
+          <a href="/library">${ICON.library}<span>คลังของฉัน</span></a>
+          <a href="/library/styles">${ICON.edit}<span>สไตล์ของฉัน</span></a>
+          <a href="/library/fonts">${ICON.film}<span>ฟอนต์ของฉัน</span></a>
+          ${user.role === 'admin' ? `<a href="/admin">${ICON.shield}<span>หลังบ้าน</span></a>` : ''}
+          <hr>
+          <a href="/license">${ICON.infinity}<span>สิทธิ์การใช้งาน</span></a>
+          <a href="/terms">${ICON.check}<span>เงื่อนไขการใช้งาน</span></a>
+          <a href="/refund">${ICON.check}<span>นโยบายคืนเงิน</span></a>
+          <a href="/privacy">${ICON.shield}<span>ความเป็นส่วนตัว (PDPA)</span></a>
+          <a href="/contact">${ICON.mail}<span>ติดต่อร้าน</span></a>
+          <hr>
           <form method="post" action="/logout"><input type="hidden" name="csrf" value="${esc(csrf)}"><button type="submit" class="linklike">ออกจากระบบ</button></form>
         </div>
       </details>` : `
@@ -262,7 +272,6 @@ function home({ cfg, user, csrf, products, owned = new Set(), pack }) {
     <p class="lead">เลือกแอนิเมชัน พิมพ์ข้อความเอง เปลี่ยนฟอนต์ สี ความยาวได้ แล้วโหลดไฟล์ที่ตรงกับโปรแกรมตัดต่อของคุณ</p>
     <div class="hero-cta">
       <a class="btn primary lg" href="#catalog">ดูแอนิเมชันทั้งหมด</a>
-      <a class="btn ghost lg" href="/subtitles">ใส่ซับอัตโนมัติ</a>
     </div>
     <ul class="facts">
       <li><b>${products.length}</b><span>แอนิเมชัน</span></li>
