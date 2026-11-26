@@ -103,6 +103,7 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
                           @src_name, @src_ext, @src_bytes, @width, @height, @duration, 0, 1, '[]', @t, @t, @t, @expires_at)`),
     asrSave: db.prepare("UPDATE subtitle_jobs SET asr_json = ?, progress = ?, stage = ?, updated_at = ? WHERE id = ? AND status = 'transcribing'"),
     asrRestart: db.prepare("UPDATE subtitle_jobs SET status = 'transcribing', progress = 0, stage = 'กำลังฟังเสียงพูด', error = NULL, asr_json = '[]', updated_at = ? WHERE id = ? AND status IN ('transcribing','failed') AND cues_json IS NULL"),
+    asrResume: db.prepare("UPDATE subtitle_jobs SET status = 'transcribing', stage = 'กำลังฟังเสียงพูด', error = NULL, updated_at = ? WHERE id = ? AND status = 'failed' AND cues_json IS NULL"),
     renderedBrowser: db.prepare("UPDATE subtitle_jobs SET status = 'done', progress = 100, stage = '', out_bytes = ?, renders = renders + 1, finished_at = ?, updated_at = ? WHERE id = ? AND status IN ('review','done','failed') AND cues_json IS NOT NULL"),
   };
 
@@ -192,23 +193,32 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     return { job: q.get.get(id) };
   }
 
-  // รับคำที่ถอดได้ของท่อนที่ i (จากทั้งหมด n ท่อน) · ท่อนสุดท้ายแล้ว = สร้างบรรทัดซับ → ให้ลูกค้าตรวจ
+  // รับคำที่ถอดได้ของท่อนที่ i (จากทั้งหมด n ท่อน) · มาไม่เรียงก็ได้ ส่งซ้ำก็ได้ (เบราว์เซอร์ลองใหม่เอง)
+  // ครบทุกท่อนแล้ว = สร้างบรรทัดซับ → ให้ลูกค้าตรวจ
+  // asr_json = { n, parts: { i: [คำ] } } (รูปแบบเก่าเป็นอาร์เรย์ ถือว่าเริ่มใหม่)
   function asrChunk(job, i, n, words) {
-    const prev = i === 0 ? [] : JSON.parse(job.asr_json || '[]');
-    const all = prev.concat(words.map((w) => ({ text: w.text, start: Math.round(w.start * 1000) / 1000, end: Math.round(w.end * 1000) / 1000 })));
-    if (i < n - 1) {
-      q.asrSave.run(JSON.stringify(all), Math.round(((i + 1) / n) * 95), 'กำลังฟังเสียงพูด', now(), job.id);
+    let st = null;
+    try { st = JSON.parse(job.asr_json || 'null'); } catch { st = null; }
+    if (!st || Array.isArray(st) || st.n !== n || typeof st.parts !== 'object') st = { n, parts: {} };
+    st.parts[i] = words.map((w) => ({ text: w.text, start: Math.round(w.start * 1000) / 1000, end: Math.round(w.end * 1000) / 1000 }));
+    const got = Object.keys(st.parts).length;
+    if (got < n) {
+      q.asrSave.run(JSON.stringify(st), Math.round((got / n) * 95), 'กำลังฟังเสียงพูด', now(), job.id);
       return { done: false };
     }
+    const all = [];
+    for (let k = 0; k < n; k++) all.push(...(st.parts[k] || []));
+    all.sort((a, b) => a.start - b.start);
     const maxChars = cuesLib.maxCharsFor(job.width, job.height);
     const cues = cuesLib.buildCues(all, { maxChars, duration: job.duration });
     q.review.run(JSON.stringify(cues), 'groq', now(), job.id);
     db.prepare('UPDATE subtitle_jobs SET asr_json = NULL WHERE id = ?').run(job.id);
-    log(`[subtitles] ถอดเสียงเสร็จ ${job.id} (${cues.length} บรรทัด)`);
+    log(`[subtitles] ถอดเสียงเสร็จ ${job.id} (${n} ท่อน, ${cues.length} บรรทัด)`);
     return { done: true, cues };
   }
 
   const restartAsr = (job) => q.asrRestart.run(now(), job.id).changes > 0;
+  const resumeAsr = (job) => q.asrResume.run(now(), job.id).changes > 0;
   const failAsr = (job, msg) => q.fail.run(msg, now(), now(), job.id);
   const renderedInBrowser = (job, bytes) => q.renderedBrowser.run(Math.max(0, Math.round(Number(bytes) || 0)), now(), now(), job.id).changes > 0;
 
@@ -385,7 +395,7 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     get: (id) => q.get.get(String(id || '')),
     byUser: (userId) => q.byUser.all(userId),
     position: (job) => (job.status === 'queued' || job.status === 'queued_render' ? q.position.get(job.queued_at).n + 1 : 0),
-    limits, validateStyle, receive, saveCues, createBrowserJob, asrChunk, restartAsr, failAsr, renderedInBrowser, setStyle, queueRender, retry, peaksOf, reopen, remove, sweep, pump, idle,
+    limits, validateStyle, receive, saveCues, createBrowserJob, asrChunk, restartAsr, resumeAsr, failAsr, renderedInBrowser, setStyle, queueRender, retry, peaksOf, reopen, remove, sweep, pump, idle,
     cuesOf, srcOf, outOf, dirOf, busy: (job) => busyStates.includes(job.status),
     tmpDir: () => { const d = path.join(S.dir, '.incoming'); fs.mkdirSync(d, { recursive: true, mode: 0o700 }); return d; },
   };

@@ -100,25 +100,31 @@ const BASE_PROMPT = 'สวัสดีครับ วันนี้เรา�
 const HALLUCINATION_RE = /^(ขอบคุณ(ที่|สำหรับการ)?รับชม.*|ขอบคุณครับ|ขอบคุณค่ะ|ฝากกด(ไลค์|ติดตาม|subscribe).*|กด(ไลค์|ติดตาม|subscribe|กระดิ่ง).*|(ซับ|คำบรรยาย)(ไตเติ้ล)?(ภาษาไทย)?(โดย|by).*|subtitles? by.*|thank(s| you) for watching.*|\.+|…+)$/iu;
 
 /*
- * ตัดท่อนที่น่าจะไม่ใช่เสียงพูดจริง (เกณฑ์เดียวกับ Whisper ต้นฉบับ)
- *   - no_speech_prob สูง และความมั่นใจต่ำ = ช่วงเงียบ/เพลงที่ถูกแต่งเป็นคำ
- *   - compression_ratio สูง = ข้อความวนซ้ำ
- *   - ประโยคแต่งเองยอดฮิต ("ขอบคุณที่รับชม") ในช่วงที่ไม่ค่อยมีเสียงพูด
- *   - ท่อนที่ซ้ำกับท่อนก่อนหน้าแบบเป๊ะๆ ติดกัน 2 ครั้งขึ้นไป
+ * ตัดท่อนที่น่าจะไม่ใช่เสียงพูดจริง
+ *   - no_speech_prob สูง และความมั่นใจต่ำ = ช่วงเงียบ/เพลงที่ถูกแต่งเป็นคำ (เกณฑ์เดียวกับ Whisper ต้นฉบับ)
+ *   - ข้อความวนซ้ำ (ไปไปไปไป…) · ภาษาไทยบีบอัดได้ดีกว่าอังกฤษ compression_ratio จึงสูงเป็นปกติ ต้องเห็นการวนซ้ำจริงด้วย
+ *   - ประโยคแต่งเองยอดฮิต ("ขอบคุณที่รับชม") หรือข้อความจากบริบทตั้งต้น (prompt) ที่หลุดออกมา ในช่วงที่ไม่ค่อยมีเสียงพูด
+ *   - ท่อนที่ซ้ำกับท่อนก่อนหน้าแบบเป๊ะๆ ติดกัน
+ * ไม่ตัดท่อนเพียงเพราะความมั่นใจต่ำ: คลิปเกม/มีเพลงประกอบ เสียงพูดจริงมักได้ความมั่นใจต่ำ ถ้าตัดทิ้งซับจะหายเป็นช่วงๆ
  */
+const squash = (t) => String(t || '').replace(/[\s.,!?…"'“”]/g, '');
+const PROMPT_FLAT = squash(BASE_PROMPT);
+const loops = (t) => /(.{1,6}?)\1{3,}/u.test(squash(t));
 function cleanSegments(raw) {
   const keep = [];
-  let last = '', rep = 0;
+  let last = '';
   for (const x of raw || []) {
     const text = String(x.text || '').trim();
     const ns = Number(x.no_speech_prob) || 0;
     const lp = Number.isFinite(Number(x.avg_logprob)) ? Number(x.avg_logprob) : 0;
     const cr = Number(x.compression_ratio) || 0;
-    let bad = !text || (ns > 0.6 && lp < -1) || cr > 2.4 || lp < -1.6;
-    if (!bad && HALLUCINATION_RE.test(text.replace(/\s+/g, '')) && (ns > 0.2 || lp < -0.7)) bad = true;
-    const norm = text.replace(/[\s.,!?…]/g, '');
-    if (!bad && norm && norm === last) { rep++; if (rep >= 1) bad = true; } else if (norm) { rep = 0; }
-    if (norm) last = norm;
+    const norm = squash(text);
+    let bad = !norm || (ns > 0.6 && lp < -1) || (cr > 2.4 && loops(text)) || lp < -2.5;
+    const unsure = ns > 0.2 || lp < -0.7;
+    if (!bad && unsure && HALLUCINATION_RE.test(text.replace(/\s+/g, ''))) bad = true;
+    if (!bad && unsure && norm.length >= 2 && PROMPT_FLAT.includes(norm)) bad = true;
+    if (!bad && norm && norm === last) bad = true;
+    if (norm && !bad) last = norm;
     keep.push({ ...x, bad });
   }
   return keep;
@@ -127,7 +133,7 @@ const THAI_PROMPT = BASE_PROMPT;
 const asrPrompt = (prev = '') => (prev ? `${BASE_PROMPT} ${String(prev).replace(/\s+/g, ' ').trim().slice(-120)}` : BASE_PROMPT);
 
 // ถอดเสียงท่อนเดียว (WAV ไม่เกิน 25 MB) → { words: [{text,start,end}], segments }
-async function groqTranscribe(cfg, wavBuf, { offset = 0, fetchImpl = globalThis.fetch, prompt = '' } = {}) {
+async function groqTranscribe(cfg, wavBuf, { offset = 0, fetchImpl = globalThis.fetch, prompt = '', timeoutMs = 45000 } = {}) {
   const G = cfg.groq;
   const form = () => {
     const fd = new FormData();
@@ -142,19 +148,34 @@ async function groqTranscribe(cfg, wavBuf, { offset = 0, fetchImpl = globalThis.
     return fd;
   };
   let r;
-  // ลองซ้ำ 1 ครั้งถ้า Groq ยุ่ง (รอไม่เกิน 3 วินาที ฟังก์ชันบน Netlify มีเวลาจำกัด)
-  for (let attempt = 0; attempt < 2; attempt++) {
-    r = await fetchImpl(`${G.apiBase}/audio/transcriptions`, { method: 'POST', headers: { Authorization: `Bearer ${G.apiKey}` }, body: form() });
-    if ((r.status !== 429 && r.status < 500) || attempt === 1) break;
+  // Groq ยุ่ง/ตอบช้า: ลองซ้ำสูงสุด 2 ครั้ง · รอครั้งละไม่เกิน 45 วินาที (ไม่ให้ค้างไม่มีกำหนด)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      r = await fetchImpl(`${G.apiBase}/audio/transcriptions`, { method: 'POST', headers: { Authorization: `Bearer ${G.apiKey}` }, body: form(), signal: AbortSignal.timeout(timeoutMs) });
+    } catch (err) {
+      if (attempt === 2) {
+        const e = new Error(`Groq ไม่ตอบ: ${err.message}`);
+        e.status = 504;
+        e.userMessage = 'ระบบถอดเสียงตอบช้าผิดปกติ ลองใหม่อีกครั้ง';
+        throw e;
+      }
+      continue;
+    }
+    if ((r.status !== 429 && r.status < 500) || attempt === 2) break;
     const ra = r.headers.get('retry-after');
-    const wait = Math.min(3, ra !== null && ra !== '' ? Number(ra) || 0 : 1);
+    const wait = Math.min(r.status === 429 ? 20 : 3, ra !== null && ra !== '' ? Number(ra) || 1 : 1);
+    if (r.status === 429 && Number(ra) > 20) break; // โควตาเต็มนาน ให้เบราว์เซอร์รอแล้วลองเอง
     await new Promise((ok) => setTimeout(ok, wait * 1000));
   }
   if (!r.ok) {
     const t = await r.text().catch(() => '');
     const e = new Error(`Groq ${r.status}: ${t.slice(0, 300)}`);
     e.status = r.status;
-    if (r.status === 429) e.userMessage = 'วันนี้ระบบถอดเสียงถูกใช้เยอะจนเต็มโควตาฟรี ลองใหม่อีกครั้งในอีกสักพัก';
+    if (r.status === 429) {
+      e.userMessage = 'ระบบถอดเสียงถูกใช้เยอะจนเต็มโควตาฟรีชั่วคราว ลองใหม่อีกครั้งในอีกสักพัก';
+      const ra = Number(r.headers.get('retry-after'));
+      if (ra > 0) e.retryAfter = Math.ceil(ra);
+    }
     if (r.status === 401) e.userMessage = 'ระบบถอดเสียงยังตั้งค่าไม่ถูกต้อง (คีย์ Groq) กรุณาแจ้งร้าน';
     throw e;
   }
@@ -172,6 +193,69 @@ async function groqTranscribe(cfg, wavBuf, { offset = 0, fetchImpl = globalThis.
   return { words, segments, text: String(j.text || '') };
 }
 
+/*
+ * ช่วงที่ "ยังมีเสียงดังอยู่แต่ไม่มีคำ" (Whisper ข้ามไป) → [{ a, b }] วินาทีในท่อน
+ *   words: เวลาในท่อน (เริ่ม 0) · pcm: Int16 โมโน
+ *   ดังพอ = เฟรม 20 ms ที่ดังกว่าครึ่งหนึ่งของความดังตอนมีคำพูด เกินครึ่งของช่วง
+ */
+function missedSpeech(words, pcm, rate, { minGap = 2, maxGaps = 2 } = {}) {
+  const per = Math.max(1, Math.round(rate * 0.02));
+  const nF = Math.floor(pcm.length / per);
+  if (!nF) return [];
+  const rms = new Float32Array(nF);
+  for (let f = 0; f < nF; f++) {
+    let s = 0;
+    for (let i = f * per; i < (f + 1) * per; i++) s += pcm[i] * pcm[i];
+    rms[f] = Math.sqrt(s / per);
+  }
+  const dur = nF * 0.02;
+  const ws = words.filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end)).sort((x, y) => x.start - y.start);
+  // ความดังตอนพูด (ค่ากลางของเฟรมที่มีคำ) · ไม่มีคำเลยใช้ค่ากลางทั้งท่อน
+  const voiced = [];
+  for (const w of ws) for (let f = Math.max(0, Math.floor(w.start / 0.02)); f < Math.min(nF, Math.ceil(w.end / 0.02)); f++) voiced.push(rms[f]);
+  const ref = (voiced.length ? voiced : Array.from(rms)).sort((x, y) => x - y)[Math.floor((voiced.length || nF) / 2)] || 0;
+  const loud = Math.max(150, ref * 0.5);
+  const spans = [];
+  let cur = 0;
+  for (const w of ws.concat([{ start: dur, end: dur }])) {
+    if (w.start - cur >= minGap) spans.push({ a: cur, b: w.start });
+    cur = Math.max(cur, w.end);
+  }
+  const out = [];
+  for (const g of spans) {
+    let n = 0, hit = 0;
+    for (let f = Math.floor(g.a / 0.02); f < Math.min(nF, Math.ceil(g.b / 0.02)); f++) { n++; if (rms[f] >= loud) hit++; }
+    if (n && hit / n >= 0.5) out.push({ ...g, score: hit * (g.b - g.a) });
+  }
+  return out.sort((x, y) => y.score - x.score).slice(0, maxGaps).sort((x, y) => x.a - y.a).map(({ a, b }) => ({ a, b }));
+}
+
+/*
+ * ถอดเสียงท่อนเดียวให้ครบ: ถอดทั้งท่อนก่อน แล้วช่วงที่ยังมีเสียงพูดแต่ไม่ได้คำ (Whisper ข้าม) ถอดซ้ำเฉพาะช่วงนั้น
+ */
+async function transcribeCovered(cfg, wavBuf, { offset = 0, fetchImpl, retryGaps = true } = {}) {
+  const r = await groqTranscribe(cfg, wavBuf, { offset, fetchImpl });
+  if (!retryGaps) return r;
+  let w;
+  try { w = parseWav(wavBuf); } catch { return r; }
+  if (w.bits !== 16 || w.channels !== 1) return r;
+  const pcm = new Int16Array(w.data.buffer.slice(w.data.byteOffset, w.data.byteOffset + (w.data.length & ~1)));
+  const gaps = missedSpeech(r.words.map((x) => ({ start: x.start - offset, end: x.end - offset })), pcm, w.rate);
+  let words = r.words.slice();
+  for (const g of gaps) {
+    const a = Math.max(0, g.a - 0.3), b = Math.min(pcm.length / w.rate, g.b + 0.3);
+    const part = pcm.subarray(Math.floor(a * w.rate), Math.ceil(b * w.rate));
+    const buf = Buffer.concat([wavHeader(part.length * 2, w), Buffer.from(part.buffer, part.byteOffset, part.length * 2)]);
+    let r2;
+    try { r2 = await groqTranscribe(cfg, buf, { offset: offset + a, fetchImpl }); } catch { continue; } // ถอดซ้ำไม่ได้ ใช้ผลเดิม
+    // เก็บเฉพาะคำที่อยู่ในช่องว่างนั้นจริง (ไม่ซ้ำกับคำที่มีอยู่แล้ว)
+    const lo = offset + g.a - 0.15, hi = offset + g.b + 0.15;
+    words = words.concat(r2.words.filter((x) => (x.start + x.end) / 2 >= lo && (x.start + x.end) / 2 <= hi));
+  }
+  if (gaps.length) words.sort((x, y) => x.start - y.start);
+  return { ...r, words, gaps: gaps.length };
+}
+
 function createTranscriber(cfg) {
   const S = cfg.subtitles;
   if (S.engine === 'groq') {
@@ -182,14 +266,14 @@ function createTranscriber(cfg) {
         const parts = splitWav(fs.readFileSync(audioFile));
         const words = [], segments = [];
         for (let i = 0; i < parts.length; i++) {
-          const r = await groqTranscribe(cfg, parts[i].buf, { offset: parts[i].start });
+          const r = await transcribeCovered(cfg, parts[i].buf, { offset: parts[i].start });
           words.push(...r.words); segments.push(...r.segments);
           onProgress(Math.round(((i + 1) / parts.length) * 100));
         }
         return { engine: 'groq', language: 'th', words, segments };
       },
       // ท่อนเสียงที่เบราว์เซอร์ลูกค้าส่งมา (โหมด serverless)
-      chunk: (wavBuf, offset) => groqTranscribe(cfg, wavBuf, { offset }),
+      chunk: (wavBuf, offset) => transcribeCovered(cfg, wavBuf, { offset }),
     };
   }
   let checked = null;
@@ -244,4 +328,4 @@ function createTranscriber(cfg) {
   return { check, transcribe };
 }
 
-module.exports = { BASE_PROMPT, THAI_PROMPT, asrPrompt, createTranscriber, run, groqTranscribe, cleanSegments, splitWav, parseWav, wavHeader, withSpaces };
+module.exports = { missedSpeech, transcribeCovered, BASE_PROMPT, THAI_PROMPT, asrPrompt, createTranscriber, run, groqTranscribe, cleanSegments, splitWav, parseWav, wavHeader, withSpaces };

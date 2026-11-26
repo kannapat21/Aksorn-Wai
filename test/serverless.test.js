@@ -302,6 +302,29 @@ test('ซับในเบราว์เซอร์: Groq เต็มโค�
   assert.equal(ctx.subtitles.get(id).status, 'review');
 });
 
+test('ซับในเบราว์เซอร์: ท่อนเสียงมาไม่เรียง/ส่งซ้ำได้ · ท่อนหนึ่งล้ม ท่อนอื่นที่เสร็จไม่หาย', async () => {
+  const c = await newUser();
+  const order = await claim(c, 'follow-now');
+  const id = (await (await c.json('/subtitles/new', { order, name: 'x.mp4', bytes: 1, width: 1920, height: 1080, duration: 80, audio: true })).json()).id;
+  assert.equal((await (await c.raw(`/subtitles/${id}/audio?i=2&n=3&start=56`, wav(2))).json()).done, false);
+  groqStatus = 503;
+  try { assert.equal((await c.raw(`/subtitles/${id}/audio?i=0&n=3&start=0`, wav(2))).status, 502); } finally { groqStatus = 200; }
+  assert.equal(ctx.subtitles.get(id).status, 'failed');
+  // ท่อนที่ 2 มาถึงหลังท่อนแรกล้ม: เก็บไว้ ไม่ปฏิเสธ
+  assert.equal((await (await c.raw(`/subtitles/${id}/audio?i=1&n=3&start=28`, wav(2))).json()).done, false);
+  // ส่งท่อนแรกใหม่ = ครบ
+  const last = await (await c.raw(`/subtitles/${id}/audio?i=0&n=3&start=0`, wav(2))).json();
+  assert.equal(last.done, true);
+  const cues = JSON.parse(ctx.subtitles.get(id).cues_json);
+  const starts = cues.map((x) => x.start);
+  assert.deepEqual(starts, starts.slice().sort((a, b) => a - b), 'เรียงตามเวลา');
+  assert.ok(cues.some((x) => x.start < 1) && cues.some((x) => x.start >= 28 && x.start < 56) && cues.some((x) => x.start >= 56));
+  // ส่งซ้ำหลังเสร็จ = ตอบสำเร็จ (ไม่ใช่ข้อผิดพลาด)
+  const again = await c.raw(`/subtitles/${id}/audio?i=2&n=3&start=56`, wav(2));
+  assert.equal(again.status, 200);
+  assert.equal((await again.json()).done, true);
+});
+
 test('ไฟล์สินค้าบน Supabase: ตรวจสิทธิ์แล้วส่งไปลิงก์เซ็นอายุสั้น · ไฟล์ใหญ่เกิน 48 MB เป็น .zip', async () => {
   const c = await newUser();
   const order = await claim(c, 'follow-now');

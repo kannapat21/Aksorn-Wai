@@ -1504,21 +1504,26 @@ function createApp(cfg, opts = {}) {
     const job = ownSub(req);
     if (!job || !job.browser) return res.status(404).json({ error: 'ไม่พบคลิปนี้' });
     const i = Number(req.query.i), n = Number(req.query.n), start = Number(req.query.start);
-    if (!(Number.isInteger(i) && Number.isInteger(n) && n >= 1 && n <= 60 && i >= 0 && i < n && start >= 0 && start <= job.duration + 1)) return res.status(400).json({ error: 'ข้อมูลเสียงไม่ถูกต้อง' });
-    if (job.status !== 'transcribing') {
-      if (i === 0 && !subtitles.restartAsr(job)) return res.status(409).json({ error: 'คลิปนี้ฟังเสียงเสร็จแล้ว' });
-      if (i !== 0) return res.status(409).json({ error: 'คลิปนี้ฟังเสียงเสร็จแล้ว' });
-    }
+    if (!(Number.isInteger(i) && Number.isInteger(n) && n >= 1 && n <= 150 && i >= 0 && i < n && start >= 0 && start <= job.duration + 1)) return res.status(400).json({ error: 'ข้อมูลเสียงไม่ถูกต้อง' });
+    // ถอดเสร็จไปแล้ว (เช่น เบราว์เซอร์ส่งท่อนเดิมซ้ำหลังเน็ตสะดุด) = ถือว่าสำเร็จ
+    if (job.cues_json && job.status !== 'transcribing') return res.json({ ok: true, done: true, url: `/subtitles/${job.id}` });
+    // งานที่ล้มกลางทาง: ลองต่อจากท่อนที่ได้แล้ว
+    if (job.status !== 'transcribing' && !subtitles.resumeAsr(job)) return res.status(409).json({ error: 'คลิปนี้ฟังเสียงเสร็จแล้ว' });
     const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
     try { require('./transcribe').parseWav(buf); } catch { return res.status(400).json({ error: 'ไฟล์เสียงไม่ถูกต้อง' }); }
     try {
       const r = await transcriber.chunk(buf, start);
-      const out = subtitles.asrChunk(subtitles.get(job.id), i, n, r.words);
+      let fresh = subtitles.get(job.id);
+      // ท่อนอื่นล้มระหว่างนี้: เก็บท่อนนี้ไว้ด้วย (เบราว์เซอร์จะส่งท่อนที่ล้มมาใหม่)
+      if (fresh && fresh.status === 'failed' && !fresh.cues_json && subtitles.resumeAsr(fresh)) fresh = subtitles.get(job.id);
+      if (!fresh || fresh.status !== 'transcribing') return res.json({ ok: true, done: Boolean(fresh && fresh.cues_json), url: `/subtitles/${job.id}` });
+      const out = subtitles.asrChunk(fresh, i, n, r.words);
       res.json({ ok: true, done: out.done, url: `/subtitles/${job.id}` });
     } catch (e) {
       log(`[subtitles] ถอดเสียงไม่สำเร็จ ${job.id}: ${String(e.message).split('\n')[0]}`);
       const msg = e.userMessage || 'ถอดเสียงไม่สำเร็จ ลองใหม่อีกครั้ง';
       subtitles.failAsr(job, msg);
+      if (e.retryAfter) res.set('Retry-After', String(e.retryAfter));
       res.status(e.status === 429 ? 429 : 502).json({ error: msg });
     }
   });
