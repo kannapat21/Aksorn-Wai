@@ -808,6 +808,7 @@ ${claimed && order.provider === 'free' ? `<p class="claimed-bar" role="status">$
   <div class="chips wrap" role="group" aria-label="เลือกแนว">${sizeTabs}</div>
   <p class="muted small">3. กดดาวน์โหลด ได้ไฟล์วิดีโอไฟล์เดียว</p>
   <div class="dl-pair">${btn('main', ed.single, true)}${ed.alt && ed.alt !== ed.single ? btn('alt', ed.alt, false) : ''}</div>
+  ${fileFor(ed.single) ? '' : `<p class="small"><a href="/library/${esc(order.id)}/customize">ต้องการ ${esc(fileLabel(cfg, ed.single))}? กดปรับแต่ง แล้วระบบสร้างให้ตามความยาวที่เลือก</a></p>`}
 </section>
 ${howToBlock(cfg, ed, ed.single)}
 <p class="muted small">ลิงก์ดาวน์โหลดสร้างใหม่ทุกครั้งที่กด (ใช้ได้ ${esc(cfg.linkMinutes)} นาที) · วันนี้ดาวน์โหลดได้อีก ${esc(left)} ครั้ง</p>
@@ -824,6 +825,15 @@ const FILL_SWATCHES = ['#ffd400', '#ffffff', '#111111', '#ff3b30', '#ff7a00', '#
 const STROKE_SWATCHES = ['#111111', '#ffffff', '#1e3a5f', '#b91c1c', '#ffd400'];
 
 const SIZE_LABEL = { vertical: 'แนวตั้ง 9:16', horizontal: 'แนวนอน 16:9' };
+// ท่าที่ใช้สีต่างจากปกติ (บอกในหน้าปรับแต่ง)
+const COLOR_NOTE = {
+  neon: 'สีตัวอักษร = สีไฟ, สีขอบ = แสงฟุ้งรอบนอก, ความหนาขอบ = ความแรงของแสง',
+  highlight: 'สีขอบ = สีแถบไฮไลต์',
+  lower: 'สีขอบ = สีแถบ, สีตัวอักษร = สีข้อความและขีด',
+  bubble: 'สีขอบ = สีกล่องแชท',
+  gold: 'สีตัวอักษร = สีโลหะ (ระบบไล่เงาให้เอง)',
+  karaoke: 'สีตัวอักษร = สีที่วิ่งตามคำ',
+};
 const SECONDS = [3, 5, 10, 15, 30];
 const fileLabel = (cfg, fmt) => ((cfg.editorsConfig.formats[fmt] || {}).short || fmt);
 // วิธีใช้ในโปรแกรม (แสดงบนหน้าเว็บแทนไฟล์อ่านก่อนใน zip)
@@ -883,7 +893,7 @@ function customize({ cfg, user, csrf, order, p, editorId, versions, limits, tool
 <nav class="crumb" aria-label="ตำแหน่งหน้า"><a href="/library">คลังของฉัน</a><span>/</span><a href="/library/${esc(order.id)}">${esc(p.title)}</a><span>/</span><span aria-current="page">ปรับแต่ง</span></nav>
 <div class="cz-head">
   <div><p class="eyebrow">ปรับแต่งเป็นของคุณเอง</p><h1>${esc(p.title)}</h1></div>
-  <p class="muted small">ท่าเคลื่อนไหวเดิม · เปลี่ยนข้อความ ฟอนต์ สี ได้ตามใจ${p.motion === 'neon' ? ' · สีตัวอักษร = สีไฟ, สีขอบ = แสงฟุ้งรอบนอก, ความหนาขอบ = ความแรงของแสง' : ''}</p>
+  <p class="muted small">ท่าเคลื่อนไหวเดิม · เปลี่ยนข้อความ ฟอนต์ สี ได้ตามใจ${COLOR_NOTE[p.motion] ? ` · ${COLOR_NOTE[p.motion]}` : ''}</p>
 </div>
 ${error ? `<p class="error" role="alert">${esc(error)}</p>` : ''}
 <div class="cz">

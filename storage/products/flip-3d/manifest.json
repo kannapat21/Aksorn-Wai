@@ -1,0 +1,163 @@
+{
+  "slug": "flip-3d",
+  "text": "ยินดีต้อนรับ",
+  "fill": "#FFD400",
+  "stroke": "#111111",
+  "motion": "flip",
+  "fps": 60,
+  "duration": 3,
+  "timing": {
+    "popUp": 0.3,
+    "settle": 1.1,
+    "fadeStart": 2.4,
+    "fadeEnd": 2.9833333333333334,
+    "loop": 2.6,
+    "holdOff": 0
+  },
+  "parts": {
+    "introSeconds": 1.1,
+    "outroSeconds": 0.6,
+    "holdFrame": 66
+  },
+  "renderedAt": "2026-11-26T15:40:23.623Z",
+  "formats": {
+    "mp4_green": {
+      "ext": "mp4",
+      "label": "MP4 พื้นเขียว (Chroma Key)"
+    },
+    "mp4_black": {
+      "ext": "mp4",
+      "label": "MP4 พื้นดำ (Screen/Add)"
+    },
+    "prores4444": {
+      "ext": "mov",
+      "label": "MOV ProRes 4444 โปร่งใส"
+    },
+    "webm_alpha": {
+      "ext": "webm",
+      "label": "WebM VP9 โปร่งใส"
+    },
+    "parts_green": {
+      "ext": "mp4",
+      "label": "ส่วนเข้า/ออก MP4 พื้นเขียว"
+    },
+    "parts_prores": {
+      "ext": "mov",
+      "label": "ส่วนเข้า/ออก MOV ProRes 4444 โปร่งใส"
+    },
+    "still_png": {
+      "ext": "png",
+      "label": "ภาพนิ่ง PNG โปร่งใส (ยืดได้)"
+    }
+  },
+  "files": [
+    {
+      "format": "mp4_green",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "flip-3d_mp4_green_1080x1920.mp4",
+      "bytes": 373817
+    },
+    {
+      "format": "mp4_black",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "flip-3d_mp4_black_1080x1920.mp4",
+      "bytes": 252503
+    },
+    {
+      "format": "webm_alpha",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "flip-3d_webm_alpha_1080x1920.webm",
+      "bytes": 560435
+    },
+    {
+      "format": "parts_green",
+      "part": "intro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "flip-3d_parts_green_intro_1080x1920.mp4",
+      "bytes": 133609
+    },
+    {
+      "format": "parts_green",
+      "part": "outro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "flip-3d_parts_green_outro_1080x1920.mp4",
+      "bytes": 75038
+    },
+    {
+      "format": "still_png",
+      "part": "hold",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "flip-3d_still_1080x1920.png",
+      "bytes": 58919
+    },
+    {
+      "format": "mp4_green",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "flip-3d_mp4_green_1920x1080.mp4",
+      "bytes": 454497
+    },
+    {
+      "format": "mp4_black",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "flip-3d_mp4_black_1920x1080.mp4",
+      "bytes": 314514
+    },
+    {
+      "format": "webm_alpha",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "flip-3d_webm_alpha_1920x1080.webm",
+      "bytes": 662549
+    },
+    {
+      "format": "parts_green",
+      "part": "intro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "flip-3d_parts_green_intro_1920x1080.mp4",
+      "bytes": 160086
+    },
+    {
+      "format": "parts_green",
+      "part": "outro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "flip-3d_parts_green_outro_1920x1080.mp4",
+      "bytes": 89372
+    },
+    {
+      "format": "still_png",
+      "part": "hold",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "flip-3d_still_1920x1080.png",
+      "bytes": 67228
+    }
+  ]
+}

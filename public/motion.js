@@ -27,6 +27,9 @@
     t -= 2.625 / d; return n * t * t + 0.984375;
   };
   var lerp = function (a, b, t) { return a + (b - a) * t; };
+  var easeOutExpo = function (t) { return t >= 1 ? 1 : 1 - Math.pow(2, -10 * t); };
+  var easeInOutCubic = function (t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
+  var easeInBack = function (t) { var c1 = 1.70158; return (c1 + 1) * t * t * t - c1 * t * t; };
   // ค่าสุ่มแบบคงที่ (ได้ค่าเดิมทุกครั้ง เรนเดอร์ซ้ำได้ผลเหมือนเดิมทุกพิกเซล)
   var hash = function (i) { var x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 
@@ -118,6 +121,30 @@
       spans.push(s);
     });
     return spans;
+  }
+
+  function graphemeUnits(text) {
+    return segments(text, 'grapheme').map(function (s) { return /^\s+$/.test(s) ? { space: true, text: s } : { text: s }; });
+  }
+  // สำเนาข้อความวางทับ .fill พอดี (ชั้นแสง/สี/แถบฉีก) · behind = วางไว้ใต้ตัวหลัก
+  function overlayText(el, cls, text, css, behind) {
+    var s = el.ownerDocument.createElement('span');
+    s.className = 'tt-x ' + cls;
+    s.setAttribute('aria-hidden', 'true');
+    s.style.cssText = 'grid-area:1/1;pointer-events:none;' + (css || '');
+    s.textContent = text;
+    var fill = el.querySelector('.fill');
+    if (behind) el.insertBefore(s, fill); else el.appendChild(s);
+    return s;
+  }
+  // กล่อง/แถบ วางตำแหน่งแบบ absolute ใน el (หน่วย em ตามขนาดตัวอักษร) อยู่ใต้ตัวอักษร
+  function addBox(el, cls, css) {
+    var b = el.ownerDocument.createElement('i');
+    b.className = 'tt-x ' + cls;
+    b.setAttribute('aria-hidden', 'true');
+    b.style.cssText = 'position:absolute;display:block;pointer-events:none;z-index:0;' + css;
+    el.insertBefore(b, el.firstChild);
+    return b;
   }
 
   function clearExtras(el) {
@@ -228,7 +255,7 @@
         // แถบแสงวิ่ง (เฉพาะช่วงค้าง ตอนตัวอักษรนิ่งแล้ว)
         var band = -1;
         if (t >= intro && !timing.still) {
-          var h = (t - intro) % (timing.loop || 2.4);
+          var h = holdPhase(t, timing, 2.4);
           if (h >= 0.05 && h < 0.85) band = easeInOutSine((h - 0.05) / 0.8);
         }
         if (el.__shine) {
@@ -293,7 +320,7 @@
         var base = clamp(t / 0.15, 0, 1); // หลอดดับค่อยๆ ปรากฏ
         // ลำดับกระพริบตอนไฟติด (วินาทีหลังเวลาติดของแต่ละตัว): ติด ดับ ติด ดับ ติดยาว
         var lit = function (dt) { return dt < 0 ? 0 : dt < 0.033 ? 1 : dt < 0.083 ? 0 : dt < 0.1 ? 0.8 : dt < 0.133 ? 0.1 : 1; };
-        var h = t >= intro ? (t - intro) % (timing.loop || 2) : -1;
+        var h = t >= intro ? holdPhase(t, timing, 2) : -1;
         var outLen = timing.fadeEnd - timing.fadeStart;
         var off = t >= timing.fadeStart ? (t - timing.fadeStart) / outLen : -1;
         units.forEach(function (s, i) {
@@ -334,7 +361,7 @@
         var fs = parseFloat(el.style.fontSize) || 100;
         var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
         var dur = 0.38, stagger = n > 1 ? Math.max(0, Math.min(0.2, (intro - dur - 0.04) / (n - 1))) : 0;
-        var h = t >= intro && !timing.still ? (t - intro) % (timing.loop || 2) : -1;
+        var h = t >= intro && !timing.still ? holdPhase(t, timing, 2) : -1;
         var at = timing.wordAt; // โหมดซับ: เวลาที่พูดแต่ละคำ (วินาทีจากต้นบรรทัด)
         units.forEach(function (s, i) {
           var sc = 1, y = 0, rot = 0, op = 1, hl = 0;
@@ -376,15 +403,564 @@
         return { transform: 'none', opacity: t >= timing.fadeEnd ? 0 : 1 };
       },
     },
+    /* ==================== ท่าชุดใหม่ (ฟรี 5 · พรีเมียม 7) ====================
+     * ทุกท่าคิดเวลาจาก timing (settle = จบท่าเข้า, fadeStart/fadeEnd = ช่วงออก) จึงใช้ได้ทั้งคลิปเต็ม ปรับความยาว และโหมดซับ
+     * timing.still (โหมดซับ) = ช่วงค้างนิ่งสนิท ไม่มีลูกเล่นวน
+     * ช่วงท้ายของรอบค้างทุกท่า = ภาพนิ่งเดียวกับตอนจบท่าเข้า จึงวนซ้ำและตัดเข้าท่าออกได้เนียนทุกความยาว
+     */
+
+    // พิมพ์ทีละตัว (ฟรี): ตัวอักษรขึ้นทีละตัวพร้อมเคอร์เซอร์ · ค้าง: เคอร์เซอร์กระพริบ · ออก: ลบถอยหลังทีละตัว
+    typewriter: {
+      intro: 1.0, outro: 0.5, loop: 1.2, fit: 1.08, premium: false,
+      build: function (el, o) {
+        el.__units = buildUnits(el.querySelector('.fill'), graphemeUnits(o.text));
+        var c = el.ownerDocument.createElement('i');
+        c.className = 'tt-x tt-caret';
+        c.setAttribute('aria-hidden', 'true');
+        var wpx = Math.max(2, Math.round(o.size * 0.07));
+        c.style.cssText = 'position:absolute;left:0;top:0;width:' + wpx + 'px;height:10px;border-radius:' + Math.ceil(wpx / 2) + 'px;pointer-events:none;background:' + o.fill + ';' +
+          (o.strokeRatio > 0 ? 'box-shadow:0 0 0 ' + Math.max(1, Math.round(o.size * o.strokeRatio * 0.6)) + 'px ' + o.stroke + ';' : '');
+        el.appendChild(c);
+        el.__caret = c;
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var units = el.__units || [], n = units.length || 1;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var per = Math.max(0.01, (intro - 0.08) / n);
+        var shown = t < intro ? clamp(Math.floor((t - 0.02) / per) + 1, 0, n) : n;
+        if (t >= timing.fadeStart) shown = Math.min(shown, n - Math.floor(clamp((t - timing.fadeStart) / (outLen * 0.75), 0, 1) * n));
+        units.forEach(function (s, i) {
+          var on = i < shown;
+          var age = t < intro ? t - (0.02 + per * i) : 1;
+          var sc = on && age < 0.08 ? lerp(1.22, 1, easeOutCubic(clamp(age / 0.08, 0, 1))) : 1;
+          s.style.opacity = on ? '1' : '0';
+          s.style.transform = sc !== 1 ? 'scale(' + sc.toFixed(4) + ')' : 'none';
+        });
+        var c = el.__caret;
+        if (c) {
+          var vis = !timing.still;
+          if (t >= intro && t < timing.fadeStart && !timing.still) { var h = holdPhase(t, timing, 1.2); if (h >= 0.35 && h < 0.75) vis = false; }
+          if (t >= timing.fadeStart && (t - timing.fadeStart) / outLen > 0.82) vis = false;
+          var er = el.getBoundingClientRect();
+          var ref = units[Math.max(0, shown - 1)];
+          if (ref && vis) {
+            var r = ref.getBoundingClientRect();
+            var x = shown ? r.right - er.left : r.left - er.left;
+            var hh = r.height * 0.52;
+            c.style.height = hh.toFixed(1) + 'px';
+            c.style.transform = 'translate(' + (x + r.height * 0.03).toFixed(1) + 'px,' + (r.top - er.top + r.height * 0.24).toFixed(1) + 'px)';
+          }
+          c.style.opacity = vis ? '1' : '0';
+        }
+        return { transform: 'none', opacity: t >= timing.fadeEnd ? 0 : 1 };
+      },
+    },
+
+    // สไลด์ขึ้นจากเส้น (ฟรี): ตัวอักษรเลื่อนขึ้นจากใต้เส้นทีละตัว · ออก: เลื่อนขึ้นหายไปด้านบน
+    rise: {
+      intro: 0.8, outro: 0.5, loop: 0, fit: 1.06, premium: false,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        el.__units = buildUnits(fill, graphemeUnits(o.text));
+        fill.style.clipPath = 'inset(0 -40% 0 -40%)';
+      },
+      frame: function (el, t, timing) {
+        var units = el.__units || [], n = units.length || 1;
+        var fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var st = Math.min(0.05, (intro * 0.45) / Math.max(1, n - 1)), dur = Math.max(0.1, intro - st * (n - 1) - 0.02);
+        units.forEach(function (s, i) {
+          var y = 0, sk = 0;
+          if (t < intro) { var p = clamp((t - st * i) / dur, 0, 1), e = easeOutExpo(p); y = (1 - e) * 1.35 * fs; sk = (1 - e) * -8; }
+          if (t >= timing.fadeStart) {
+            var q = clamp((t - timing.fadeStart - (outLen * 0.35) * (i / Math.max(1, n - 1))) / (outLen * 0.5), 0, 1);
+            y -= easeInCubic(q) * 1.35 * fs;
+          }
+          s.style.transform = (y || sk) ? 'translateY(' + y.toFixed(2) + 'px) skewY(' + sk.toFixed(3) + 'deg)' : 'none';
+        });
+        return { transform: 'none', opacity: t >= timing.fadeEnd ? 0 : 1 };
+      },
+    },
+
+    // ซูมพุ่งเข้า (ฟรี): พุ่งจากใหญ่และเบลอเข้ามาหยุดคม · ออก: พุ่งทะลุจอ
+    zoom: {
+      intro: 0.6, outro: 0.5, loop: 0, fit: 1.04, premium: false,
+      frame: function (el, t, timing) {
+        var fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var s = 1, rot = 0, blur = 0, op = 1;
+        if (t < intro) { var e = easeOutExpo(clamp(t / intro, 0, 1)); s = lerp(2.6, 1, e); rot = (1 - e) * -7; blur = (1 - e) * 0.1 * fs; op = clamp(t / (intro * 0.35), 0, 1); }
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1), eq = easeInCubic(q); s *= lerp(1, 3.2, eq); blur += eq * 0.12 * fs; op = Math.min(op, 1 - q); }
+        if (t >= timing.fadeEnd) op = 0;
+        el.style.filter = blur > 0.05 ? 'blur(' + blur.toFixed(2) + 'px)' : '';
+        return { transform: 'rotate(' + rot.toFixed(3) + 'deg) scale(' + s.toFixed(5) + ')', opacity: op };
+      },
+    },
+
+    // ตัวอักษรกระโดด (ฟรี): ตกลงมาทีละตัว เด้งพื้นแบบยืดหยุ่น · ออก: ร่วงลงหายทีละตัว
+    jump: {
+      intro: 1.0, outro: 0.5, loop: 0, fit: 1.08, premium: false,
+      build: function (el, o) {
+        el.__units = buildUnits(el.querySelector('.fill'), graphemeUnits(o.text));
+        el.__units.forEach(function (s) { s.style.transformOrigin = '50% 85%'; });
+      },
+      frame: function (el, t, timing) {
+        var units = el.__units || [], n = units.length || 1;
+        var fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var st = Math.min(0.06, (intro * 0.45) / Math.max(1, n - 1)), dur = Math.max(0.12, intro - st * (n - 1) - 0.02);
+        units.forEach(function (s, i) {
+          var y = 0, sx = 1, sy = 1, rot = 0, op = 1;
+          if (t < intro) {
+            var p = clamp((t - st * i) / dur, 0, 1);
+            y = -(1 - easeOutBounce(p)) * 1.1 * fs;
+            var land = p > 0.36 ? Math.sin(clamp((p - 0.36) / 0.3, 0, 1) * Math.PI) * (1 - p) : 0; // ยุบตอนกระทบพื้น
+            sy = 1 - 0.3 * land; sx = 1 + 0.22 * land;
+            if (p < 0.36) { sy = 1 + 0.12 * (1 - p / 0.36); sx = 1 - 0.08 * (1 - p / 0.36); }
+            op = clamp(p * 6, 0, 1);
+          }
+          if (t >= timing.fadeStart) {
+            var q = clamp((t - timing.fadeStart - (outLen * 0.4) * (i / Math.max(1, n - 1))) / (outLen * 0.5), 0, 1);
+            y += easeInCubic(q) * 0.9 * fs; rot = q * (i % 2 ? 18 : -18); op = Math.min(op, 1 - q);
+          }
+          s.style.opacity = op.toFixed(4);
+          s.style.transform = (y || rot || sx !== 1 || sy !== 1) ? 'translateY(' + y.toFixed(2) + 'px) rotate(' + rot.toFixed(2) + 'deg) scale(' + sx.toFixed(4) + ',' + sy.toFixed(4) + ')' : 'none';
+        });
+        return { transform: 'none', opacity: t >= timing.fadeEnd ? 0 : 1 };
+      },
+    },
+
+    // ป้ายไฮไลต์ (ฟรี): แถบปากกาเน้นข้อความปาดเข้า แล้วตัวอักษรเผยตาม · สีขอบ = สีแถบ
+    highlight: {
+      intro: 0.8, outro: 0.5, loop: 0, fit: 1.1, premium: false,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        fill.style.position = 'relative';
+        fill.style.zIndex = '1';
+        fill.style.filter = 'none'; // ตัวอักษรอยู่บนแถบสีทึบ ไม่ต้องมีขอบ/เงา (เงาอยู่ที่แถบแทน)
+        el.__box = addBox(el, 'tt-box', 'left:.16em;right:.16em;top:.42em;bottom:.42em;border-radius:.1em;background:' + o.stroke + ';' +
+          (o.shadow ? 'box-shadow:0 .05em .16em rgba(0,0,0,.35);' : ''));
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var fill = el.querySelector('.fill');
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var bw = 1, reveal = 1, cut = 0, origin = '0% 50%';
+        if (t < intro) { bw = easeOutExpo(clamp(t / (intro * 0.55), 0, 1)); reveal = easeOutCubic(clamp((t - intro * 0.25) / (intro * 0.7), 0, 1)); }
+        if (t >= timing.fadeStart) {
+          var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1);
+          cut = easeInCubic(clamp(q / 0.6, 0, 1));
+          bw = 1 - easeInCubic(clamp((q - 0.2) / 0.8, 0, 1)); origin = '100% 50%';
+        }
+        if (el.__box) { el.__box.style.transformOrigin = origin; el.__box.style.transform = 'skewX(-6deg) scaleX(' + bw.toFixed(4) + ')'; el.__box.style.opacity = bw > 0.002 ? '1' : '0'; }
+        fill.style.clipPath = 'inset(-20% ' + ((1 - reveal) * 110 - 5).toFixed(2) + '% -20% ' + (cut * 110 - 5).toFixed(2) + '%)';
+        return { transform: 'none', opacity: t >= timing.fadeEnd ? 0 : 1 };
+      },
+    },
+
+    // กลิตช์ดิจิทัล (พรีเมียม): สีแยก RGB + ภาพฉีกเป็นแถบ · ค้าง: สะดุดเป็นจังหวะ · ออก: ดับแบบจอทีวี
+    glitch: {
+      intro: 0.8, outro: 0.5, loop: 2.2, fit: 1.14, premium: true,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        el.__rgb = [['#FF2D55', 'screen'], ['#00E5FF', 'screen']].map(function (c) {
+          var s = overlayText(el, 'tt-rgb', o.text, 'color:' + c[0] + ';opacity:0;', true);
+          return s;
+        });
+        el.__slices = [0, 1].map(function () {
+          return overlayText(el, 'tt-slice', o.text, 'color:' + o.fill + ';visibility:hidden;' + (fill.style.filter ? 'filter:' + fill.style.filter + ';' : ''));
+        });
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var fill = el.querySelector('.fill');
+        var fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var g = 0, op = 1, sx = 1, sy = 1;
+        var seed = Math.floor(t * 30) + 1;
+        if (t < intro) {
+          g = 1 - easeOutCubic(clamp(t / intro, 0, 1));
+          if (t < intro * 0.7) op = hash(seed * 5) > 0.35 ? 1 : 0.25;
+          op *= clamp(t / 0.06, 0, 1);
+        } else if (t < timing.fadeStart && !timing.still) {
+          var h = holdPhase(t, timing, 2.2);
+          if (h >= 0.9 && h < 1.12) g = 0.85; else if (h >= 1.24 && h < 1.34) g = 0.5;
+        }
+        if (t >= timing.fadeStart) {
+          var q = clamp((t - timing.fadeStart) / outLen, 0, 1);
+          g = Math.max(g, 0.5 + q * 0.5);
+          if (q > 0.45) { var k = easeInCubic(clamp((q - 0.45) / 0.4, 0, 1)); sy = lerp(1, 0.03, k); sx = lerp(1, 1.35, k); }
+          op = 1 - clamp((q - 0.75) / 0.15, 0, 1);
+        }
+        if (t >= timing.fadeEnd) op = 0;
+        var calm = g < 0.01;
+        var d = g * 0.16 * fs;
+        (el.__rgb || []).forEach(function (s, i) {
+          var dx = calm ? 0 : (i ? -1 : 1) * (d * 0.6 + (hash(seed * 3 + i) - 0.5) * d);
+          var dy = calm ? 0 : (hash(seed * 7 + i) - 0.5) * d * 0.4;
+          s.style.opacity = calm ? '0' : '0.85';
+          s.style.transform = 'translate(' + dx.toFixed(2) + 'px,' + dy.toFixed(2) + 'px)';
+        });
+        // แถบฉีก 2 แถบ: ซ่อนแถบนั้นจากตัวหลัก แล้วโชว์สำเนาที่เลื่อนไปด้านข้างแทน
+        var bands = [];
+        if (g > 0.15) {
+          var a1 = 8 + hash(seed * 11) * 30, h1 = 6 + hash(seed * 13) * 12;
+          var a2 = 52 + hash(seed * 17) * 28, h2 = 5 + hash(seed * 19) * 12;
+          bands = [[a1, h1], [a2, h2]];
+        }
+        (el.__slices || []).forEach(function (s, i) {
+          var b = bands[i];
+          if (!b) { s.style.visibility = 'hidden'; return; }
+          var dx = (hash(seed * 23 + i) - 0.5 > 0 ? 1 : -1) * (0.4 + hash(seed * 41 + i) * 0.6) * g * 0.3 * fs;
+          s.style.visibility = 'visible';
+          s.style.clipPath = 'inset(' + b[0].toFixed(2) + '% -30% ' + (100 - b[0] - b[1]).toFixed(2) + '% -30%)';
+          s.style.transform = 'translateX(' + dx.toFixed(2) + 'px)';
+        });
+        if (bands.length) {
+          var m = 'linear-gradient(180deg,#000 ' + bands[0][0].toFixed(2) + '%,transparent ' + bands[0][0].toFixed(2) + '%,transparent ' + (bands[0][0] + bands[0][1]).toFixed(2) + '%,#000 ' + (bands[0][0] + bands[0][1]).toFixed(2) + '%,#000 ' +
+            bands[1][0].toFixed(2) + '%,transparent ' + bands[1][0].toFixed(2) + '%,transparent ' + (bands[1][0] + bands[1][1]).toFixed(2) + '%,#000 ' + (bands[1][0] + bands[1][1]).toFixed(2) + '%)';
+          fill.style.webkitMaskImage = m; fill.style.maskImage = m;
+        } else { fill.style.webkitMaskImage = ''; fill.style.maskImage = ''; }
+        var jx = calm ? 0 : (hash(seed * 29) - 0.5) * g * 0.05 * fs;
+        var skew = calm || hash(seed * 31) < 0.6 ? 0 : (hash(seed * 37) - 0.5) * g * 24;
+        return { transform: 'translateX(' + jx.toFixed(2) + 'px) skewX(' + skew.toFixed(2) + 'deg) scale(' + sx.toFixed(4) + ',' + sy.toFixed(4) + ')', opacity: op };
+      },
+    },
+
+    // ทองประกาย (พรีเมียม): ตัวอักษรไล่สีโลหะ แสงวิ่งผ่าน ดาววิบวับรอบคำ · สีตัวอักษร = สีโลหะหลัก
+    gold: {
+      intro: 1.0, outro: 0.6, loop: 2.4, fit: 1.12, premium: true,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        var light = mix(o.fill, '#ffffff', 0.7), dark = mix(o.fill, '#000000', 0.38);
+        fill.style.backgroundImage = 'linear-gradient(180deg,' + light + ' 8%,' + mix(o.fill, '#ffffff', 0.2) + ' 38%,' + dark + ' 52%,' + o.fill + ' 66%,' + light + ' 92%)';
+        fill.style.webkitBackgroundClip = 'text';
+        fill.style.backgroundClip = 'text';
+        fill.style.webkitTextFillColor = 'transparent';
+        fill.style.color = 'transparent';
+        var sh = overlayText(el, 'tt-shine', o.text, 'color:#fff;-webkit-text-fill-color:#fff;visibility:hidden;text-shadow:0 0 ' + (o.size * 0.06).toFixed(1) + 'px rgba(255,255,255,.9);');
+        el.__shine = sh;
+        var doc = el.ownerDocument;
+        el.__stars = [0, 1, 2, 3, 4].map(function (j) {
+          var s = doc.createElement('span');
+          s.className = 'tt-x tt-star';
+          s.setAttribute('aria-hidden', 'true');
+          var sz = (0.5 + hash(j + 40) * 0.45).toFixed(3);
+          var left = [10, 88, 30, 70, 52][j] + (hash(j + 50) - 0.5) * 8, top = [22, 30, 80, 76, 14][j] + (hash(j + 60) - 0.5) * 10;
+          s.style.cssText = 'position:absolute;left:' + left.toFixed(1) + '%;top:' + top.toFixed(1) + '%;width:' + sz + 'em;height:' + sz + 'em;margin:-' + (sz / 2).toFixed(3) + 'em;opacity:0;pointer-events:none;z-index:2;';
+          s.innerHTML = '<svg viewBox="-10 -10 20 20" width="100%" height="100%" style="display:block;overflow:visible"><circle r="3.2" fill="' + mix(o.fill, '#ffffff', 0.6) + '" opacity=".55"/><path d="M0-10C.8-2.2 2.2-.8 10 0 2.2.8.8 2.2 0 10-.8 2.2-2.2.8-10 0-2.2-.8-.8-2.2 0-10Z" fill="#fff"/></svg>';
+          el.appendChild(s);
+          return s;
+        });
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var s = 1, op = 1, band = -1;
+        if (t < intro) {
+          var e = easeOutCubic(clamp(t / (intro * 0.7), 0, 1));
+          s = lerp(0.82, 1, e); op = clamp(t / (intro * 0.35), 0, 1);
+          if (t >= intro * 0.3 && t < intro * 0.95) band = easeInOutSine((t - intro * 0.3) / (intro * 0.65));
+        }
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 2.4) : -1;
+        if (h >= 0.1 && h < 0.9) band = easeInOutSine((h - 0.1) / 0.8);
+        var q = t >= timing.fadeStart ? clamp((t - timing.fadeStart) / (outLen * 0.85), 0, 1) : -1;
+        if (q >= 0) { s *= lerp(1, 1.1, easeInCubic(q)); op = 1 - easeInCubic(q); }
+        if (t >= timing.fadeEnd) op = 0;
+        var sh = el.__shine;
+        if (sh) {
+          if (band < 0) sh.style.visibility = 'hidden';
+          else {
+            var c = lerp(-25, 125, band);
+            var g2 = 'linear-gradient(110deg,transparent ' + (c - 14).toFixed(2) + '%,rgba(0,0,0,.5) ' + (c - 4).toFixed(2) + '%,#000 ' + c.toFixed(2) + '%,rgba(0,0,0,.5) ' + (c + 4).toFixed(2) + '%,transparent ' + (c + 14).toFixed(2) + '%)';
+            sh.style.visibility = 'visible'; sh.style.webkitMaskImage = g2; sh.style.maskImage = g2;
+          }
+        }
+        // ดาววิบวับ: ตอนเข้าแต่ละดวงโผล่ไล่กัน · ช่วงค้างวิบทีละดวง (จบก่อนท้ายรอบ) · ตอนออกวาบพร้อมกัน
+        (el.__stars || []).forEach(function (st, j) {
+          var u = -1;
+          if (t < intro) u = (t - (0.25 + j * 0.12) * intro) / (0.5 * Math.max(intro, 0.6));
+          else if (h >= 0) u = (h - (0.15 + j * 0.17)) / 0.45;
+          else if (q >= 0) u = q / 0.7;
+          var a = u > 0 && u < 1 ? Math.sin(u * Math.PI) : 0;
+          st.style.opacity = a.toFixed(4);
+          st.style.transform = 'rotate(' + (u * 90).toFixed(2) + 'deg) scale(' + (0.2 + a * 0.9).toFixed(4) + ')';
+        });
+        return { transform: 'scale(' + s.toFixed(5) + ')', opacity: op };
+      },
+    },
+
+    // พลิก 3D (พรีเมียม): ตัวอักษรนูนมีความลึก พลิกลงมาทีละตัว · ค้าง: หมุนรอบตัวเป็นคลื่น · ออก: พลิกหายทีละตัว
+    flip: {
+      intro: 1.1, outro: 0.6, loop: 2.6, fit: 1.12, premium: true,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        el.__units = buildUnits(fill, graphemeUnits(o.text));
+        var depth = Math.max(3, Math.round(o.size * 0.055)), dark = mix(o.fill, '#000000', 0.5), sh = [];
+        for (var k = 1; k <= depth; k++) sh.push('0 ' + k + 'px 0 ' + mix(o.fill, '#000000', 0.38 + 0.25 * (k / depth)));
+        sh.push('0 ' + (depth + 2) + 'px ' + (depth * 1.4).toFixed(1) + 'px rgba(0,0,0,.45)');
+        fill.style.textShadow = sh.join(',');
+        el.__dark = dark;
+        el.__units.forEach(function (s) { s.style.transformOrigin = '50% 50%'; s.style.backfaceVisibility = 'visible'; });
+      },
+      frame: function (el, t, timing) {
+        var units = el.__units || [], n = units.length || 1;
+        var fs = parseFloat(el.style.fontSize) || 100, P = (fs * 4).toFixed(0);
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var st = Math.min(0.06, (intro * 0.45) / Math.max(1, n - 1)), dur = Math.max(0.14, intro - st * (n - 1) - 0.02);
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 2.6) : -1;
+        var sg = Math.min(0.06, 0.45 / Math.max(1, n));
+        units.forEach(function (s, i) {
+          var rx = 0, ry = 0, y = 0, op = 1;
+          if (t < intro) { var p = clamp((t - st * i) / dur, 0, 1); rx = lerp(-100, 0, easeOutBack(p)); y = (1 - easeOutCubic(p)) * -0.3 * fs; op = clamp(p * 3, 0, 1); }
+          if (h >= 0) { var u = clamp((h - 0.15 - sg * i) / 0.55, 0, 1); ry = u >= 1 ? 0 : 360 * easeInOutCubic(u); }
+          if (t >= timing.fadeStart) {
+            var q = clamp((t - timing.fadeStart - (outLen * 0.35) * (i / Math.max(1, n - 1))) / (outLen * 0.5), 0, 1);
+            rx += 100 * easeInCubic(q); op = Math.min(op, 1 - clamp((q - 0.4) / 0.6, 0, 1));
+          }
+          var shade = Math.abs(Math.sin((rx / 180) * Math.PI)) * 0.4 + Math.abs(Math.sin((ry / 180) * Math.PI)) * 0.35;
+          s.style.opacity = op.toFixed(4);
+          s.style.filter = shade > 0.01 ? 'brightness(' + (1 - shade).toFixed(3) + ')' : 'none';
+          s.style.transform = (rx || ry || y) ? 'perspective(' + P + 'px) translateY(' + y.toFixed(2) + 'px) rotateX(' + rx.toFixed(3) + 'deg) rotateY(' + ry.toFixed(3) + 'deg)' : 'none';
+        });
+        return { transform: 'none', opacity: t >= timing.fadeEnd ? 0 : 1 };
+      },
+    },
+
+    // คาราโอเกะ (พรีเมียม): สีวิ่งตามคำร้องจากซ้ายไปขวา มีลูกบอลกระโดดนำ · สีตัวอักษร = สีที่วิ่ง
+    karaoke: {
+      intro: 0.5, outro: 0.4, loop: 2.4, fit: 1.12, premium: true,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        fill.style.color = luminance(o.fill) > 0.86 ? '#8b919a' : '#ffffff';
+        el.__hl = overlayText(el, 'tt-hl', o.text, 'color:' + o.fill + ';' + (fill.style.filter ? 'filter:' + fill.style.filter + ';' : '') + 'clip-path:inset(-30% 100% -30% -5%);');
+        var b = el.ownerDocument.createElement('i');
+        b.className = 'tt-x tt-ball';
+        b.setAttribute('aria-hidden', 'true');
+        var d = Math.max(6, Math.round(o.size * 0.22));
+        b.style.cssText = 'position:absolute;left:0;top:0;width:' + d + 'px;height:' + d + 'px;border-radius:50%;opacity:0;pointer-events:none;background:' + o.fill + ';' +
+          (o.strokeRatio > 0 ? 'box-shadow:0 0 0 ' + Math.max(1, Math.round(o.size * o.strokeRatio * 0.5)) + 'px ' + o.stroke + ';' : '');
+        el.appendChild(b);
+        el.__ball = b; el.__ballD = d;
+        el.__beats = Math.max(2, wordUnits(o.text).filter(function (w) { return !w.space; }).length);
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var y = 0, op = 1, p = -1, hlOp = 1, ballOp = 0;
+        if (t < intro) { var e = easeOutCubic(clamp(t / intro, 0, 1)); y = (1 - e) * 0.25 * fs; op = clamp(t / (intro * 0.6), 0, 1); }
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 2.4) : -1;
+        if (h >= 0) {
+          p = clamp((h - 0.15) / 1.2, 0, 1);
+          ballOp = clamp((h - 0.02) / 0.12, 0, 1) * (1 - clamp((h - 1.35) / 0.15, 0, 1));
+          hlOp = 1 - clamp((h - 1.5) / 0.35, 0, 1);
+        }
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.85), 0, 1); y -= easeInCubic(q) * 0.2 * fs; op = 1 - easeInCubic(q); }
+        if (t >= timing.fadeEnd) op = 0;
+        var hl = el.__hl;
+        if (hl) {
+          hl.style.clipPath = 'inset(-30% ' + (p < 0 ? 100 : (1 - p) * 100).toFixed(2) + '% -30% -5%)';
+          hl.style.opacity = hlOp.toFixed(4);
+        }
+        var b = el.__ball;
+        if (b) {
+          if (ballOp > 0.001 && p >= 0) {
+            var fill = el.querySelector('.fill');
+            var er = el.getBoundingClientRect(), fr = fill.getBoundingClientRect(), d = el.__ballD;
+            var hop = Math.abs(Math.sin(p * Math.PI * el.__beats));
+            var x = fr.left - er.left + p * fr.width - d / 2;
+            var by = fr.top - er.top + fr.height * 0.16 - d - hop * fs * 0.28;
+            b.style.transform = 'translate(' + x.toFixed(1) + 'px,' + by.toFixed(1) + 'px) scale(' + (1 + (1 - hop) * 0.12).toFixed(3) + ',' + (1 - (1 - hop) * 0.12).toFixed(3) + ')';
+          }
+          b.style.opacity = ballOp.toFixed(4);
+        }
+        return { transform: 'translateY(' + y.toFixed(2) + 'px)', opacity: op };
+      },
+    },
+
+    // แถบชื่อ Lower Third (พรีเมียม): ขีดสีโผล่ แถบปาดออก ข้อความสไลด์ตาม · สีขอบ = สีแถบ · สีตัวอักษร = สีข้อความและขีด
+    lower: {
+      intro: 1.0, outro: 0.6, loop: 3.0, fit: 1.08, premium: true,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        fill.style.position = 'relative';
+        fill.style.zIndex = '1';
+        fill.style.filter = 'none';
+        el.__bar = addBox(el, 'tt-bar', 'left:.22em;right:.1em;top:.4em;bottom:.4em;border-radius:.06em;overflow:hidden;background:' + o.stroke + ';' +
+          (o.shadow ? 'box-shadow:0 .06em .2em rgba(0,0,0,.4);' : ''));
+        var sh = el.ownerDocument.createElement('i');
+        sh.style.cssText = 'position:absolute;top:0;bottom:0;left:0;width:35%;opacity:0;background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);';
+        el.__bar.appendChild(sh);
+        el.__barShine = sh;
+        el.__acc = addBox(el, 'tt-acc', 'left:0;width:.13em;top:.32em;bottom:.32em;border-radius:.03em;background:' + o.fill + ';');
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var fill = el.querySelector('.fill');
+        var fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var acc = 1, bar = 1, rev = 1, tx = 0, cut = 0, barOrigin = '0% 50%', shine = -1;
+        if (t < intro) {
+          acc = easeOutCubic(clamp(t / (intro * 0.3), 0, 1));
+          bar = easeOutExpo(clamp((t - intro * 0.12) / (intro * 0.5), 0, 1));
+          var r = easeOutCubic(clamp((t - intro * 0.3) / (intro * 0.6), 0, 1));
+          rev = r; tx = (1 - r) * -0.5 * fs;
+        }
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 3) : -1;
+        if (h >= 0.2 && h < 1.0) shine = easeInOutSine((h - 0.2) / 0.8);
+        if (t >= timing.fadeStart) {
+          var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1);
+          var tq = easeInCubic(clamp(q / 0.5, 0, 1));
+          rev = 1 - tq; tx = -tq * 0.3 * fs;
+          bar = 1 - easeInCubic(clamp((q - 0.2) / 0.55, 0, 1)); barOrigin = '0% 50%';
+          acc = 1 - easeInCubic(clamp((q - 0.6) / 0.35, 0, 1));
+        }
+        if (el.__bar) { el.__bar.style.transformOrigin = barOrigin; el.__bar.style.transform = 'scaleX(' + bar.toFixed(4) + ')'; el.__bar.style.opacity = bar > 0.002 ? '1' : '0'; }
+        if (el.__barShine) { el.__barShine.style.opacity = shine >= 0 ? '1' : '0'; el.__barShine.style.transform = 'translateX(' + (lerp(-110, 300, Math.max(0, shine))).toFixed(2) + '%)'; }
+        if (el.__acc) { el.__acc.style.transform = 'scaleY(' + acc.toFixed(4) + ')'; el.__acc.style.opacity = acc > 0.002 ? '1' : '0'; }
+        fill.style.clipPath = 'inset(-20% -10% -20% 0)';
+        fill.style.transform = tx ? 'translateX(' + tx.toFixed(2) + 'px)' : '';
+        fill.style.opacity = rev.toFixed(4);
+        return { transform: 'none', opacity: t >= timing.fadeEnd ? 0 : 1 };
+      },
+    },
+
+    // กระแทกสะเทือน (พรีเมียม): ข้อความกระแทกลงจอ สั่น คลื่นกระแทกและเศษกระจาย · ค้าง: เต้นตุบๆ · ออก: หดหายหมุน
+    impact: {
+      intro: 0.9, outro: 0.5, loop: 2.0, fit: 1.16, premium: true,
+      build: function (el, o) {
+        var doc = el.ownerDocument;
+        el.__ring = addBox(el, 'tt-ring', 'left:0;right:0;top:0;bottom:0;border-radius:50%;opacity:0;border:' + Math.max(2, Math.round(o.size * 0.05)) + 'px solid ' + o.fill + ';');
+        el.__bits = [];
+        for (var j = 0; j < 12; j++) {
+          var b = doc.createElement('i');
+          b.className = 'tt-x tt-bit';
+          b.setAttribute('aria-hidden', 'true');
+          var len = (0.35 + hash(j + 80) * 0.35).toFixed(3);
+          b.style.cssText = 'position:absolute;left:50%;top:50%;width:' + len + 'em;height:.09em;margin:-.045em 0 0 -' + (len / 2).toFixed(3) + 'em;border-radius:.05em;opacity:0;pointer-events:none;background:' + (j % 3 === 2 ? o.stroke : o.fill) + ';';
+          el.appendChild(b);
+          el.__bits.push({ el: b, a: (j / 12) * Math.PI * 2 + (hash(j + 90) - 0.5) * 0.4, k: 0.85 + hash(j + 100) * 0.4 });
+        }
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var T0 = Math.min(0.28, intro * 0.35);
+        var s = 1, op = 1, dx = 0, dy = 0, rot = 0, ring = -1, burst = -1;
+        if (t < T0) { var p = clamp(t / T0, 0, 1); s = lerp(3.4, 1, easeInCubic(p)); op = clamp(p * 2.5, 0, 1); }
+        else if (t < intro) {
+          var d = 1 - clamp((t - T0) / (intro - T0), 0, 1), amp = d * d * 0.06 * fs, sd = Math.floor(t * 60);
+          dx = (hash(sd) - 0.5) * 2 * amp; dy = (hash(sd + 500) - 0.5) * 2 * amp;
+          s = 1 + Math.sin((t - T0) * 40) * 0.05 * d * d;
+          ring = (t - T0) / Math.max(0.2, intro - T0); burst = ring;
+        }
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 2) : -1;
+        if (h >= 0.1 && h < 0.35) s = 1 + 0.07 * Math.sin(((h - 0.1) / 0.25) * Math.PI);
+        else if (h >= 0.35 && h < 0.6) s = 1 + 0.04 * Math.sin(((h - 0.35) / 0.25) * Math.PI);
+        if (h >= 0.1 && h < 0.7) ring = ((h - 0.1) / 0.6) * 0.75 + 0.25;
+        if (t >= timing.fadeStart) {
+          var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1);
+          s *= 1 - easeInBack(q); rot = q * -12; op = 1 - clamp((q - 0.6) / 0.4, 0, 1);
+        }
+        if (t >= timing.fadeEnd) op = 0;
+        if (el.__ring) {
+          var ru = ring > 0 && ring < 1 ? ring : -1;
+          el.__ring.style.opacity = ru < 0 ? '0' : ((1 - ru) * (h >= 0 ? 0.45 : 0.9)).toFixed(4);
+          el.__ring.style.transform = 'scale(' + lerp(0.75, 1.45, easeOutCubic(Math.max(0, ru))).toFixed(4) + ')';
+        }
+        var W = el.offsetWidth / 2, H = el.offsetHeight / 2;
+        (el.__bits || []).forEach(function (b) {
+          var u = burst > 0 && burst < 1 ? burst : -1;
+          if (u < 0) { b.el.style.opacity = '0'; return; }
+          var r = lerp(0.55, 1.3, easeOutCubic(u)) * b.k;
+          b.el.style.opacity = (1 - u).toFixed(4);
+          b.el.style.transform = 'translate(' + (Math.cos(b.a) * W * r).toFixed(1) + 'px,' + (Math.sin(b.a) * H * r * 1.3).toFixed(1) + 'px) rotate(' + (b.a * 180 / Math.PI).toFixed(2) + 'deg) scaleX(' + (1 - u * 0.8).toFixed(3) + ')';
+        });
+        return { transform: 'translate(' + dx.toFixed(2) + 'px,' + dy.toFixed(2) + 'px) rotate(' + rot.toFixed(2) + 'deg) scale(' + Math.max(0, s).toFixed(5) + ')', opacity: op };
+      },
+    },
+
+    // กล่องแชท (พรีเมียม): กล่องข้อความเด้งขึ้น จุดกำลังพิมพ์... แล้วข้อความโผล่ · ค้าง: กล่องโยกเบาๆ · สีขอบ = สีกล่อง
+    bubble: {
+      intro: 1.2, outro: 0.5, loop: 2.4, fit: 1.16, premium: true,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        fill.style.position = 'relative';
+        fill.style.zIndex = '1';
+        fill.style.filter = 'none';
+        var box = addBox(el, 'tt-bubble', 'left:.05em;right:.05em;top:.2em;bottom:.3em;border-radius:.55em;background:' + o.stroke + ';' +
+          (o.shadow ? 'box-shadow:0 .08em .25em rgba(0,0,0,.35);' : ''));
+        var tail = el.ownerDocument.createElement('i');
+        tail.style.cssText = 'position:absolute;left:14%;bottom:-.17em;width:.42em;height:.42em;border-radius:.06em;background:' + o.stroke + ';transform:rotate(45deg) skew(8deg,8deg);';
+        box.appendChild(tail);
+        el.__box = box;
+        var dots = addBox(el, 'tt-dots', 'left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;gap:.16em;z-index:2;opacity:0;');
+        el.__dots = [0, 1, 2].map(function () {
+          var d = el.ownerDocument.createElement('i');
+          d.style.cssText = 'display:block;width:.2em;height:.2em;border-radius:50%;background:' + o.fill + ';';
+          dots.appendChild(d);
+          return d;
+        });
+        el.__dotsBox = dots;
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var fill = el.querySelector('.fill');
+        var fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var bs = 1, txt = 1, ty = 0, dotsOp = 0, s = 1, rot = 0, op = 1;
+        var short = intro < 0.7; // โหมดซับ: ไม่มีจุดกำลังพิมพ์
+        if (t < intro) {
+          bs = easeOutBack(clamp(t / (short ? intro : 0.45), 0, 1));
+          op = clamp(t / 0.08, 0, 1);
+          if (!short) {
+            dotsOp = clamp((t - 0.15) / 0.12, 0, 1) * (1 - clamp((t - 0.62) / 0.12, 0, 1));
+            var r = easeOutCubic(clamp((t - 0.66) / (intro - 0.66), 0, 1)); txt = r; ty = (1 - r) * 0.25 * fs;
+          } else { var r2 = easeOutCubic(clamp(t / intro, 0, 1)); txt = r2; ty = (1 - r2) * 0.2 * fs; }
+        }
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 2.4) : -1;
+        if (h >= 0.1 && h < 1.1) { var w = (h - 0.1) / 1.0; rot = Math.sin(w * Math.PI * 2) * 2.2 * Math.sin(w * Math.PI); s = 1 + 0.03 * Math.sin(w * Math.PI); }
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1); s *= 1 - easeInBack(q); op = 1 - clamp((q - 0.5) / 0.5, 0, 1); }
+        if (t >= timing.fadeEnd) op = 0;
+        if (el.__box) { el.__box.style.transformOrigin = '18% 100%'; el.__box.style.transform = 'scale(' + Math.max(0, bs).toFixed(4) + ')'; }
+        (el.__dots || []).forEach(function (d, i) {
+          var u = ((t - i * 0.1) % 0.45) / 0.45;
+          d.style.transform = 'translateY(' + (-Math.max(0, Math.sin(u * Math.PI * 2)) * 0.12 * fs).toFixed(2) + 'px)';
+        });
+        if (el.__dotsBox) el.__dotsBox.style.opacity = dotsOp.toFixed(4);
+        fill.style.opacity = txt.toFixed(4);
+        fill.style.transform = ty ? 'translateY(' + ty.toFixed(2) + 'px)' : '';
+        el.style.transformOrigin = '18% 100%';
+        return { transform: 'rotate(' + rot.toFixed(3) + 'deg) scale(' + Math.max(0, s).toFixed(5) + ')', opacity: op };
+      },
+    },
   };
 
   var NAMES = Object.keys(MOTIONS);
-  function meta(motion) { var m = MOTIONS[motion] || MOTIONS.pop; return { intro: m.intro, outro: m.outro, loop: m.loop, premium: !!m.build }; }
+  // premium = ท่าระดับพรีเมียม (ท่าที่ไม่ระบุ: มีชิ้นส่วนเพิ่ม = พรีเมียม) · timed = ใช้เวลาเข้า/ออกตามท่า (ท่าฟรีรุ่นแรก pop/drop ใช้เวลาเดิมคงที่)
+  function meta(motion) {
+    var name = MOTIONS[motion] ? motion : 'pop', m = MOTIONS[name];
+    return { intro: m.intro, outro: m.outro, loop: m.loop, premium: m.premium !== undefined ? m.premium : !!m.build, timed: name !== 'pop' && name !== 'drop' };
+  }
 
   // เวลาของคลิปยาว seconds วินาที (ใช้เหมือนกันทั้งตัวเรนเดอร์และตัวอย่างสด)
   function timingFor(motion, seconds, fps) {
     var m = MOTIONS[motion] || MOTIONS.pop;
-    return { popUp: 0.3, settle: m.intro, fadeStart: seconds - m.outro, fadeEnd: seconds - 1 / (fps || 60), loop: m.loop };
+    var tm = { popUp: 0.3, settle: m.intro, fadeStart: seconds - m.outro, fadeEnd: seconds - 1 / (fps || 60), loop: m.loop };
+    if (m.loop) {
+      // ช่วงค้างยาวกว่ารอบ: เศษที่ไม่ครบรอบไว้ต้นช่วงค้างเป็นภาพนิ่ง → รอบสุดท้ายจบพอดีตอนเริ่มท่าออก (ไม่ตัดกลางลูกเล่น)
+      var f = fps || 60, holdN = Math.round(seconds * f) - Math.round(m.intro * f) - Math.round(m.outro * f), loopN = Math.round(m.loop * f);
+      tm.holdOff = loopN < holdN ? (holdN % loopN) / f : 0;
+    }
+    return tm;
+  }
+  // ตำแหน่งในรอบค้าง (วินาที) ใช้ร่วมกันทุกท่า · ก่อนถึง holdOff = ภาพนิ่ง (ตำแหน่ง 0)
+  function holdPhase(t, timing, loop) {
+    var d = t - timing.settle - (timing.holdOff || 0);
+    return d <= 0 ? 0 : d % (timing.loop || loop);
   }
 
   /*
@@ -400,6 +976,17 @@
     if (motion === 'kinetic' && wordAt && wordAt.length) tm.wordAt = wordAt;
     return tm;
   }
+  /*
+   * เฟรมช่วงค้างที่ j (0..holdN-1) ใช้ภาพวนรอบที่เท่าไร (0..loopN-1)
+   *   เศษที่ไม่ครบรอบไว้ต้นช่วงค้างเป็นภาพนิ่ง (= ภาพตอนจบท่าเข้า) รอบสุดท้ายจึงจบพอดีตอนเริ่มท่าออก
+   *   ไม่ว่าคลิปยาวเท่าไร ไม่มีการตัดเข้าท่าออกกลางลูกเล่น (เช่น แสงวิ่งค้างครึ่งทาง)
+   */
+  function holdIndex(j, holdN, loopN) {
+    if (loopN <= 1) return 0;
+    var off = holdN % loopN;
+    return j < off ? 0 : (j - off) % loopN;
+  }
+
   // ช่วงเวลาที่ภาพขยับ (ต้องวาดทุกเฟรม) นอกนั้นนิ่ง วาดเฟรมเดียวใช้ซ้ำได้
   function subtitleMoving(motion, t, tm) {
     if (t < tm.settle + 0.02 || t >= tm.fadeStart) return true;
@@ -425,8 +1012,10 @@
     var M = MOTIONS[motion];
     clearExtras(el);
     fill.textContent = opts.text;
-    fill.style.color = '';
+    fill.removeAttribute('style'); // ล้างสไตล์ที่ท่าก่อนหน้าตั้งไว้ (สี ไล่สี ตัดขอบ ฯลฯ)
     fill.style.gridArea = '1 / 1';
+    el.style.filter = '';
+    el.style.transformOrigin = '';
     el.__units = el.__shineUnits = el.__lines = el.__shine = null;
     el.style.fontFamily = '"' + opts.fontFamily + '", sans-serif';
     el.style.fontWeight = String(opts.weight || 700);
@@ -476,5 +1065,5 @@
     el.style.opacity = o.toFixed(5);
   }
 
-  g.TTMotion = { MOTIONS: NAMES, TIMING: TIMING, meta: meta, timingFor: timingFor, subtitleTiming: subtitleTiming, subtitleMoving: subtitleMoving, filterMarkup: filterMarkup, setup: setup, setTime: setTime };
+  g.TTMotion = { MOTIONS: NAMES, TIMING: TIMING, meta: meta, timingFor: timingFor, subtitleTiming: subtitleTiming, subtitleMoving: subtitleMoving, holdIndex: holdIndex, filterMarkup: filterMarkup, setup: setup, setTime: setTime };
 })(typeof window !== 'undefined' ? window : globalThis);
