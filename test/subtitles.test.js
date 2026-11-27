@@ -595,3 +595,218 @@ test('Groq: ส่งประโยคนำทางภาษาไทยท�
   assert.ok(prompts[1].startsWith(BASE_PROMPT) && prompts[1].endsWith('ท่อนก่อนหน้า'));
   assert.doesNotMatch(BASE_PROMPT, /เอ่อ|อ่า |ติดตาม|ซับสไครบ์/);
 });
+
+// ---------- หลายแบบ (แอนิเมชัน) ในคลิปเดียว ----------
+test('หลายแบบในคลิปเดียว: ตรวจแบบรายบรรทัด (ต้องอยู่ในคลัง · ไม่เกิน 8 แบบ) และเก็บแบบไว้กับบรรทัด', () => {
+  const styles = new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']);
+  const row = (i, p) => ({ start: i, end: i + 0.8, text: `บรรทัด ${i}`, ...(p === undefined ? {} : { p }) });
+  const ok = subcues.validateCues([row(0), row(1, 'b'), row(2, ''), row(3, null)], { duration: 10, styles, main: 'a' });
+  assert.equal(ok.error, undefined);
+  assert.deepEqual(ok.cues.map((c) => c.p || null), [null, 'b', null, null], 'ไม่เลือก / ค่าว่าง = ใช้แบบหลัก');
+  assert.ok(!('p' in ok.cues[0]), 'บรรทัดแบบหลักไม่มีช่อง p (ข้อมูลเดิมไม่เปลี่ยน)');
+  assert.match(subcues.validateCues([row(0, 'zzz')], { duration: 10, styles, main: 'a' }).error, /บรรทัดที่ 1: แบบที่เลือกไม่มีในคลัง/);
+  assert.match(subcues.validateCues([row(0, 'b')], { duration: 10 }).error, /ไม่มีในคลัง/, 'ไม่ส่งรายการแบบมา = ไม่รับแบบรายบรรทัด');
+  // แบบหลัก + อีก 7 = 8 ได้ · 9 ไม่ได้
+  const eight = ['b', 'c', 'd', 'e', 'f', 'g', 'h'].map((p, i) => row(i + 1, p)).concat([row(0)]);
+  assert.equal(subcues.validateCues(eight, { duration: 20, styles, main: 'a' }).error, undefined);
+  assert.match(subcues.validateCues(eight.concat([row(9, 'i')]), { duration: 20, styles, main: 'a' }).error, /ไม่เกิน 8 แบบ/);
+  // บรรทัดที่ระบุแบบหลักตรงๆ นับเป็นแบบเดียวกัน
+  assert.equal(subcues.validateCues(eight.concat([row(9, 'a')]), { duration: 20, styles, main: 'a' }).error, undefined);
+});
+
+test('หลายแบบในคลิปเดียว: แต่ละบรรทัดได้ท่า/ตำแหน่งของตัวเอง · แบบเดียวทั้งคลิปทำงานเหมือนเดิม', () => {
+  const { renderCues, looksOf } = require('../src/subtitles');
+  const motions = { main: 'pop', st: 'stamp', zm: 'zoom' };
+  const motionOf = (s) => motions[s] || null;
+  const job = { product_slug: 'main', position: 'bottom', looks_json: JSON.stringify({ st: '20' }) };
+  const cues = [
+    { id: 'a', start: 0, end: 1, text: 'หนึ่ง', w: [] },
+    { id: 'b', start: 1, end: 2, text: 'สอง', w: [], p: 'st' },
+    { id: 'c', start: 2, end: 3, text: 'สาม', w: [], p: 'zm' },
+    { id: 'd', start: 3, end: 4, text: 'สี่', w: [], p: 'main' },
+    { id: 'e', start: 4, end: 5, text: 'ห้า', w: [], p: 'gone' },
+  ];
+  const out = renderCues(job, cues, motionOf);
+  assert.deepEqual(out.map((c) => [c.m, c.pos]), [['pop', 'bottom'], ['stamp', '20'], ['zoom', 'bottom'], ['pop', 'bottom'], ['pop', 'bottom']],
+    'แบบที่ไม่เคยลาก = ตำแหน่งหลัก · แบบที่ไม่มีแล้ว = แบบหลัก');
+  assert.deepEqual(looksOf({ looks_json: 'not json' }), {});
+  // วางแผนเฟรม: ท่าของแต่ละบรรทัดติดไปกับภาพ (ทั้งเครื่องร้านและเบราว์เซอร์ใช้ตัวเดียวกัน)
+  require('../public/motion.js');
+  const P = require('../public/subplan');
+  const plan = P.planFrames(out, { duration: 5, motion: 'pop', TT: globalThis.TTMotion });
+  const byCue = {};
+  for (const s of plan.shots) byCue[s.cue] = s.motion;
+  assert.deepEqual(byCue, { 0: 'pop', 1: 'stamp', 2: 'zoom', 3: 'pop', 4: 'pop' });
+  const plain = P.planFrames(cues.map(({ p, ...c }) => c), { duration: 5, motion: 'kinetic', TT: globalThis.TTMotion });
+  assert.ok(plain.shots.every((s) => s.motion === 'kinetic'), 'ไม่มีแบบรายบรรทัด = ท่าเดียวทั้งคลิปเหมือนเดิม');
+  // ตำแหน่งต่อบรรทัด: แถบสูงเท่ากัน ย้ายแค่ y
+  const a = P.cueLayout(1080, 1920, out[0], { size: '100', position: 'bottom' });
+  const b = P.cueLayout(1080, 1920, out[1], { size: '100', position: 'bottom' });
+  assert.equal(a.band, b.band);
+  assert.equal(b.y + b.band / 2, 1920 * 0.2);
+  assert.deepEqual(P.cueLayout(1080, 1920, { pos: undefined }, { size: '100', position: 'bottom' }), P.layoutFor(1080, 1920, { size: '100', position: 'bottom' }));
+});
+
+test('หลายแบบในคลิปเดียว: บันทึกแบบรายบรรทัด + ตำแหน่งของแต่ละแบบ → สร้างคลิปได้ท่าตรงตามบรรทัด', async () => {
+  const c = await newUser('multi-look@example.com');
+  const main = await claim(c, 'follow-now');
+  await claim(c, 'stamp');
+  const id = await uploadOk(c, main);
+  await ctx.subtitles.idle();
+  const cues = JSON.parse(jobOf(id).cues_json);
+  assert.ok(cues.length >= 3);
+  const send = cues.map((x, i) => ({ id: x.id, start: x.start, end: x.end, text: x.text, ...(i === 1 ? { p: 'stamp' } : {}) }));
+  const style = { order: main, font: 'kanit', fill: '#ffffff', stroke: '#111111', outline: 'medium', shadow: false, size: '100', position: 'bottom',
+    looks: { stamp: '25', 'follow-now': '50', 'not-mine': '10', 'zoom-in': '30', bad: 'x' } };
+  // แบบที่ไม่มีในคลัง ถูกปฏิเสธ ไม่ทับของเดิม
+  const bad = await c.json(`/subtitles/${id}/save`, { cues: send.map((x, i) => (i === 2 ? { ...x, p: 'glitch' } : x)), style });
+  assert.equal(bad.status, 400);
+  assert.match((await bad.json()).error, /ไม่มีในคลัง/);
+  assert.ok(!JSON.parse(jobOf(id).cues_json).some((x) => x.p), 'ข้อมูลผิดไม่ทับของเดิม');
+  const sv = await c.json(`/subtitles/${id}/save`, { cues: send, style });
+  const svj = await sv.json();
+  assert.equal(sv.status, 200, svj.error);
+  assert.equal(svj.cues[1].p, 'stamp');
+  assert.deepEqual(JSON.parse(jobOf(id).looks_json), { stamp: '25' }, 'เก็บเฉพาะแบบในคลังที่ไม่ใช่แบบหลัก และตำแหน่งที่ถูกต้อง');
+  // หน้าแก้ซับ: มีปุ่มเปลี่ยนแบบรายบรรทัด เลือกหลายบรรทัด และส่งข้อมูลแบบไปให้หน้าเว็บ
+  const ed = await (await c.req(`/subtitles/${id}`)).text();
+  assert.match(ed, /data-tl-look/);
+  assert.match(ed, /data-multi /);
+  assert.match(ed, /data-look-sheet/);
+  const data = JSON.parse(ed.split('id="sub-data">')[1].split('</script>')[0]);
+  assert.equal(data.cues[1].p, 'stamp');
+  assert.deepEqual(data.style.looks, { stamp: '25' });
+  assert.ok(data.owned.some((o) => o.slug === 'stamp' && o.motion === 'stamp'));
+  // สร้างคลิป: บรรทัดที่ 2 ท่า stamp ที่ 25% · ที่เหลือท่าหลัก (drop) ตำแหน่งหลัก
+  assert.equal((await c.json(`/subtitles/${id}/save?render=1`, { cues: send, style })).status, 200);
+  await ctx.subtitles.idle();
+  assert.equal(jobOf(id).status, 'done');
+  const last = rendered[rendered.length - 1];
+  assert.equal(last.motion, 'drop');
+  assert.deepEqual(last.cues.map((x) => [x.m, x.pos]).slice(0, 3), [['drop', 'bottom'], ['stamp', '25'], ['drop', 'bottom']]);
+  // .srt ไม่เปลี่ยน
+  assert.match(await (await c.req(`/subtitles/${id}/srt`)).text(), /^﻿?1\r\n/);
+  // แก้กลับเป็นแบบเดียวทั้งคลิป
+  await c.post(`/subtitles/${id}/edit`);
+  const back = await c.json(`/subtitles/${id}/save`, { cues: send.map(({ p, ...x }) => x), style: { ...style, looks: {} } });
+  assert.equal(back.status, 200);
+  assert.ok(!JSON.parse(jobOf(id).cues_json).some((x) => x.p));
+  assert.equal(jobOf(id).looks_json, null);
+});
+
+test('เรนเดอร์จริง: ซับหลายแบบหลายตำแหน่งในคลิปเดียว อยู่ถูกที่ตามเวลา', async (t) => {
+  const tools = require('../render/tools');
+  const R = require('../render/subtitles');
+  if (!tools.checkRenderTools().ok) return t.skip('ไม่มี ffmpeg หรือ Chrome');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'subs-multi-'));
+  try {
+    const src = path.join(dir, 'in.mp4');
+    require('child_process').execFileSync(tools.ffmpegPath(), ['-y', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=c=0x334455:s=720x1280:r=30:d=4',
+      '-f', 'lavfi', '-i', 'sine=f=300:d=4', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', src]);
+    const info = await R.probe(src);
+    const cues = [
+      { id: 'a', start: 0.1, end: 1.9, text: 'บรรทัดล่าง', w: null, m: 'pop', pos: 'bottom' },
+      { id: 'b', start: 2.0, end: 3.9, text: 'บรรทัดบน', w: null, m: 'stamp', pos: '20' },
+    ];
+    await R.renderSubtitled({
+      src, outFile: path.join(dir, 'out.mp4'), cues, motion: 'pop', fill: '#ffffff', stroke: '#111111', strokeRatio: 0.05, shadow: false,
+      font: { file: path.join(__dirname, '..', 'fonts', 'Kanit-Bold.ttf'), weight: 700 }, info, size: '100', position: 'bottom',
+    });
+    const out = await R.probe(path.join(dir, 'out.mp4'));
+    assert.deepEqual([out.width, out.height, out.audio], [720, 1280, true]);
+    const P = require('../public/subplan');
+    const low = P.cueLayout(720, 1280, cues[0], { size: '100', position: 'bottom' });
+    const high = P.cueLayout(720, 1280, cues[1], { size: '100', position: 'bottom' });
+    const bright = (t, L) => require('child_process').execFileSync(tools.ffmpegPath(), ['-hide_banner', '-loglevel', 'error', '-ss', String(t), '-i', path.join(dir, 'out.mp4'), '-frames:v', '1',
+      '-vf', `crop=720:${L.band}:0:${L.y},format=gray`, '-f', 'rawvideo', '-'], { maxBuffer: 16e6 }).filter((x) => x > 200).length;
+    assert.ok(bright(1.2, low) > 500, 'วินาทีที่ 1: ซับอยู่ล่าง');
+    assert.ok(bright(1.2, high) < 50, 'วินาทีที่ 1: ด้านบนว่าง');
+    assert.ok(bright(3.2, high) > 500, 'วินาทีที่ 3: ซับแบบที่ 2 อยู่บน');
+    assert.ok(bright(3.2, low) < 50, 'วินาทีที่ 3: ด้านล่างว่าง');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('หน้าแก้ซับในเบราว์เซอร์จริง: เปลี่ยนแบบรายบรรทัด · เลือกหลายบรรทัด · ใช้บ่อยขึ้นก่อน · เลิกทำได้ · ไม่มี error', async (t) => {
+  const tools = require('../render/tools');
+  if (!tools.checkRenderTools().ok) return t.skip('ไม่มี Chrome');
+  const browser = await tools.launchBrowser();
+  try {
+    const bctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page = await bctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(base + '/login');
+    const csrf = async () => decodeURIComponent((await bctx.cookies()).find((x) => x.name === 'csrf').value);
+    const email = 'ui-multi@example.com';
+    await page.request.post(base + '/signup', { form: { csrf: await csrf(), email, password: 'correct-horse-9', password2: 'correct-horse-9', name: '', next: '/library' }, maxRedirects: 0 });
+    for (const slug of ['follow-now', 'stamp', 'zoom-in', 'type-on']) await page.request.post(base + '/checkout', { form: { csrf: await csrf(), product: slug }, maxRedirects: 0 });
+    const main = ctx.db.prepare("SELECT o.id FROM orders o JOIN users u ON u.id = o.user_id WHERE u.email = ? AND o.product_slug = 'follow-now'").get(email).id;
+    const up = await page.request.post(base + '/subtitles/upload', { data: fakeClip(), headers: { 'content-type': 'application/octet-stream', 'x-style': main, 'x-filename': 'a.mp4', 'x-csrf-token': await csrf() } });
+    assert.equal(up.status(), 200);
+    const id = (await up.json()).url.split('/').pop();
+    await ctx.subtitles.idle();
+    // ใช้บ่อย: zoom-in ขึ้นก่อนในหน้าแรก (และถูกเลือกไว้ให้)
+    await page.goto(base + '/subtitles');
+    await page.evaluate(() => localStorage.setItem('aw-sub-looks', JSON.stringify({ 'zoom-in': { n: 3, t: 1 } })));
+    await page.goto(base + '/subtitles');
+    assert.equal(await page.getAttribute('.sub-styles .sub-style:first-child input', 'data-slug'), 'zoom-in');
+    assert.equal(await page.$eval('input[data-slug="zoom-in"]', (x) => x.checked), true);
+    assert.equal(await page.isVisible('.sub-styles .sub-style:first-child .sub-used'), true);
+
+    await page.goto(base + `/subtitles/${id}`);
+    await page.waitForSelector('.sub-line .sub-line-lk');
+    const n = await page.$$eval('.sub-line', (l) => l.length);
+    assert.ok(n >= 4);
+    // แบบหลักในแท็บหน้าตาซับ: ใช้บ่อยขึ้นก่อน
+    assert.equal(await page.getAttribute('[data-main-chips] .sub-chip:first-child input', 'data-slug'), 'zoom-in');
+    // บรรทัดที่ 2 → ปั๊มตรา
+    await page.click('.sub-line:nth-child(2) .sub-line-lk');
+    await page.waitForSelector('[data-look-sheet]:not([hidden])');
+    assert.equal(await page.textContent('[data-look-h]'), 'แบบของบรรทัดนี้');
+    assert.match(await page.textContent('[data-look-body]'), /ใช้บ่อย/);
+    await page.click('[data-look-body] .look-grid:last-of-type [data-look-pick="stamp"]');
+    assert.equal(await page.isHidden('[data-look-sheet]'), true);
+    assert.match(await page.textContent('.sub-line:nth-child(2) .sub-line-lk'), /ปั๊มตรา/);
+    assert.equal(await page.$eval('[data-tl-cues] .sub-tl-cue:nth-child(2)', (b) => b.classList.contains('lk')), true, 'บล็อกบนไทม์ไลน์มีสีของแบบ');
+    // เลือกหลายบรรทัด (3 และ 4) → ซูมพุ่งเข้า
+    await page.click('[data-multi]');
+    await page.click('.sub-line:nth-child(3)');
+    await page.click('.sub-line:nth-child(4)');
+    assert.equal(await page.textContent('[data-multi-n]'), 'เลือก 2 บรรทัด');
+    await page.click('[data-multi-look]');
+    assert.equal(await page.textContent('[data-look-h]'), 'แบบของ 2 บรรทัด');
+    await page.click('[data-look-body] .look-grid:last-of-type [data-look-pick="zoom-in"]');
+    assert.equal(await page.isHidden('[data-multi-bar]'), true, 'เปลี่ยนแล้วออกจากโหมดเลือกหลายบรรทัด');
+    // ลากซับตอนแสดงบรรทัดแบบปั๊มตรา = ย้ายเฉพาะแบบนั้น
+    await page.click('.sub-line:nth-child(2) .sub-line-t');
+    await page.evaluate(() => { const b = document.querySelector('[data-band]'); b.focus(); });
+    for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowUp');
+    assert.match(await page.textContent('[data-save-state]'), /ย้ายเฉพาะแบบ "ปั๊มตรา"/);
+    // รอบันทึกอัตโนมัติ
+    await page.waitForFunction(() => /บันทึกแล้ว/.test(document.querySelector('[data-save-state]').textContent), null, { timeout: 8000 });
+    let saved = JSON.parse(jobOf(id).cues_json);
+    assert.deepEqual(saved.slice(0, 4).map((x) => x.p || null), [null, 'stamp', 'zoom-in', 'zoom-in']);
+    const looks = JSON.parse(jobOf(id).looks_json);
+    assert.ok(looks.stamp && !looks['zoom-in'], `ตำแหน่งเฉพาะแบบที่ลาก (${jobOf(id).looks_json})`);
+    assert.equal(jobOf(id).position, 'bottom', 'ตำแหน่งหลักไม่ขยับ');
+    // แบ่งบรรทัดแบบเอง: ทั้งสองท่อนยังเป็นแบบเดิม · เลิกทำกลับได้
+    await page.click('[data-tl-undo]');
+    await page.waitForFunction(() => /บันทึกแล้ว/.test(document.querySelector('[data-save-state]').textContent), null, { timeout: 8000 });
+    saved = JSON.parse(jobOf(id).cues_json);
+    assert.deepEqual(saved.slice(0, 4).map((x) => x.p || null), [null, 'stamp', null, null], 'เลิกทำ = กลับเป็นแบบหลัก');
+    // กลับเป็นแบบหลักจากกล่อง
+    await page.click('.sub-line:nth-child(2) .sub-line-lk');
+    await page.click('[data-look-body] [data-look-pick=""]');
+    await page.waitForFunction(() => /บันทึกแล้ว/.test(document.querySelector('[data-save-state]').textContent), null, { timeout: 8000 });
+    assert.ok(!JSON.parse(jobOf(id).cues_json).some((x) => x.p));
+    // มือถือ: กล่องเลือกแบบขึ้นจากด้านล่างเต็มกว้าง
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.click('.sub-line:nth-child(1) .sub-line-lk');
+    await page.waitForTimeout(400); // รอท่าเปิดกล่องจบ
+    const box = await page.$eval('.look-sheet-box', (b) => { const r = b.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.bottom)]; });
+    assert.deepEqual(box, [390, 844]);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.isHidden('[data-look-sheet]'), true);
+    assert.deepEqual(errors, []);
+  } finally { await browser.close(); }
+});

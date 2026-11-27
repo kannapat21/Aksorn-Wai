@@ -1544,3 +1544,56 @@ h1 .beta { font-size: .9rem; padding: 2px 10px; vertical-align: .3em; }
 }
 /* จอแคบมาก: ทั้งการ์ดกดได้อยู่แล้ว ซ่อนปุ่มเล็กให้ไม่เบียด */
 @media (max-width: 380px) { .card-cta { display: none; } }
+
+/* ---------- ซับ: หลายแบบในคลิปเดียว · ใช้บ่อยขึ้นก่อน ---------- */
+.sub-used { position: absolute; right: 8px; top: 8px; font-style: normal; font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); }
+.sub-tl-tools { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.sub-tl-cue.lk { background: color-mix(in srgb, var(--lk) 26%, var(--surface)); border-color: color-mix(in srgb, var(--lk) 80%, var(--ink) 10%); }
+.sub-tl-cue.lk.on { background: color-mix(in srgb, var(--lk) 48%, var(--surface)); }
+.sub-tl-cue.pk { box-shadow: inset 0 0 0 2px var(--accent); }
+.sub-tl-cue.pk::before { content: '✓'; position: absolute; left: 4px; top: 2px; font-size: .7rem; font-weight: 700; color: var(--accent); }
+.sub-lines-head { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.sub-lines-head .sub-hint { flex: 1; min-width: 0; }
+.sub-lines-head .sub-mini { flex: none; }
+.sub-multi { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 8px; border-radius: 12px; background: var(--accent-soft); border: 1px solid var(--accent); position: sticky; top: 0; z-index: 2; }
+.sub-multi b { margin-right: auto; font-size: .9rem; }
+.sub-mini.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+.sub-line-ck { display: none; flex: none; width: 20px; height: 20px; margin: 0 2px 0 4px; accent-color: var(--accent); pointer-events: none; }
+.sub-lines.multi .sub-line-ck { display: block; }
+.sub-lines.multi .sub-line-t { display: none; }
+.sub-lines.multi .sub-line { cursor: pointer; }
+.sub-lines.multi .sub-line-in { cursor: pointer; pointer-events: none; }
+.sub-lines.multi .sub-line-lk { pointer-events: none; }
+.sub-line.pk { border-color: var(--accent); background: var(--accent-soft); }
+.sub-line-lk { flex: none; display: inline-flex; align-items: center; gap: 6px; max-width: 34%; min-width: 36px; min-height: 36px; justify-content: center; padding: 4px 8px; border-radius: 999px; border: 1px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: .8rem; cursor: pointer; }
+.sub-line-lk:hover { border-color: var(--line); color: var(--ink); }
+.sub-line-lk.own { border-color: var(--line); background: var(--surface-2); color: var(--ink); justify-content: flex-start; }
+.sub-line-lk i { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.sub-line-lk span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-line-lk:disabled { opacity: .5; cursor: default; }
+/* กล่องเลือกแบบ: มือถือขึ้นจากด้านล่าง · คอมอยู่กลางจอ */
+.look-sheet { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgba(10, 12, 16, .45); }
+.look-sheet[hidden] { display: none; }
+.look-sheet-box { width: min(520px, 100%); max-height: min(640px, 86vh); display: grid; grid-template-rows: auto 1fr; border-radius: 18px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-lg, 0 18px 40px rgba(0,0,0,.25)); overflow: hidden; }
+.look-sheet-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px 8px; }
+.look-sheet-top .sub-mini { min-width: 36px; min-height: 36px; }
+.look-sheet-body { overflow-y: auto; overscroll-behavior: contain; padding: 0 14px 16px; }
+.look-main { width: 100%; display: flex; align-items: baseline; gap: 8px; text-align: left; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--line); background: var(--surface-2); color: var(--ink); font: inherit; cursor: pointer; }
+.look-main span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.look-main.on, .look-card.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.look-h { margin: 14px 0 6px; font-size: .82rem; font-weight: 700; color: var(--muted); }
+.look-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.look-card { position: relative; display: grid; grid-template-rows: auto auto; gap: 0; padding: 0; border-radius: 12px; border: 2px solid var(--line); background: var(--surface-2); color: var(--ink); font: inherit; cursor: pointer; overflow: hidden; text-align: center; }
+.look-card img { width: 100%; height: 72px; object-fit: cover; display: block; background: #222; }
+.look-card span { padding: 5px 4px 6px; font-size: .78rem; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.look-card:focus-visible, .look-main:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.look-more { display: block; margin: 14px auto 0; font-size: .9rem; }
+html.look-open { overflow: hidden; }
+@media (max-width: 600px) {
+  .look-sheet { place-items: end stretch; padding: 0; }
+  .look-sheet-box { width: 100%; max-height: 78vh; border-radius: 18px 18px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+  .look-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 380px) { .sub-tool { font-size: .8rem; } }
+@media (prefers-reduced-motion: no-preference) { .look-sheet-box { animation: look-in .22s var(--ease) both; } }
+@keyframes look-in { from { opacity: 0; transform: translateY(14px); } }

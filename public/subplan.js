@@ -49,6 +49,7 @@
   }
 
   // วางแผนเฟรม: ทุกเฟรมของคลิปใช้ภาพไหน (null = ว่าง / เลขภาพที่ต้องวาด)
+  //   แต่ละบรรทัดมีท่าของตัวเองได้ (c.m) ไม่มี = ใช้ o.motion · ภาพแต่ละภาพจำท่าไว้ใน shot.motion
   function planFrames(cues, o) {
     var TT = o.TT || g.TTMotion;
     var total = Math.max(1, Math.ceil(o.duration * FPS));
@@ -60,16 +61,17 @@
       if (f1 - f0 < 2) return;
       var d = (f1 - f0) / FPS;
       var wordAt = (c.w || []).filter(function (x) { return x[1] !== null; }).map(function (x) { return Math.min(x[1], Math.max(0, d - 0.3)); });
-      var timing = TT.subtitleTiming(o.motion, d, FPS, wordAt);
+      var mo = motionOf(c, o);
+      var timing = TT.subtitleTiming(mo, d, FPS, wordAt);
       var staticShot = -1;
       for (var f = f0; f < f1; f++) {
         var t = (f - f0) / FPS;
-        if (TT.subtitleMoving(o.motion, t, timing)) {
-          shots.push({ cue: ci, t: t, timing: timing });
+        if (TT.subtitleMoving(mo, t, timing)) {
+          shots.push({ cue: ci, t: t, timing: timing, motion: mo });
           frames[f] = shots.length - 1;
           staticShot = -1;
         } else {
-          if (staticShot < 0) { shots.push({ cue: ci, t: t, timing: timing }); staticShot = shots.length - 1; }
+          if (staticShot < 0) { shots.push({ cue: ci, t: t, timing: timing, motion: mo }); staticShot = shots.length - 1; }
           frames[f] = staticShot;
         }
       }
@@ -77,7 +79,11 @@
     return { total: total, frames: frames, shots: shots };
   }
 
-  var api = { FPS: FPS, MAX_SIDE: MAX_SIDE, MAX_SIDE_BROWSER: MAX_SIDE_BROWSER, SIZE_K: SIZE_K, SIZE_MIN: SIZE_MIN, SIZE_MAX: SIZE_MAX, sizePct: sizePct, POS_Y: POS_Y, posPct: posPct, POS_MIN: POS_MIN, POS_MAX: POS_MAX, outSize: outSize, layoutFor: layoutFor, planFrames: planFrames };
+  function motionOf(c, o) { return (c && c.m) || (o && o.motion) || 'pop'; }
+  // ตำแหน่งของบรรทัด (c.pos) ไม่มี = ตำแหน่งหลัก
+  function cueLayout(w, h, c, o) { return layoutFor(w, h, { size: o.size, position: c && c.pos ? c.pos : o.position }); }
+
+  var api = { motionOf: motionOf, cueLayout: cueLayout, FPS: FPS, MAX_SIDE: MAX_SIDE, MAX_SIDE_BROWSER: MAX_SIDE_BROWSER, SIZE_K: SIZE_K, SIZE_MIN: SIZE_MIN, SIZE_MAX: SIZE_MAX, sizePct: sizePct, POS_Y: POS_Y, posPct: posPct, POS_MIN: POS_MIN, POS_MAX: POS_MAX, outSize: outSize, layoutFor: layoutFor, planFrames: planFrames };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   g.TTSubPlan = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

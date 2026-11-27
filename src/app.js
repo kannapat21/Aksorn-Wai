@@ -13,7 +13,7 @@ const { createMailer, mailStatus } = require('./mailer');
 const { getProvider, WebhookSignatureError } = require('./payments');
 const custom = require('./customizer');
 const renderTools = require('../render/tools');
-const { createSubtitles } = require('./subtitles');
+const { createSubtitles, renderCues: subRenderCues } = require('./subtitles');
 const { createTranscriber } = require('./transcribe');
 const { createStorage, productKey } = require('./storage');
 
@@ -1546,7 +1546,8 @@ function createApp(cfg, opts = {}) {
     const font = fontSpec(job.user_id, job.font);
     const { w, h } = R.outSize(job.width, job.height, job.browser ? R.MAX_SIDE_BROWSER : R.MAX_SIDE);
     return {
-      id: job.id, cues: subtitles.cuesOf(job), motion: (p && p.motion) || 'pop', fill: job.fill, stroke: job.stroke,
+      id: job.id, cues: subRenderCues(job, subtitles.cuesOf(job), (slug) => { const x = productsBySlug.get(slug); return (x && x.motion) || null; }),
+      motion: (p && p.motion) || 'pop', fill: job.fill, stroke: job.stroke,
       strokeRatio: custom.OUTLINES[job.outline] || 0, shadow: Boolean(job.shadow), size: job.size, position: job.position,
       font, out: { w, h }, layout: R.layoutFor(w, h, { size: job.size, position: job.position }), fps: R.FPS, duration: job.duration,
       fileName: `${(job.src_name || 'clip').replace(/\.[a-z0-9]{2,4}$/i, '')}-ซับ.mp4`.replace(/[\\/:*?"<>|]/g, ' '),
@@ -1619,9 +1620,11 @@ function createApp(cfg, opts = {}) {
       const st = subtitles.validateStyle(body.style, { owned, fonts: subFonts(job.user_id) });
       if (st.error) return { error: st.error };
       subtitles.setStyle(job, st.value);
+      job = subtitles.get(job.id);
     }
     if (body.cues) {
-      const r = subtitles.saveCues(job, body.cues);
+      // แต่ละบรรทัดเลือกแบบเองได้ เฉพาะแบบที่อยู่ในคลัง
+      const r = subtitles.saveCues(job, body.cues, { styles: owned.map((o) => o.product_slug) });
       if (r.error) return r;
       return { cues: r.cues };
     }

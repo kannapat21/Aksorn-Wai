@@ -13,6 +13,7 @@ const ALLOWED_RE = /^[ก-ฺ฿-๛ !"#$%&'()*+,\-./0-9:;=?@A-Z[\]^_a-z{|}~ ‘
 const MAX_CUE_GRAPHEMES = 60;
 const MAX_CUES = 600;
 const MIN_CUE = 0.3; // บรรทัดสั้นสุด (วินาที)
+const MAX_LOOKS = 8; // แบบ (แอนิเมชัน) ต่างกันได้สูงสุดกี่แบบในคลิปเดียว รวมแบบหลัก
 
 const segG = () => new Intl.Segmenter('th', { granularity: 'grapheme' });
 const segW = () => new Intl.Segmenter('th', { granularity: 'word' });
@@ -236,8 +237,10 @@ function spreadWords(text, dur) {
 /*
  * ตรวจซับที่ลูกค้าส่งมา (JSON) → { cues } หรือ { error }
  *   prev: ซับเดิม (ใช้เวลาของคำจากการถอดเสียงต่อ ถ้าข้อความบรรทัดนั้นไม่ได้แก้)
+ *   styles: slug ของแบบที่ลูกค้ามีในคลัง (บรรทัดที่เลือกแบบเอง p = slug · ไม่มี p = ใช้แบบหลักของคลิป)
+ *   main: slug ของแบบหลัก (นับรวมในจำนวนแบบสูงสุด)
  */
-function validateCues(input, { duration, prev = [] }) {
+function validateCues(input, { duration, prev = [], styles = null, main = null }) {
   if (!Array.isArray(input)) return { error: 'ข้อมูลซับไม่ถูกต้อง' };
   if (input.length > MAX_CUES) return { error: `ซับมีได้ไม่เกิน ${MAX_CUES} บรรทัด` };
   const byId = new Map(prev.map((c) => [c.id, c]));
@@ -255,7 +258,9 @@ function validateCues(input, { duration, prev = [] }) {
     if (start >= duration) return { error: `บรรทัดที่ ${i + 1} เริ่มหลังคลิปจบแล้ว` };
     if (end - start < MIN_CUE - 0.001) return { error: `บรรทัดที่ ${i + 1} สั้นเกินไป (อย่างน้อย ${MIN_CUE} วินาที)` };
     const id = /^[a-f0-9]{10}$/.test(String(r.id || '')) ? String(r.id) : newId();
-    rows.push({ id, start, end, text, n: i + 1 });
+    let p = r.p === undefined || r.p === null || r.p === '' ? null : String(r.p);
+    if (p !== null && !(styles && styles.has(p))) return { error: `บรรทัดที่ ${i + 1}: แบบที่เลือกไม่มีในคลังของคุณ` };
+    rows.push({ id, start, end, text, n: i + 1, p });
   }
   rows.sort((a, b) => a.start - b.start || a.end - b.end);
   for (let i = 0; i < rows.length - 1; i++) {
@@ -266,7 +271,9 @@ function validateCues(input, { duration, prev = [] }) {
       a.end = b.start;
     }
   }
-  const cues = rows.map(({ id, start, end, text }) => {
+  const looks = new Set(rows.map((r) => r.p || main || '').filter(Boolean));
+  if (looks.size > MAX_LOOKS) return { error: `ใช้แบบต่างกันได้ไม่เกิน ${MAX_LOOKS} แบบในคลิปเดียว` };
+  const cues = rows.map(({ id, start, end, text, p }) => {
     const old = byId.get(id);
     let w;
     if (old && old.text === text && Array.isArray(old.w)) {
@@ -276,7 +283,7 @@ function validateCues(input, { duration, prev = [] }) {
     } else {
       w = spreadWords(text, end - start);
     }
-    return { id, start, end, text, w };
+    return p ? { id, start, end, text, w, p } : { id, start, end, text, w };
   });
   return { cues };
 }
@@ -293,4 +300,4 @@ function toSrt(cues) {
   return cues.map((c, i) => `${i + 1}\r\n${srtTime(c.start)} --> ${srtTime(c.end)}\r\n${c.text}\r\n`).join('\r\n');
 }
 
-module.exports = { dropFillers, dropFillerTokens, FILLER_RE, buildCues, tokensFromWords, validateCues, spreadWords, toSrt, srtTime, maxCharsFor, cleanText, ALLOWED_RE, MAX_CUE_GRAPHEMES, MAX_CUES, graphemes };
+module.exports = { MAX_LOOKS, dropFillers, dropFillerTokens, FILLER_RE, buildCues, tokensFromWords, validateCues, spreadWords, toSrt, srtTime, maxCharsFor, cleanText, ALLOWED_RE, MAX_CUE_GRAPHEMES, MAX_CUES, graphemes };
