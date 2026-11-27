@@ -253,6 +253,15 @@
     var countLabel = document.querySelector('[data-count-label]');
     var catBtns = document.querySelectorAll('[data-cat-btn]');
     var state = { q: '', cat: '' };
+    // แสดงทีละชุด (มือถือ 8 / คอม 12) แล้วกด "ดูเพิ่มเติม" โหลดชุดต่อไป
+    var moreWrap = document.querySelector('[data-more-wrap]');
+    var moreBtn = document.querySelector('[data-more]');
+    var moreLeft = document.querySelector('[data-more-left]');
+    var batchSize = function () {
+      var narrow = window.matchMedia && window.matchMedia('(max-width: 720px)').matches;
+      return Number(grid.getAttribute(narrow ? 'data-batch' : 'data-batch-wide')) || 0;
+    };
+    var limit = batchSize();
 
     var apply = function () {
       var q = state.q.trim().toLowerCase();
@@ -262,12 +271,18 @@
         var hay = c.getAttribute('data-search');
         var ok = (!state.cat || c.getAttribute('data-cat') === state.cat) &&
           terms.every(function (t) { return hay.indexOf(t) !== -1; });
-        c.hidden = !ok;
-        if (ok) { shown++; c.classList.add('in'); }
+        if (ok) shown++;
+        var vis = ok && (!limit || shown <= limit);
+        c.hidden = !vis;
+        if (vis) c.classList.add('in');
       });
+      var left = limit ? Math.max(0, shown - limit) : 0;
+      if (moreWrap) moreWrap.hidden = left === 0;
+      if (moreLeft) moreLeft.textContent = '(อีก ' + left + ' แบบ)';
       if (empty) empty.hidden = shown !== 0;
       if (countLabel) countLabel.textContent = shown + ' แบบ' + (shown !== cards.length ? ' จาก ' + cards.length : '');
     };
+    if (moreBtn) moreBtn.addEventListener('click', function () { limit += batchSize(); apply(); });
     var sortCards = function () {
       var mode = sortSel ? sortSel.value : 'order';
       var key = function (c) { return Number(c.getAttribute(mode === 'order' ? 'data-order' : 'data-price')); };
@@ -279,7 +294,7 @@
     if (input) {
       input.addEventListener('input', function () {
         clearTimeout(timer);
-        timer = setTimeout(function () { state.q = input.value; apply(); }, 120);
+        timer = setTimeout(function () { state.q = input.value; limit = batchSize(); apply(); }, 120);
       });
       document.addEventListener('keydown', function (e) {
         var tag = (document.activeElement && document.activeElement.tagName) || '';
@@ -291,6 +306,7 @@
       b.addEventListener('click', function () {
         state.cat = b.getAttribute('data-cat-btn');
         catBtns.forEach(function (x) { x.classList.toggle('active', x === b); });
+        limit = batchSize();
         apply();
       });
     });
@@ -316,11 +332,12 @@
 
     var reset = document.querySelector('[data-reset]');
     if (reset) reset.addEventListener('click', function () {
-      state.q = ''; state.cat = '';
+      state.q = ''; state.cat = ''; limit = batchSize();
       if (input) input.value = '';
       catBtns.forEach(function (x) { x.classList.toggle('active', x.getAttribute('data-cat-btn') === ''); });
       apply();
     });
+    if (limit) apply();
   }
 
   // ---------- หน้าสินค้า: สลับพรีวิวแนวนอน/แนวตั้ง ----------

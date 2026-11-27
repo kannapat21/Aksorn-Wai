@@ -1754,6 +1754,9 @@ test('ของฟรี: กดรับ → เข้าคลังทัน�
   assert.match(home, /<span class="card-cta">รับฟรี ›<\/span>/);
   assert.match(home, /<span class="card-cta">ดูตัวอย่าง ›<\/span>/);
   assert.match(home, /<span class="price">แพ็ก ฿150<\/span>/);
+  // แอนิเมชันเยอะ: แสดงทีละชุด (มือถือ 8 / คอม 12) แล้วกดดูเพิ่มเติม
+  assert.match(home, /data-grid data-batch="8" data-batch-wide="12"/);
+  assert.match(home, /data-more>ดูเพิ่มเติม/);
   assert.doesNotMatch(home, /class="marquee"|class="hero-bg"/, 'ไม่มีแถบวิ่ง หรือพื้นหลังเบลอ');
   // หัวเว็บเดิม (ข้อความพิมพ์วน) อยู่บนสุด แล้วตามด้วยปุ่มแบบแอป
   assert.ok(home.indexOf('data-type-rotate') > 0 && home.indexOf('data-type-rotate') < home.indexOf('class="tool tool-main"'), 'หัวเว็บพิมพ์ข้อความอยู่เหนือปุ่มแบบแอป');
