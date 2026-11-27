@@ -170,7 +170,7 @@ function createApp(cfg, opts = {}) {
     return { render: (o) => R.renderSubtitled(o), extractAudio: R.extractAudio, probe: R.probe, peaks: R.peaks };
   })();
   const subtitles = createSubtitles({
-    db, cfg, log, now, transcriber, renderer: subRender,
+    db, cfg, log, now, transcriber, renderer: subRender, fixer: opts.subtitleFixer,
     toolsOk: () => !browserMode && tools().ok,
     resolveFont: (job) => {
       const f = customizer.resolveFont(job);
@@ -1517,7 +1517,7 @@ function createApp(cfg, opts = {}) {
       // ท่อนอื่นล้มระหว่างนี้: เก็บท่อนนี้ไว้ด้วย (เบราว์เซอร์จะส่งท่อนที่ล้มมาใหม่)
       if (fresh && fresh.status === 'failed' && !fresh.cues_json && subtitles.resumeAsr(fresh)) fresh = subtitles.get(job.id);
       if (!fresh || fresh.status !== 'transcribing') return res.json({ ok: true, done: Boolean(fresh && fresh.cues_json), url: `/subtitles/${job.id}` });
-      const out = subtitles.asrChunk(fresh, i, n, r.words);
+      const out = await subtitles.asrChunk(fresh, i, n, r.words);
       res.json({ ok: true, done: out.done, url: `/subtitles/${job.id}` });
     } catch (e) {
       log(`[subtitles] ถอดเสียงไม่สำเร็จ ${job.id}: ${String(e.message).split('\n')[0]}`);

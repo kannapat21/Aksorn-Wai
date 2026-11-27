@@ -207,7 +207,8 @@
   D.owned.forEach(function (o, i) { bySlug[o.slug] = o; o.color = LOOK_COLORS[i % LOOK_COLORS.length]; });
   var MAX_LOOKS = 8;
   var cleanP = function (p) { return p && bySlug[p] ? p : null; }; // แบบที่ไม่มีในคลังแล้ว → กลับไปใช้แบบหลัก
-  var cues = D.cues.map(function (c) { return { id: c.id, start: c.start, end: c.end, text: c.text, w: c.w || null, p: cleanP(c.p) }; });
+  // o = ข้อความที่ระบบได้ยินก่อนแก้คำผิด (มีเฉพาะบรรทัดที่ระบบแก้ให้) กด ↺ ใช้คำเดิมได้
+  var cues = D.cues.map(function (c) { return { id: c.id, start: c.start, end: c.end, text: c.text, w: c.w || null, p: cleanP(c.p), o: c.o || null }; });
   var style = D.style;
   if (!style.looks || typeof style.looks !== 'object') style.looks = {};
   var video = $('[data-video]'), player = $('[data-player]'), band = $('[data-band]'), el = $('[data-sub-text]');
@@ -726,14 +727,16 @@
     cues.forEach(function (c, i) {
       var li = document.createElement('li');
       li.className = 'sub-line';
-      li.innerHTML = '<input type="checkbox" class="sub-line-ck" tabindex="-1"><button type="button" class="sub-line-t" data-line-seek tabindex="-1"></button><input type="text" class="sub-line-in" maxlength="120" enterkeyhint="next" placeholder="พิมพ์ข้อความซับ"><button type="button" class="sub-line-lk" data-line-look></button>';
+      li.innerHTML = '<input type="checkbox" class="sub-line-ck" tabindex="-1"><button type="button" class="sub-line-t" data-line-seek tabindex="-1"></button><input type="text" class="sub-line-in" maxlength="120" enterkeyhint="next" placeholder="พิมพ์ข้อความซับ"><button type="button" class="sub-line-un" data-line-undo tabindex="-1" hidden>↺</button><button type="button" class="sub-line-lk" data-line-look></button>';
       $('.sub-line-t', li).textContent = fmtT(c.start);
       var inp = $('.sub-line-in', li);
       inp.value = c.text; inp.disabled = disabled; inp.readOnly = multi; inp.setAttribute('aria-label', 'ซับบรรทัดที่ ' + (i + 1));
       $('.sub-line-ck', li).setAttribute('aria-label', 'เลือกบรรทัดที่ ' + (i + 1));
       linesEl.appendChild(li);
       lineLook(li, c);
+      lineFix(li, c);
     });
+    fixNote();
     linesEl.classList.toggle('multi', multi);
     if (!cues.length) linesEl.innerHTML = '<li class="sub-line-empty muted small">ยังไม่มีซับ เล่นคลิปถึงจุดที่มีคนพูด แล้วกด "+ เพิ่มบรรทัด"</li>';
   }
@@ -744,6 +747,23 @@
     $('.sub-line-t', li).textContent = fmtT(c.start);
     if (document.activeElement !== inp) inp.value = c.text;
     lineLook(li, c);
+    lineFix(li, c);
+  }
+  // บรรทัดที่ระบบแก้คำผิดให้: ขีดเส้นใต้จางๆ + ปุ่ม ↺ ใช้คำเดิม
+  function isFixed(c) { return Boolean(c && c.o && c.o !== c.text.trim()); }
+  function lineFix(li, c) {
+    var b = $('.sub-line-un', li), on = isFixed(c);
+    li.classList.toggle('fx', on);
+    if (!b) return;
+    b.hidden = !on || disabled;
+    if (on) { b.title = 'ใช้คำเดิม: ' + c.o; b.setAttribute('aria-label', 'ใช้คำเดิมที่ระบบได้ยิน: ' + c.o); }
+  }
+  var fixNoteEl = $('[data-fix-note]');
+  function fixNote() {
+    if (!fixNoteEl) return;
+    var n = cues.filter(isFixed).length;
+    fixNoteEl.hidden = !n || disabled;
+    fixNoteEl.textContent = 'แก้คำผิดให้แล้ว ' + n + ' บรรทัด · กด ↺ เพื่อใช้คำเดิม';
   }
   // ปุ่มแบบท้ายบรรทัด: แบบหลัก = ✦ จางๆ · แบบของบรรทัดเอง = จุดสี + ชื่อแบบ
   function lineLook(li, c) {
@@ -796,7 +816,7 @@
       c.text = c.text.trim();
       if (!c.text) { cues.splice(i, 1); sel = -1; renderList(); changed(); return; } // ลบข้อความหมด = ลบบรรทัด
       e.target.value = c.text;
-      tlUpdate(i);
+      tlUpdate(i); lineFix(e.target.closest('.sub-line'), c); fixNote();
     });
     linesEl.addEventListener('click', function (e) {
       var i = lineIndex(e.target);
@@ -808,6 +828,13 @@
         return;
       }
       if (e.target.closest('[data-line-look]')) { select(i, true); peekCue(cues[i]); openSheet([cues[i]]); return; }
+      if (e.target.closest('[data-line-undo]')) {
+        var u = cues[i];
+        if (!isFixed(u)) return;
+        snap(); u.text = u.o; u.w = null;
+        lineUpdate(i); tlUpdate(i); dirty = true; draw(); changed(); fixNote();
+        return;
+      }
       if (!e.target.closest('[data-line-seek]')) return;
       select(i, true); seek(cues[i].start + 0.01);
     });
@@ -1106,8 +1133,9 @@
       // รับเวลาคำที่ร้านคำนวณ (ถ้าระหว่างนั้นไม่ได้แก้เพิ่ม)
       if (!pending && sentFor.length === cues.length && res.j.cues) {
         var same = res.j.cues.length === cues.length && res.j.cues.every(function (s, i) { return s.text === cues[i].text.trim(); });
-        if (same) res.j.cues.forEach(function (s, i) { cues[i].id = s.id; cues[i].w = s.w; cues[i].start = s.start; cues[i].end = s.end; });
-        else if (!edIn && !typingLine()) { cues = res.j.cues.map(function (c) { return { id: c.id, start: c.start, end: c.end, text: c.text, w: c.w, p: cleanP(c.p) }; }); multiSel = []; renderList(); }
+        if (same) res.j.cues.forEach(function (s, i) { cues[i].id = s.id; cues[i].w = s.w; cues[i].start = s.start; cues[i].end = s.end; cues[i].o = s.o || null; });
+        else if (!edIn && !typingLine()) { cues = res.j.cues.map(function (c) { return { id: c.id, start: c.start, end: c.end, text: c.text, w: c.w, p: cleanP(c.p), o: c.o || null }; }); multiSel = []; renderList(); }
+        fixNote();
       }
       if (!pending) saveState.textContent = 'บันทึกแล้ว';
       dirty = true; draw();

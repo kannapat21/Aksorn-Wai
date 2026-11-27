@@ -19,8 +19,22 @@ const SIZES = ['sm', 'md', 'lg'];
 const POSITIONS = ['bottom', 'middle', 'top'];
 const OUTLINES = { none: 0, thin: 0.035, medium: 0.05, thick: 0.08 };
 
-function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, resolveFont }) {
+function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, resolveFont, fixer }) {
   const S = cfg.subtitles;
+  const fix = fixer || require('./subfix').createFixer(cfg, { log });
+  // คำจากตัวถอดเสียง → แก้คำผิด → บรรทัดซับ (แก้ไม่ได้ = ใช้คำเดิม)
+  async function cuesFrom(words, job) {
+    const maxChars = cuesLib.maxCharsFor(job.width, job.height);
+    let fixed = { words, raw: '' };
+    try { fixed = await require('./subfix').fixWords(words, fix); } catch (e) { log(`[subtitles] แก้คำผิดไม่สำเร็จ ${job.id}: ${String(e.message).split('\n')[0]}`); }
+    try {
+      return cuesLib.buildCues(fixed.words, { maxChars, duration: job.duration, raw: fixed.raw });
+    } catch (e) {
+      log(`[subtitles] แก้คำผิดแล้วสร้างบรรทัดไม่ได้ ${job.id} ใช้คำเดิม: ${String(e.message).split('\n')[0]}`);
+      return cuesLib.buildCues(words, { maxChars, duration: job.duration });
+    }
+  }
+  const finishing = new Set();
   db.exec(`
     CREATE TABLE IF NOT EXISTS subtitle_jobs (
       id           TEXT PRIMARY KEY,
@@ -209,7 +223,7 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
   // รับคำที่ถอดได้ของท่อนที่ i (จากทั้งหมด n ท่อน) · มาไม่เรียงก็ได้ ส่งซ้ำก็ได้ (เบราว์เซอร์ลองใหม่เอง)
   // ครบทุกท่อนแล้ว = สร้างบรรทัดซับ → ให้ลูกค้าตรวจ
   // asr_json = { n, parts: { i: [คำ] } } (รูปแบบเก่าเป็นอาร์เรย์ ถือว่าเริ่มใหม่)
-  function asrChunk(job, i, n, words) {
+  async function asrChunk(job, i, n, words) {
     let st = null;
     try { st = JSON.parse(job.asr_json || 'null'); } catch { st = null; }
     if (!st || Array.isArray(st) || st.n !== n || typeof st.parts !== 'object') st = { n, parts: {} };
@@ -219,15 +233,24 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
       q.asrSave.run(JSON.stringify(st), Math.round((got / n) * 95), 'กำลังฟังเสียงพูด', now(), job.id);
       return { done: false };
     }
-    const all = [];
-    for (let k = 0; k < n; k++) all.push(...(st.parts[k] || []));
-    all.sort((a, b) => a.start - b.start);
-    const maxChars = cuesLib.maxCharsFor(job.width, job.height);
-    const cues = cuesLib.buildCues(all, { maxChars, duration: job.duration });
-    q.review.run(JSON.stringify(cues), 'groq', now(), job.id);
-    db.prepare('UPDATE subtitle_jobs SET asr_json = NULL WHERE id = ?').run(job.id);
-    log(`[subtitles] ถอดเสียงเสร็จ ${job.id} (${n} ท่อน, ${cues.length} บรรทัด)`);
-    return { done: true, cues };
+    // ครบแล้ว: เก็บท่อนสุดท้ายก่อน (ร้านรีสตาร์ตระหว่างแก้คำผิด เบราว์เซอร์ส่งซ้ำแล้วทำต่อได้) แล้วค่อยแก้คำผิด
+    q.asrSave.run(JSON.stringify(st), 97, 'กำลังตรวจคำผิด', now(), job.id);
+    if (finishing.has(job.id)) return { done: false }; // อีกคำขอกำลังทำอยู่ (เบราว์เซอร์ส่งท่อนซ้ำ)
+    finishing.add(job.id);
+    try {
+      const all = [];
+      for (let k = 0; k < n; k++) all.push(...(st.parts[k] || []));
+      all.sort((a, b) => a.start - b.start);
+      const cues = await cuesFrom(all, job);
+      const fresh = q.get.get(job.id);
+      if (!fresh || fresh.status !== 'transcribing') return { done: Boolean(fresh && fresh.cues_json) }; // ลูกค้าลบระหว่างทำ
+      q.review.run(JSON.stringify(cues), 'groq', now(), job.id);
+      db.prepare('UPDATE subtitle_jobs SET asr_json = NULL WHERE id = ?').run(job.id);
+      log(`[subtitles] ถอดเสียงเสร็จ ${job.id} (${n} ท่อน, ${cues.length} บรรทัด, แก้คำ ${cues.filter((c) => c.o).length} บรรทัด)`);
+      return { done: true, cues };
+    } finally {
+      finishing.delete(job.id);
+    }
   }
 
   const restartAsr = (job) => q.asrRestart.run(now(), job.id).changes > 0;
@@ -276,8 +299,9 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     }
     const fresh = q.get.get(job.id);
     if (!fresh || fresh.status !== 'transcribing') return; // ลูกค้าลบระหว่างทำ
-    const maxChars = cuesLib.maxCharsFor(job.width, job.height);
-    const cues = cuesLib.buildCues(r.words || [], { maxChars, duration: job.duration });
+    onProgress(97, 'กำลังตรวจคำผิด');
+    const cues = await cuesFrom(r.words || [], job);
+    if ((q.get.get(job.id) || {}).status !== 'transcribing') return;
     q.review.run(JSON.stringify(cues), r.engine || '', now(), job.id);
     log(`[subtitles] ถอดเสียงเสร็จ ${job.id} (${cues.length} บรรทัด)`);
   }

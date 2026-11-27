@@ -302,6 +302,7 @@ ${!rendering && !cues.length ? `<div class="note">${ICON.shield}<span><b>ระ�
     <button type="button" class="sub-mini primary" data-multi-look disabled>✦ เปลี่ยนแบบ</button>
     <button type="button" class="sub-mini" data-multi-done>เสร็จ</button>
   </div>
+  <p class="muted small sub-fix-note" data-fix-note hidden></p>
   <ol class="sub-lines" data-lines aria-label="ข้อความซับทุกบรรทัด"></ol>
   </div>
   <div class="sub-pane" data-pane="look" hidden>
