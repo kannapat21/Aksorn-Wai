@@ -335,7 +335,8 @@ function home({ cfg, user, csrf, products, owned = new Set(), pack }) {
     ${freeCount ? '<button type="button" class="chip" data-cat-btn="free">ฟรี</button>' : ''}
     ${premCount ? '<button type="button" class="chip" data-cat-btn="premium">พรีเมียม</button>' : ''}
   </div>
-  <div class="grid" data-grid>${cards}</div>
+  <div class="grid" data-grid data-batch="8" data-batch-wide="12">${cards}</div>
+  <div class="more-wrap" data-more-wrap hidden><button type="button" class="btn ghost more-btn" data-more>ดูเพิ่มเติม <span data-more-left></span></button></div>
   <div class="empty" data-empty hidden>
     <p><b>ไม่พบแอนิเมชัน</b></p>
     <p class="muted small"><button type="button" class="linklike" data-reset>ดูทั้งหมด</button></p>
@@ -365,7 +366,8 @@ function packPage({ cfg, user, csrf, pack, products }) {
 </section>
 <section class="catalog">
   <div class="section-head"><h2>อยู่ในแพ็ก</h2><p class="muted small">${products.length} แบบ</p></div>
-  <div class="grid">${products.map((p, i) => card(p, i, null)).join('')}</div>
+  <div class="grid" data-grid data-batch="8" data-batch-wide="12">${products.map((p, i) => card(p, i, null)).join('')}</div>
+  <div class="more-wrap" data-more-wrap hidden><button type="button" class="btn ghost more-btn" data-more>ดูเพิ่มเติม <span data-more-left></span></button></div>
 </section>
 <div class="buy-bar" data-buy-bar>
   <div><b>แพ็กพรีเมียม</b><span class="price">${baht(pack.price)}</span></div>
