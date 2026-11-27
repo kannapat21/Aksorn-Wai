@@ -9,7 +9,7 @@
  *  ซับ     : Mediabunny + WebCodecs (ฮาร์ดแวร์ของเครื่องลูกค้า) อ่านคลิป → วางแถบซับทีละเฟรม → MP4 H.264 + เสียงเดิม
  *  เสียง   : แยกเสียงเป็น WAV 16 kHz โมโน ส่งให้ร้านทีละท่อน (ร้านส่งต่อให้ Groq ถอดเสียง) คลิปไม่ถูกอัปโหลด
  */
-import { planParts, wavBytes } from './speechcut.mjs';
+import { planParts, wavBytes, voiceFilter } from './speechcut.mjs';
 
 const TT = window.TTMotion;
 const PLAN = window.TTSubPlan;
@@ -465,7 +465,8 @@ async function toWav(file, sampleRate, onProgress = () => {}) {
 // เสียงพูด → ท่อนละไม่เกิน ~28 วินาที ตัดตรงช่วงเงียบ (ไม่ตัดกลางคำ) · ท่อนที่เงียบสนิทไม่ต้องส่ง
 export async function extractSpeech(file, onProgress = () => {}) {
   const { rate, pcm } = wavPcm(await toWav(file, 16000, onProgress));
-  return planParts(pcm, rate).map((p) => ({ start: p.start, end: p.end, keepA: p.keepA, keepB: p.keepB, blob: new Blob([wavBytes(pcm.subarray(p.a, p.b), rate)], { type: 'audio/wav' }) }));
+  const voice = voiceFilter(pcm, rate); // ลดเสียงเบส/ระเบิดของเกม ปรับความดังเสียงพูด ก่อนส่งให้ Whisper
+  return planParts(pcm, rate).map((p) => ({ start: p.start, end: p.end, keepA: p.keepA, keepB: p.keepB, blob: new Blob([wavBytes(voice.subarray(p.a, p.b), rate)], { type: 'audio/wav' }) }));
 }
 
 // WAV 16-bit โมโน → { rate, pcm: Int16Array }

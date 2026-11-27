@@ -1519,7 +1519,7 @@ function createApp(cfg, opts = {}) {
       // ตอบเบราว์เซอร์ให้ทันภายใน ~100 วินาที (เบราว์เซอร์รอ 150) ไม่ให้ตัดสายแล้วส่งซ้ำซ้อนงานกัน
       const r = await transcriber.chunk(buf, start, { keep, deadline: Date.now() + 100000 });
       const tag = `${job.id} ท่อน ${i + 1}/${n} (${fmtSec(start)})`;
-      if (r.gaps || r.filled) log(`[subtitles] ${tag}: ${r.words.length} คำ · ช่วงที่ Whisper ข้าม ${r.gaps || 0} ถอดซ้ำได้ ${r.recovered || 0}${r.missed && r.missed.length ? ` · ยังขาด ${r.missed.map((g) => `${fmtSec(g.a)}–${fmtSec(g.b)}`).join(', ')}${r.gapError ? ` (${r.gapError})` : ''}` : ''}${r.filled ? ` · ใช้ข้อความท่อนแทนคำที่หาย ${r.filled}` : ''}`);
+      log(`[subtitles] ${tag}: ${r.words.length} คำ · ตัดท่อนที่ไม่มั่นใจ/แต่งเอง ${r.dropped || 0}/${r.total || 0} · ช่วงที่ Whisper ข้าม ${r.gaps || 0} ถอดซ้ำได้ ${r.recovered || 0}${r.missed && r.missed.length ? ` · ยังขาด ${r.missed.map((g) => `${fmtSec(g.a)}–${fmtSec(g.b)}`).join(', ')}${r.gapError ? ` (${r.gapError})` : ''}` : ''}${r.filled ? ` · ใช้ข้อความท่อนแทนคำที่หาย ${r.filled}` : ''}`);
       let fresh = subtitles.get(job.id);
       // ท่อนอื่นล้มระหว่างนี้: เก็บท่อนนี้ไว้ด้วย (เบราว์เซอร์จะส่งท่อนที่ล้มมาใหม่)
       if (fresh && fresh.status === 'failed' && !fresh.cues_json && subtitles.resumeAsr(fresh)) fresh = subtitles.get(job.id);

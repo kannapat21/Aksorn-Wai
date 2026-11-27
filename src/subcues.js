@@ -126,7 +126,13 @@ const FILLER_WORD_RE = /^(เอ่อ+|เอ๋อ+|เอ้อ+|เออะ
 const isFiller = (s) => FILLER_WORD_RE.test(String(s).replace(/[.,!?…~\-]+$/, ''));
 const isPunct = (s) => /^[\s.,!?…~\-–—"“”'‘’()]+$/.test(s);
 // รอบสอง (ระดับคำ): คำเติมที่หลุดรอบแรก เช่น เอิ่ม ฮึ่ม หืม
+// เศษอักษรอังกฤษ 1–2 ตัวที่หลุดมากลางคำพูดภาษาไทย (เช่น "df") = Whisper ถอดเสียงเกม/เสียงลมหายใจผิด
+// คำสั้นที่คนเล่นเกมพูดจริง (gg ez ok …) เก็บไว้
+const LATIN_OK = new Set(['ok', 'gg', 'ez', 'ad', 'ap', 'go', 'hi', 'yo', 'no', 'pc', 'tv', 'vs', 'ai', 'ig', 'fb', 'ff', 'hp', 'mp', 'cd', 'my', 'me', 'we', 'up', 'it', 'is', 'so', 'oh', 'a', 'i']);
+const isStrayLatin = (s) => /^[a-z]{1,2}$/.test(s) && !LATIN_OK.has(s);
 function dropFillerTokens(toks) {
+  const thai = toks.some((t) => /[\u0E00-\u0E7F]/.test(t.text));
+  if (thai) toks = toks.filter((t) => t.space || !isStrayLatin(t.text));
   const out = [];
   for (let i = 0; i < toks.length; i++) {
     const t = toks[i];

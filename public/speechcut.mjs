@@ -76,6 +76,43 @@ export function planParts(pcm, rate, { pad = 0.8, ...opt } = {}) {
   });
 }
 
+/*
+ * เน้นเสียงพูดก่อนส่งถอด: คลิปเกมมีเสียงระเบิด/เบสหนัก และเสียงแหลมของเอฟเฟกต์ปนกับเสียงคน
+ *   - ตัดความถี่ต่ำกว่า ~120 Hz (เสียงตูม/เบส ไม่มีข้อมูลคำพูด) และสูงกว่า ~6.5 kHz
+ *   - ปรับความดังทั้งคลิปให้เสียงพูดดังพอดี (คลิปที่อัดเบาๆ Whisper มักฟังผิด) ไม่ให้แตก
+ * ใช้เฉพาะเสียงที่ส่งให้ Whisper (การหาจุดตัด/ช่วงเงียบใช้เสียงเดิม)
+ */
+function biquad(x, b0, b1, b2, a1, a2) {
+  const y = new Float32Array(x.length);
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < x.length; i++) {
+    const v = b0 * x[i] + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+    x2 = x1; x1 = x[i]; y2 = y1; y1 = v; y[i] = v;
+  }
+  return y;
+}
+function coeffs(type, f, rate, q = Math.SQRT1_2) {
+  const w = (2 * Math.PI * f) / rate, c = Math.cos(w), al = Math.sin(w) / (2 * q), a0 = 1 + al;
+  const k = type === 'hp' ? [(1 + c) / 2, -(1 + c), (1 + c) / 2] : [(1 - c) / 2, 1 - c, (1 - c) / 2];
+  return [k[0] / a0, k[1] / a0, k[2] / a0, (-2 * c) / a0, (1 - al) / a0];
+}
+export function voiceFilter(pcm, rate, { low = 120, high = 6500 } = {}) {
+  let y = biquad(pcm, ...coeffs('hp', low, rate));
+  if (high < rate / 2 - 100) y = biquad(y, ...coeffs('lp', high, rate));
+  // ความดัง: ให้ช่วงที่ดังที่สุด 1% (มักเป็นเสียงพูด/เสียงเกมดังสุด) อยู่ราว -3 dBFS · ขยายไม่เกิน 8 เท่า
+  const abs = new Float32Array(Math.ceil(y.length / 64));
+  for (let i = 0, k = 0; i < y.length; i += 64, k++) abs[k] = Math.abs(y[i]);
+  const ref = abs.slice().sort()[Math.floor(abs.length * 0.99)] || 1;
+  const gain = Math.min(8, Math.max(0.5, 23000 / ref));
+  const out = new Int16Array(y.length);
+  for (let i = 0; i < y.length; i++) {
+    let v = y[i] * gain;
+    if (v > 30000 || v < -30000) v = Math.sign(v) * (30000 + 2767 * Math.tanh((Math.abs(v) - 30000) / 2767)); // ไม่ให้แตก
+    out[i] = Math.round(v);
+  }
+  return out;
+}
+
 // WAV 16-bit โมโน (หัว 44 ไบต์)
 export function wavBytes(pcm, rate) {
   const head = new DataView(new ArrayBuffer(44));

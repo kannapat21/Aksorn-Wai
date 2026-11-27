@@ -139,3 +139,32 @@ test('แปลงคลิปมือถือ (HEVC/VFR) เก็บเว�
   assert.ok(exec, 'หา ff.exec ไม่เจอ');
   assert.match(exec[0], /'-fps_mode', 'passthrough'/);
 });
+
+test('ประโยคที่ Whisper แต่งจากเสียงเกม (ไม่มั่นใจ) ถูกตัด · เสียงพูดจริงที่ความมั่นใจต่ำแต่ยาว ยังเก็บไว้', () => {
+  const s = T.cleanSegments([
+    { text: ' แล้วก็ขอบคุณทุกคนที่ยังจำช่องนี้ได้นะคะ', no_speech_prob: 0.15, avg_logprob: -1.8, compression_ratio: 2.6 },
+    { text: ' เท่ารักทีควัฒนิยังเฉยของดูเข้า', no_speech_prob: 0.5, avg_logprob: -1.3, compression_ratio: 1.1 },
+    { text: ' อะไร สั้นไม่เม df', no_speech_prob: 0.1, avg_logprob: -1.7, compression_ratio: 1 },
+    { text: ' ริงๆ ผมสักครั้งเล่นทั้ง 2', no_speech_prob: 0.05, avg_logprob: -0.4, compression_ratio: 1.1 },
+  ]);
+  assert.deepEqual(s.map((x) => x.bad), [false, true, true, false]);
+  // ถอดซ้ำช่วงที่ขาด: เก็บเฉพาะที่มั่นใจ
+  const g = T.cleanSegments([{ text: ' ไปต่อกันเลย', no_speech_prob: 0.1, avg_logprob: -0.9 }, { text: ' ไปต่อกันเลยนะ', no_speech_prob: 0.05, avg_logprob: -0.3 }], { strict: true });
+  assert.deepEqual(g.map((x) => x.bad), [true, false]);
+});
+
+test('เศษอักษรอังกฤษที่หลุดกลางประโยคไทย (df) ถูกตัด · คำเกมสั้นๆ (gg) เก็บไว้', () => {
+  const w = (text, start) => ({ text, start, end: start + 0.5 });
+  const cues = buildCues([w(' อะไร', 0), w(' สั้นไม่เม', 0.5), w(' df', 1), w(' gg', 1.5), w(' ครับ', 2)], { maxChars: 32 });
+  assert.equal(cues.map((c) => c.text).join(' '), 'อะไร สั้นไม่เม gg ครับ');
+});
+
+test('กรองเสียงก่อนส่งถอด: ลดเสียงเบส/ระเบิด (50 Hz) เทียบกับย่านเสียงพูด (1 kHz) และดังพอดีไม่แตก', async () => {
+  const { voiceFilter } = await import('../public/speechcut.mjs');
+  const r = 16000, n = r * 2, p = new Int16Array(n);
+  for (let i = 0; i < n; i++) p[i] = Math.round(3000 * Math.sin((2 * Math.PI * 50 * i) / r) + 1000 * Math.sin((2 * Math.PI * 1000 * i) / r));
+  const o = voiceFilter(p, r);
+  const amp = (a, f) => { let re = 0, im = 0; for (let i = r; i < n; i++) { re += a[i] * Math.cos((2 * Math.PI * f * i) / r); im += a[i] * Math.sin((2 * Math.PI * f * i) / r); } return Math.hypot(re, im) / (r / 2); };
+  assert.ok(amp(o, 50) / amp(o, 1000) < (amp(p, 50) / amp(p, 1000)) / 4, 'เบสลดลงมากกว่า 12 dB เมื่อเทียบเสียงพูด');
+  assert.ok(Math.max(...o.slice(r)) <= 32767 && Math.max(...o.slice(r)) > 8000);
+});
