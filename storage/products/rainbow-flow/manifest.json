@@ -1,0 +1,163 @@
+{
+  "slug": "rainbow-flow",
+  "text": "ปังมาก!!",
+  "fill": "#FFFFFF",
+  "stroke": "#111111",
+  "motion": "rainbow",
+  "fps": 60,
+  "duration": 3,
+  "timing": {
+    "popUp": 0.3,
+    "settle": 0.9,
+    "fadeStart": 2.5,
+    "fadeEnd": 2.9833333333333334,
+    "loop": 1.6,
+    "holdOff": 0
+  },
+  "parts": {
+    "introSeconds": 0.9,
+    "outroSeconds": 0.5,
+    "holdFrame": 54
+  },
+  "renderedAt": "2026-11-27T08:57:32.039Z",
+  "formats": {
+    "mp4_green": {
+      "ext": "mp4",
+      "label": "MP4 พื้นเขียว (Chroma Key)"
+    },
+    "mp4_black": {
+      "ext": "mp4",
+      "label": "MP4 พื้นดำ (Screen/Add)"
+    },
+    "prores4444": {
+      "ext": "mov",
+      "label": "MOV ProRes 4444 โปร่งใส"
+    },
+    "webm_alpha": {
+      "ext": "webm",
+      "label": "WebM VP9 โปร่งใส"
+    },
+    "parts_green": {
+      "ext": "mp4",
+      "label": "ส่วนเข้า/ออก MP4 พื้นเขียว"
+    },
+    "parts_prores": {
+      "ext": "mov",
+      "label": "ส่วนเข้า/ออก MOV ProRes 4444 โปร่งใส"
+    },
+    "still_png": {
+      "ext": "png",
+      "label": "ภาพนิ่ง PNG โปร่งใส (ยืดได้)"
+    }
+  },
+  "files": [
+    {
+      "format": "mp4_green",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "rainbow-flow_mp4_green_1080x1920.mp4",
+      "bytes": 299390
+    },
+    {
+      "format": "mp4_black",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "rainbow-flow_mp4_black_1080x1920.mp4",
+      "bytes": 226512
+    },
+    {
+      "format": "webm_alpha",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "rainbow-flow_webm_alpha_1080x1920.webm",
+      "bytes": 363945
+    },
+    {
+      "format": "parts_green",
+      "part": "intro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "rainbow-flow_parts_green_intro_1080x1920.mp4",
+      "bytes": 139329
+    },
+    {
+      "format": "parts_green",
+      "part": "outro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "rainbow-flow_parts_green_outro_1080x1920.mp4",
+      "bytes": 57303
+    },
+    {
+      "format": "still_png",
+      "part": "hold",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "rainbow-flow_still_1080x1920.png",
+      "bytes": 56201
+    },
+    {
+      "format": "mp4_green",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "rainbow-flow_mp4_green_1920x1080.mp4",
+      "bytes": 299002
+    },
+    {
+      "format": "mp4_black",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "rainbow-flow_mp4_black_1920x1080.mp4",
+      "bytes": 224993
+    },
+    {
+      "format": "webm_alpha",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "rainbow-flow_webm_alpha_1920x1080.webm",
+      "bytes": 371496
+    },
+    {
+      "format": "parts_green",
+      "part": "intro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "rainbow-flow_parts_green_intro_1920x1080.mp4",
+      "bytes": 141207
+    },
+    {
+      "format": "parts_green",
+      "part": "outro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "rainbow-flow_parts_green_outro_1920x1080.mp4",
+      "bytes": 57612
+    },
+    {
+      "format": "still_png",
+      "part": "hold",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "rainbow-flow_still_1920x1080.png",
+      "bytes": 54494
+    }
+  ]
+}
