@@ -567,6 +567,8 @@ export async function burnSubtitles(file, spec, onProgress = () => {}, opts = {}
   }
   if (!(await M.canEncodeVideo('avc', { width: w, height: h, bitrate: vp.bitrate }))) throw new Error('เบราว์เซอร์นี้สร้างวิดีโอ MP4 ไม่ได้ ลองเปิดด้วย Chrome หรือ Safari รุ่นใหม่');
   const plan = PLAN.planFrames(spec.cues, { duration: spec.duration, motion: spec.motion, TT });
+  // แต่ละบรรทัดวางคนละตำแหน่งได้ (คนละแบบ) · ความสูงแถบเท่ากันทุกบรรทัด
+  const yOf = spec.cues.map((c) => (c.pos ? PLAN.cueLayout(w, h, c, { size: spec.size, position: spec.position }).y : L.y));
   const painter = plan.shots.length ? await Painter.create(w, L.band, spec.font) : null;
   const canvas = new OffscreenCanvas(w, h);
   const ctx = canvas.getContext('2d');
@@ -578,16 +580,16 @@ export async function burnSubtitles(file, spec, onProgress = () => {}, opts = {}
     if (s.cue !== cur) {
       cur = s.cue;
       const c = spec.cues[cur];
-      const words = spec.motion === 'kinetic' ? (c.w || []).map((x) => x[0]) : null;
+      const words = s.motion === 'kinetic' ? (c.w || []).map((x) => x[0]) : null;
       const wordAt = s.timing.wordAt;
       if (words && wordAt && words.filter((x) => !/^\s+$/.test(x)).length !== wordAt.length) delete s.timing.wordAt;
       painter.setup({
         text: c.text, words: words && words.join('') === c.text ? words : null,
         fill: spec.fill, stroke: spec.stroke, strokeRatio: spec.strokeRatio || 0, shadow: Boolean(spec.shadow),
-        motion: spec.motion, fixedSize: L.fontPx, maxW: 0.92, maxH: 0.92,
+        motion: s.motion, fixedSize: L.fontPx, maxW: 0.92, maxH: 0.92,
       });
     }
-    painter.setTime(s.t, s.timing, spec.motion);
+    painter.setTime(s.t, s.timing, s.motion);
     cache = { idx, cv: await painter.canvasFrame() };
     return cache.cv;
   }
@@ -604,7 +606,7 @@ export async function burnSubtitles(file, spec, onProgress = () => {}, opts = {}
           ctx.drawImage(sample.toCanvasImageSource(), 0, 0, w, h);
           const f = Math.min(plan.total - 1, Math.max(0, Math.round(sample.timestamp * PLAN.FPS)));
           const idx = plan.frames[f];
-          if (idx !== null && painter) ctx.drawImage(await band(idx), 0, L.y);
+          if (idx !== null && painter) ctx.drawImage(await band(idx), 0, yOf[plan.shots[idx].cue]);
           return canvas;
         },
       },

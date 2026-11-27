@@ -271,6 +271,7 @@ test('ซับในเบราว์เซอร์: คลิปไม่ข
   assert.deepEqual(sj.spec.out, { w: 1080, h: 1920 });
   assert.ok(sj.spec.layout.band > 0 && sj.spec.layout.y > 0);
   assert.equal(sj.spec.fileName, 'คลิปของฉัน-ซับ.mp4');
+  assert.ok(sj.spec.cues.every((x) => x.m === 'drop' && x.pos === 'bottom'), 'แต่ละบรรทัดมีท่าและตำแหน่งของตัวเอง (แบบเดียว = แบบหลักทุกบรรทัด)');
   assert.equal(ctx.subtitles.get(id).status, 'review', 'ไม่เข้าคิวเครื่องร้าน');
   assert.equal((await c.json(`/subtitles/${id}/rendered`, { bytes: 9999 })).status, 200);
   assert.equal(ctx.subtitles.get(id).status, 'done');

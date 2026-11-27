@@ -55,6 +55,10 @@ async function renderSubtitled(opts) {
   const { w, h } = outSize(info.width, info.height);
   const L = layoutFor(w, h, opts);
   const plan = planFrames(cues, { duration: info.duration, motion });
+  // แต่ละบรรทัดอยู่คนละตำแหน่งได้ (คนละแบบ): แยกลำดับภาพตามตำแหน่ง แล้ววางทับทีละชั้น (แถบสูงเท่ากันทุกบรรทัด)
+  const yOf = cues.map((c) => PLAN.cueLayout(w, h, c, opts).y);
+  const ys = [...new Set(plan.shots.map((s) => yOf[s.cue]))];
+  if (!ys.length) ys.push(L.y);
   const work = fs.mkdtempSync(path.join(opts.tmpDir || os.tmpdir(), 'subs-'));
   const ownBrowser = !opts.browser;
   const t0 = Date.now();
@@ -89,17 +93,17 @@ async function renderSubtitled(opts) {
           if (s.cue !== cur) {
             cur = s.cue;
             const c = cues[cur];
-            const words = motion === 'kinetic' ? (c.w || []).map((x) => x[0]) : null;
+            const words = s.motion === 'kinetic' ? (c.w || []).map((x) => x[0]) : null;
             const wordAt = s.timing.wordAt;
             // จำนวนคำต้องตรงกับเวลา ไม่งั้นใช้ท่าเด้งตามลำดับปกติ
             if (words && wordAt && words.filter((x) => !/^\s+$/.test(x)).length !== wordAt.length) delete s.timing.wordAt;
             await page.evaluate((o) => window.setup(o), {
               text: c.text, words: words && words.join('') === c.text ? words : null,
               fill: opts.fill, stroke: opts.stroke, strokeRatio: opts.strokeRatio || 0, shadow: Boolean(opts.shadow),
-              weight: font.weight || 700, motion, fixedSize: L.fontPx, maxW: 0.92, maxH: 0.92,
+              weight: font.weight || 700, motion: s.motion, fixedSize: L.fontPx, maxW: 0.92, maxH: 0.92,
             });
           }
-          await page.evaluate(([tt, tm, mo]) => window.setTime(tt, tm, mo), [s.t, s.timing, motion]);
+          await page.evaluate(([tt, tm, mo]) => window.setTime(tt, tm, mo), [s.t, s.timing, s.motion]);
           await page.screenshot({ path: path.join(shotsDir, `s${i}.png`), omitBackground: true, type: 'png' });
           if (i % 5 === 0 || i === plan.shots.length - 1) onProgress(2 + 58 * ((i + 1) / plan.shots.length), 'กำลังวาดซับ');
         }
@@ -110,20 +114,32 @@ async function renderSubtitled(opts) {
       // ไม่มีซับเลย: แถบว่าง (PNG โปร่งใส 2x2 ขยายด้วย ffmpeg ไม่ได้ จึงสร้างด้วย ffmpeg ตรงๆ)
       await run(tools.ffmpegPath(), ['-y', '-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', `color=c=black@0.0:s=${w}x${L.band},format=rgba`, '-frames:v', '1', blank]);
     }
-    // 2) ลำดับเฟรมเต็มความยาวคลิป ด้วย hard link
-    for (let f = 0; f < plan.total; f++) {
-      const srcPng = plan.frames[f] === null ? blank : path.join(shotsDir, `s${plan.frames[f]}.png`);
-      fs.linkSync(srcPng, path.join(seq, `f${String(f).padStart(6, '0')}.png`));
-    }
+    // 2) ลำดับเฟรมเต็มความยาวคลิป ด้วย hard link (ตำแหน่งละ 1 ชุด · ปกติมีชุดเดียว)
+    const seqs = ys.map((y, k) => {
+      const dir = k ? path.join(work, `seq${k}`) : seq;
+      if (k) fs.mkdirSync(dir);
+      for (let f = 0; f < plan.total; f++) {
+        const i = plan.frames[f];
+        const srcPng = i === null || yOf[plan.shots[i].cue] !== y ? blank : path.join(shotsDir, `s${i}.png`);
+        fs.linkSync(srcPng, path.join(dir, `f${String(f).padStart(6, '0')}.png`));
+      }
+      return { dir, y };
+    });
     onProgress(61, 'กำลังรวมซับกับคลิป');
     // 3) วางซับทับคลิป แล้วเข้ารหัส
     const hdr = info.hdr && hasFilter('zscale');
     const base = hdr
       ? `[0:v]zscale=t=linear:npl=203,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=${w}:${h}:flags=lanczos,setsar=1[b]`
       : `[0:v]scale=${w}:${h}:flags=lanczos,setsar=1[b]`;
-    const fc = `${base};[b][1:v]overlay=0:${L.y}:eof_action=pass:format=auto,format=yuv420p[v]`;
+    let fc = base, last = 'b';
+    seqs.forEach((sq, k) => {
+      const out = k === seqs.length - 1 ? 'o' : `o${k}`;
+      fc += `;[${last}][${k + 1}:v]overlay=0:${sq.y}:eof_action=pass:format=auto[${out}]`;
+      last = out;
+    });
+    fc += ';[o]format=yuv420p[v]';
     const args = ['-y', '-hide_banner', '-loglevel', 'error', '-nostats', '-progress', 'pipe:2',
-      '-i', src, '-framerate', String(FPS), '-i', path.join(seq, 'f%06d.png'),
+      '-i', src, ...seqs.flatMap((sq) => ['-framerate', String(FPS), '-i', path.join(sq.dir, 'f%06d.png')]),
       '-filter_complex', fc, '-map', '[v]', '-map', '0:a:0?',
       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '19', '-profile:v', 'high', '-pix_fmt', 'yuv420p',
       '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709',

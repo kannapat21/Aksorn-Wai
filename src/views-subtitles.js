@@ -79,7 +79,7 @@ function subtitlesHome({ cfg, user, csrf, owned, jobs, limits, ready, now, picke
   const choice = owned.find((o) => o.order.id === picked) || owned.find((o) => o.p.motion === 'kinetic') || owned[0];
   const cards = owned.map(({ order, p }) => `
       <label class="sub-style">
-        <input type="radio" name="order" value="${esc(order.id)}" ${choice && choice.order.id === order.id ? 'checked' : ''} required>
+        <input type="radio" name="order" value="${esc(order.id)}" data-slug="${esc(p.slug)}" ${choice && choice.order.id === order.id ? 'checked' : ''} required>
         <span class="sub-style-card">
           <img src="/previews/${esc(p.slug)}_vertical.jpg" alt="" width="540" height="960" loading="lazy">
           <span class="sub-style-txt"><b>${esc(p.title)}</b></span>
@@ -100,7 +100,7 @@ function subtitlesHome({ cfg, user, csrf, owned, jobs, limits, ready, now, picke
 </div>
 ${state}
 ${owned.length ? `
-<form class="sub-new" data-sub-new ${bm ? 'data-browser' : ''} data-csrf="${esc(csrf)}" data-max-mb="${esc(S.maxMb)}" data-max-sec="${esc(S.maxSeconds)}" ${can ? '' : 'data-off'}>
+<form class="sub-new" data-sub-new ${bm ? 'data-browser' : ''} ${picked ? 'data-picked' : ''} data-csrf="${esc(csrf)}" data-max-mb="${esc(S.maxMb)}" data-max-sec="${esc(S.maxSeconds)}" ${can ? '' : 'data-off'}>
   <label class="sub-drop big" data-drop>
     <input type="file" accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.m4v,.webm,.mkv" data-file ${can ? '' : 'disabled'}>
     <span class="sub-drop-icon">${ICON.film}</span>
@@ -229,8 +229,8 @@ ${removeForm(job, csrf)}
   const rendering = job.status === 'queued_render' || job.status === 'rendering';
   const data = {
     id: job.id, duration: job.duration, width: layoutInfo.w, height: layoutInfo.h, cues,
-    style: { order: job.order_id, font: job.font, fill: job.fill, stroke: job.stroke, outline: job.outline, shadow: Boolean(job.shadow), size: String(sizePct(job.size)), position: job.position },
-    owned: owned.map(({ order, p: pp }) => ({ id: order.id, title: pp.title, motion: pp.motion })),
+    style: { order: job.order_id, font: job.font, fill: job.fill, stroke: job.stroke, outline: job.outline, shadow: Boolean(job.shadow), size: String(sizePct(job.size)), position: job.position, looks: looksOf(job) },
+    owned: owned.map(({ order, p: pp }) => ({ id: order.id, slug: pp.slug, title: pp.title, motion: pp.motion })),
     fonts: fonts.map((f) => ({ id: f.id, weight: f.weight, chars: f.chars || null, label: f.label })),
     csrf, disabled: rendering, browser: bm,
   };
@@ -238,7 +238,7 @@ ${removeForm(job, csrf)}
   const swatches = (name, list, cur) => list.map((c) => `<button type="button" class="swatch${c === cur ? ' active' : ''}" data-swatch="${name}" data-color="${c}" style="--c:${c}" aria-label="สี ${c}"></button>`).join('');
   const seg = (name, opts, cur) => `<div class="seg seg-wide">${opts.map(([k, l]) => `<label class="seg-opt"><input type="radio" name="${name}" value="${k}" ${cur === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>`;
   const fontOpts = fonts.map((f) => `<label class="font-opt"><input type="radio" name="font" value="${esc(f.id)}" ${f.id === job.font ? 'checked' : ''}><span class="font-sample" style="font-family:'tt-${esc(f.id)}';font-weight:${esc(f.weight || 700)}">ซับไทย สวัสดี</span><small>${esc(f.label)}${f.user ? ' · <b>ของฉัน</b>' : ''}</small></label>`).join('');
-  const styleCards = owned.map(({ order, p: pp }) => `<label class="sub-chip"><input type="radio" name="order" value="${esc(order.id)}" ${order.id === job.order_id ? 'checked' : ''}><span>${esc(pp.title)}</span></label>`).join('');
+  const styleCards = owned.map(({ order, p: pp }) => `<label class="sub-chip"><input type="radio" name="order" value="${esc(order.id)}" data-slug="${esc(pp.slug)}" ${order.id === job.order_id ? 'checked' : ''}><span>${esc(pp.title)}</span></label>`).join('');
 
   return layout({
     title: 'ตรวจคำและเลือกแบบ', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-subtitles page-sub-edit', wide: true, tab: 'subs',
@@ -259,6 +259,12 @@ ${!rendering && !cues.length ? `<div class="note">${ICON.shield}<span><b>ระ�
     ${bm ? `<div data-local-clip="${esc(job.id)}">${clipAsk('เลือกคลิปเดิมเพื่อดูตัวอย่างและสร้างคลิป')}</div>` : ''}
   </div>
   <div data-filters></div>
+  <div class="look-sheet" data-look-sheet role="dialog" aria-modal="true" aria-labelledby="look-sheet-h" hidden>
+    <div class="look-sheet-box">
+      <div class="look-sheet-top"><b id="look-sheet-h" data-look-h>แบบของบรรทัดนี้</b><button type="button" class="sub-mini" data-look-close aria-label="ปิด">✕</button></div>
+      <div class="look-sheet-body" data-look-body></div>
+    </div>
+  </div>
   <div class="sub-tabs" role="tablist" aria-label="เครื่องมือ">
     <button type="button" class="sub-tab active" role="tab" aria-selected="true" data-sub-tab="words">${ICON.edit}<span>แก้คำ</span></button>
     <button type="button" class="sub-tab" role="tab" aria-selected="false" data-sub-tab="look"><span class="sub-tab-aa" aria-hidden="true">Aa</span><span>หน้าตาซับ</span></button>
@@ -282,17 +288,27 @@ ${!rendering && !cues.length ? `<div class="note">${ICON.shield}<span><b>ระ�
       <button type="button" class="sub-tool" data-tl-split title="แบ่งบรรทัดตรงเส้นเวลา (S)">✂ แบ่ง</button>
       <button type="button" class="sub-tool" data-tl-del>🗑 ลบ</button>
       <button type="button" class="sub-tool" data-add>+ เพิ่มบรรทัด</button>
+      <button type="button" class="sub-tool" data-tl-look title="เปลี่ยนแอนิเมชันของบรรทัดนี้">✦ แบบ</button>
       <button type="button" class="sub-tool" data-tl-edit hidden>✎ แก้คำ</button>
     </div>
   </div>
-  <p class="muted small sub-hint">แตะข้อความด้านล่างเพื่อพิมพ์แก้ · ลากขอบบล็อกบนไทม์ไลน์เพื่อปรับเวลา</p>
+  <div class="sub-lines-head">
+    <p class="muted small sub-hint">แตะข้อความเพื่อแก้ · กด ✦ เพื่อเปลี่ยนแบบเฉพาะบรรทัด</p>
+    ${rendering ? '' : '<button type="button" class="sub-mini" data-multi aria-pressed="false">เลือกหลายบรรทัด</button>'}
+  </div>
+  <div class="sub-multi" data-multi-bar hidden>
+    <b data-multi-n>เลือก 0 บรรทัด</b>
+    <button type="button" class="sub-mini" data-multi-all>ทั้งหมด</button>
+    <button type="button" class="sub-mini primary" data-multi-look disabled>✦ เปลี่ยนแบบ</button>
+    <button type="button" class="sub-mini" data-multi-done>เสร็จ</button>
+  </div>
   <ol class="sub-lines" data-lines aria-label="ข้อความซับทุกบรรทัด"></ol>
   </div>
   <div class="sub-pane" data-pane="look" hidden>
     <fieldset class="cz-field sub-look-f" ${rendering ? 'disabled' : ''} data-look>
       <legend class="sr-only">หน้าตาซับ <span data-look-sum></span></legend>
-      <p class="sub-label">แบบ</p>
-      <div class="sub-chips">${styleCards}</div>
+      <p class="sub-label">แบบหลัก <span class="muted small">ใช้กับทุกบรรทัด</span></p>
+      <div class="sub-chips" data-main-chips>${styleCards}</div>
       <p class="muted small" data-motion-note></p>
       <p class="sub-label" id="sub-font-l">ฟอนต์</p>
       <div class="font-pick" data-font-pick>
@@ -344,6 +360,7 @@ ${bm ? `<script type="module" src="/render-ui.js?v=${V}"></script>` : ''}`,
 
 // ขนาดซับเป็น % ของขนาดมาตรฐาน (ค่าเก่า sm/md/lg ยังอ่านได้)
 const { SIZE_MIN, SIZE_MAX, sizePct } = require('../public/subplan');
+const { looksOf } = require('./subtitles');
 
 function removeForm(job, csrf) {
   const { esc } = h();

@@ -70,6 +70,8 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
   const subCols = db.prepare('PRAGMA table_info(subtitle_jobs)').all().map((c) => c.name);
   if (!subCols.includes('asr_json')) db.exec('ALTER TABLE subtitle_jobs ADD COLUMN asr_json TEXT');
   if (!subCols.includes('browser')) db.exec('ALTER TABLE subtitle_jobs ADD COLUMN browser INTEGER NOT NULL DEFAULT 0');
+  // ตำแหน่งของแต่ละแบบที่ใช้ในคลิป (นอกจากแบบหลัก) { slug: '20' | 'top' ... } · ลากซับของแบบไหน ก็ย้ายเฉพาะแบบนั้น
+  if (!subCols.includes('looks_json')) db.exec('ALTER TABLE subtitle_jobs ADD COLUMN looks_json TEXT');
   const q = {
     insert: db.prepare(`INSERT INTO subtitle_jobs (id, user_id, order_id, product_slug, font, fill, stroke, outline, shadow, size, position, status,
                           src_name, src_ext, src_bytes, width, height, duration, hdr, created_at, queued_at, updated_at, expires_at)
@@ -90,7 +92,7 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     backToReview: db.prepare("UPDATE subtitle_jobs SET status = 'review', stage = '', error = NULL, updated_at = ? WHERE id = ? AND status IN ('done','failed') AND cues_json IS NOT NULL"),
     saveCues: db.prepare("UPDATE subtitle_jobs SET cues_json = ?, updated_at = ? WHERE id = ? AND status IN ('review','done','failed')"),
     setStyle: db.prepare(`UPDATE subtitle_jobs SET order_id = @order_id, product_slug = @product_slug, font = @font, fill = @fill, stroke = @stroke,
-                            outline = @outline, shadow = @shadow, size = @size, position = @position, updated_at = @t WHERE id = @id`),
+                            outline = @outline, shadow = @shadow, size = @size, position = @position, looks_json = @looks_json, updated_at = @t WHERE id = @id`),
     queueRender: db.prepare("UPDATE subtitle_jobs SET status = 'queued_render', progress = 0, stage = '', error = NULL, queued_at = ?, updated_at = ? WHERE id = ? AND status IN ('review','done','failed') AND cues_json IS NOT NULL"),
     expired: db.prepare("SELECT id FROM subtitle_jobs WHERE expires_at < ? AND status != 'expired'"),
     expire: db.prepare("UPDATE subtitle_jobs SET status = 'expired', cues_json = NULL, src_name = '', error = NULL, stage = '', updated_at = ? WHERE id = ?"),
@@ -137,10 +139,21 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     const pct = require('../public/subplan').posPct(body.position);
     const position = POSITIONS.includes(body.position) ? body.position : pct !== null ? String(pct) : 'bottom';
     const shadow = body.shadow === true || body.shadow === '1' || body.shadow === 'on' || body.shadow === 1;
+    // ตำแหน่งของแบบอื่นๆ ในคลิป (ค่าที่ไม่รู้จักถูกตัดทิ้งเงียบๆ ใช้ตำแหน่งหลักแทน)
+    const looks = {};
+    if (body.looks && typeof body.looks === 'object' && !Array.isArray(body.looks)) {
+      const slugs = new Set(owned.map((o) => o.product_slug));
+      for (const [k, v] of Object.entries(body.looks).slice(0, 60)) {
+        if (!slugs.has(k) || k === order.product_slug) continue;
+        const lp = posValue(v);
+        if (lp) looks[k] = lp;
+      }
+    }
     return {
       value: {
         order_id: order.id, product_slug: order.product_slug, font: font.id, fill,
         stroke: /^#[0-9a-f]{6}$/.test(stroke) ? stroke : '#111111', outline, shadow: shadow ? 1 : 0, size, position,
+        looks_json: Object.keys(looks).length ? JSON.stringify(looks) : null,
       },
     };
   }
@@ -280,10 +293,10 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
         throw e;
       }
     }
-    const p = cfg.products.find((x) => x.slug === job.product_slug);
+    const motionOf = (slug) => { const p = cfg.products.find((x) => x.slug === slug); return (p && p.motion) || null; };
     fs.rmSync(outOf(job), { force: true });
     const r = await renderer.render({
-      src: srcOf(job), outFile: outOf(job), cues, motion: (p && p.motion) || 'pop',
+      src: srcOf(job), outFile: outOf(job), cues: renderCues(job, cues, motionOf), motion: motionOf(job.product_slug) || 'pop',
       fill: job.fill, stroke: job.stroke, strokeRatio: OUTLINES[job.outline] || 0, shadow: Boolean(job.shadow),
       font, size: job.size, position: job.position, tmpDir: dirOf(job.id),
       info: { width: job.width, height: job.height, duration: job.duration, hdr: Boolean(job.hdr) },
@@ -311,8 +324,8 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     }
   }
 
-  function saveCues(job, input) {
-    const r = cuesLib.validateCues(input, { duration: job.duration, prev: cuesOf(job) });
+  function saveCues(job, input, { styles } = {}) {
+    const r = cuesLib.validateCues(input, { duration: job.duration, prev: cuesOf(job), styles: new Set(styles || []), main: job.product_slug });
     if (r.error) return r;
     q.saveCues.run(JSON.stringify(r.cues), now(), job.id);
     return r;
@@ -401,6 +414,33 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
   };
 }
 
+// ตำแหน่งที่ยอมรับ: บน/กลาง/ล่าง หรือ % ความสูง 5–95 (อย่างอื่น = null)
+function posValue(v) {
+  if (POSITIONS.includes(v)) return v;
+  const pct = require('../public/subplan').posPct(v);
+  return pct === null ? null : String(pct);
+}
+
+function looksOf(job) {
+  try { const o = JSON.parse((job && job.looks_json) || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; }
+}
+
+/*
+ * บรรทัดซับสำหรับสร้างคลิป: ใส่ท่า (m) และตำแหน่ง (pos) ของแต่ละบรรทัดไว้เลย
+ * ทั้งเครื่องร้านและเบราว์เซอร์ลูกค้าใช้ค่าชุดนี้ ไม่ต้องรู้เรื่องแบบหลัก/แบบรอง
+ *   บรรทัดที่ไม่ได้เลือกแบบ หรือแบบไม่มีแล้ว → ท่าและตำแหน่งของแบบหลัก
+ */
+function renderCues(job, cues, motionOf) {
+  const looks = looksOf(job);
+  const mainMotion = motionOf(job.product_slug) || 'pop';
+  return cues.map((c) => {
+    const own = c.p && c.p !== job.product_slug ? motionOf(c.p) : null;
+    const out = { id: c.id, start: c.start, end: c.end, text: c.text, w: c.w, m: own || mainMotion, pos: job.position };
+    if (own && looks[c.p]) out.pos = posValue(looks[c.p]) || job.position;
+    return out;
+  });
+}
+
 function fmtDur(sec) {
   const s = Math.round(sec);
   return s >= 60 ? `${Math.floor(s / 60)} นาที${s % 60 ? ` ${s % 60} วินาที` : ''}` : `${s} วินาที`;
@@ -410,4 +450,4 @@ function cleanName(name) {
   return String(name || 'คลิป').normalize('NFC').replace(/[\p{Cc}\p{Cf}<>\\/:*?"|]/gu, '').trim().slice(0, 80) || 'คลิป';
 }
 
-module.exports = { createSubtitles, fmtDur, SIZES, POSITIONS };
+module.exports = { createSubtitles, fmtDur, SIZES, POSITIONS, renderCues, looksOf, posValue };
