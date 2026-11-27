@@ -15,6 +15,7 @@ const custom = require('./customizer');
 const renderTools = require('../render/tools');
 const { createSubtitles, renderCues: subRenderCues } = require('./subtitles');
 const { createTranscriber } = require('./transcribe');
+const fmtSec = (x) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
 const { createStorage, productKey } = require('./storage');
 
 const MIN_MS = 60 * 1000;
@@ -1504,6 +1505,9 @@ function createApp(cfg, opts = {}) {
     const job = ownSub(req);
     if (!job || !job.browser) return res.status(404).json({ error: 'ไม่พบคลิปนี้' });
     const i = Number(req.query.i), n = Number(req.query.n), start = Number(req.query.start);
+    // ช่วงของท่อนนี้จริงๆ (เบราว์เซอร์ส่งเสียงเผื่อหัวท้าย ไม่ให้คำตรงรอยต่อขาด) · เบราว์เซอร์รุ่นเก่าไม่ส่งมา = ใช้ทั้งท่อน
+    const ka = Number(req.query.a), kb = Number(req.query.b);
+    const keep = Number.isFinite(ka) && Number.isFinite(kb) && kb > ka && ka >= start - 0.01 ? { a: ka, b: kb } : null;
     if (!(Number.isInteger(i) && Number.isInteger(n) && n >= 1 && n <= 150 && i >= 0 && i < n && start >= 0 && start <= job.duration + 1)) return res.status(400).json({ error: 'ข้อมูลเสียงไม่ถูกต้อง' });
     // ถอดเสร็จไปแล้ว (เช่น เบราว์เซอร์ส่งท่อนเดิมซ้ำหลังเน็ตสะดุด) = ถือว่าสำเร็จ
     if (job.cues_json && job.status !== 'transcribing') return res.json({ ok: true, done: true, url: `/subtitles/${job.id}` });
@@ -1512,7 +1516,10 @@ function createApp(cfg, opts = {}) {
     const buf = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
     try { require('./transcribe').parseWav(buf); } catch { return res.status(400).json({ error: 'ไฟล์เสียงไม่ถูกต้อง' }); }
     try {
-      const r = await transcriber.chunk(buf, start);
+      // ตอบเบราว์เซอร์ให้ทันภายใน ~100 วินาที (เบราว์เซอร์รอ 150) ไม่ให้ตัดสายแล้วส่งซ้ำซ้อนงานกัน
+      const r = await transcriber.chunk(buf, start, { keep, deadline: Date.now() + 100000 });
+      const tag = `${job.id} ท่อน ${i + 1}/${n} (${fmtSec(start)})`;
+      if (r.gaps || r.filled) log(`[subtitles] ${tag}: ${r.words.length} คำ · ช่วงที่ Whisper ข้าม ${r.gaps || 0} ถอดซ้ำได้ ${r.recovered || 0}${r.missed && r.missed.length ? ` · ยังขาด ${r.missed.map((g) => `${fmtSec(g.a)}–${fmtSec(g.b)}`).join(', ')}${r.gapError ? ` (${r.gapError})` : ''}` : ''}${r.filled ? ` · ใช้ข้อความท่อนแทนคำที่หาย ${r.filled}` : ''}`);
       let fresh = subtitles.get(job.id);
       // ท่อนอื่นล้มระหว่างนี้: เก็บท่อนนี้ไว้ด้วย (เบราว์เซอร์จะส่งท่อนที่ล้มมาใหม่)
       if (fresh && fresh.status === 'failed' && !fresh.cues_json && subtitles.resumeAsr(fresh)) fresh = subtitles.get(job.id);
@@ -1522,9 +1529,14 @@ function createApp(cfg, opts = {}) {
     } catch (e) {
       log(`[subtitles] ถอดเสียงไม่สำเร็จ ${job.id}: ${String(e.message).split('\n')[0]}`);
       const msg = e.userMessage || 'ถอดเสียงไม่สำเร็จ ลองใหม่อีกครั้ง';
-      subtitles.failAsr(job, msg);
       if (e.retryAfter) res.set('Retry-After', String(e.retryAfter));
-      res.status(e.status === 429 ? 429 : 502).json({ error: msg });
+      // ชั่วคราว (คิวเต็ม/Groq ช้า): งานยังเดินต่อ เบราว์เซอร์รอแล้วส่งท่อนนี้ใหม่ · ถาวร (คีย์ผิด ฯลฯ): งานล้ม
+      if (e.transient) {
+        subtitles.asrWaiting(job, msg);
+        return res.status(e.status === 429 ? 429 : 503).json({ error: msg, retry: true });
+      }
+      subtitles.failAsr(job, msg);
+      res.status(502).json({ error: msg });
     }
   });
 

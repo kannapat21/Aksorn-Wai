@@ -97,7 +97,9 @@ before(async () => {
     USER_FONT_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'sl-fonts-')),
     SUBTITLE_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'sl-subs-')),
     SUBTITLE_MAX_SECONDS: '180',
+    GROQ_ASR_RPM: '1000',
   });
+  cfg.groq.backoffMs = [5, 5, 5]; // ลองซ้ำเร็วๆ ในเทสต์
   ctx = createApp(cfg, { log: () => {} });
   ctx.mailer.send = async () => {};
   await new Promise((r) => { server = ctx.app.listen(0, '127.0.0.1', r); });
@@ -300,7 +302,7 @@ test('ซับในเบราว์เซอร์: คลิปไม่ข
   assert.equal((await other.raw(`/subtitles/${id}/audio?i=0&n=1&start=0`, wav(1))).status, 404);
 });
 
-test('ซับในเบราว์เซอร์: Groq เต็มโควตา → แจ้งลูกค้าชัดเจน · ส่งเสียงท่อนแรกใหม่ = ลองใหม่ได้', async () => {
+test('ซับในเบราว์เซอร์: Groq เต็มโควตา → งานไม่ล้ม บอกให้รอคิว · ส่งเสียงท่อนแรกใหม่ = ลองใหม่ได้', async () => {
   const c = await newUser();
   const order = await claim(c, 'follow-now');
   const id = (await (await c.json('/subtitles/new', { order, name: 'x.mp4', bytes: 1, width: 1920, height: 1080, duration: 20, audio: true })).json()).id;
@@ -308,10 +310,13 @@ test('ซับในเบราว์เซอร์: Groq เต็มโค�
   try {
     const r = await c.raw(`/subtitles/${id}/audio?i=0&n=1&start=0`, wav(1));
     assert.equal(r.status, 429);
-    assert.match((await r.json()).error, /โควตาฟรี/);
+    const j = await r.json();
+    assert.match(j.error, /คิว/);
+    assert.equal(j.retry, true, 'บอกเบราว์เซอร์ให้รอแล้วลองใหม่เอง');
   } finally { groqStatus = 200; }
-  assert.equal(ctx.subtitles.get(id).status, 'failed');
-  assert.match(await (await c.req(`/subtitles/${id}`)).text(), /data-sub-resume/);
+  // คิวเต็มชั่วคราวไม่ทำให้งานล้ม (เดิมขึ้นเป็น error ทั้งที่เบราว์เซอร์กำลังลองใหม่อยู่)
+  assert.equal(ctx.subtitles.get(id).status, 'transcribing');
+  assert.match(ctx.subtitles.get(id).stage, /คิว/);
   const r2 = await c.raw(`/subtitles/${id}/audio?i=0&n=1&start=0`, wav(1));
   assert.equal(r2.status, 200);
   assert.equal(ctx.subtitles.get(id).status, 'review');
@@ -323,6 +328,10 @@ test('ซับในเบราว์เซอร์: ท่อนเสีย
   const id = (await (await c.json('/subtitles/new', { order, name: 'x.mp4', bytes: 1, width: 1920, height: 1080, duration: 80, audio: true })).json()).id;
   assert.equal((await (await c.raw(`/subtitles/${id}/audio?i=2&n=3&start=56`, wav(2))).json()).done, false);
   groqStatus = 503;
+  try { assert.equal((await c.raw(`/subtitles/${id}/audio?i=0&n=3&start=0`, wav(2))).status, 503); } finally { groqStatus = 200; }
+  assert.equal(ctx.subtitles.get(id).status, 'transcribing', 'Groq ล่มชั่วคราว: งานไม่ล้ม รอส่งท่อนนั้นใหม่');
+  // คีย์ผิด (ถาวร) = งานล้ม บอกชัด
+  groqStatus = 401;
   try { assert.equal((await c.raw(`/subtitles/${id}/audio?i=0&n=3&start=0`, wav(2))).status, 502); } finally { groqStatus = 200; }
   assert.equal(ctx.subtitles.get(id).status, 'failed');
   // ท่อนที่ 2 มาถึงหลังท่อนแรกล้ม: เก็บไว้ ไม่ปฏิเสธ
