@@ -14,6 +14,15 @@ const MOTIONS = globalThis.TTMotion.MOTIONS;
 const PREMIUM_TAG = 'พรีเมียม';
 
 // รันบนโฮสต์แบบ serverless (Netlify/Vercel/AWS Lambda): ไม่มีดิสก์ถาวร ไม่มี Chrome/ffmpeg เขียนได้แค่ /tmp
+// เพจ Facebook ของร้าน (ค่าเริ่มต้น = เพจ อักษรไหว) · รับเฉพาะลิงก์ https · "off" = ไม่แสดง
+const DEFAULT_FACEBOOK = 'https://www.facebook.com/profile.php?id=61596788079753';
+function facebookUrl(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return DEFAULT_FACEBOOK;
+  if (s.toLowerCase() === 'off') return '';
+  return /^https:\/\/[^\s"'<>]+$/.test(s) ? s : DEFAULT_FACEBOOK;
+}
+
 function isServerless(env) {
   return env.SERVERLESS === '1' || Boolean(env.NETLIFY || env.AWS_LAMBDA_FUNCTION_NAME || env.VERCEL);
 }
@@ -94,6 +103,8 @@ function loadConfig(overrides = {}) {
     // ข้อมูลร้านที่แสดงในหน้านโยบาย (เว้นว่าง = แสดงช่องให้กรอก)
     legal: {
       name: env.LEGAL_NAME || '', contactEmail: env.CONTACT_EMAIL || '', phone: env.CONTACT_PHONE || '', line: env.CONTACT_LINE || '',
+      // เพจ Facebook ของร้าน: ช่องทางหลักให้ลูกค้าทักเมื่อมีปัญหา/สอบถาม (CONTACT_FACEBOOK=off = ซ่อน)
+      facebook: facebookUrl(env.CONTACT_FACEBOOK), facebookName: env.CONTACT_FACEBOOK_NAME || 'อักษรไหว',
       address: env.CONTACT_ADDRESS || '', taxId: env.TAX_ID || '', refundDays: Number(env.REFUND_DAYS || 7),
     },
     paymentProvider: env.PAYMENT_PROVIDER || 'mock',

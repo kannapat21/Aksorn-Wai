@@ -7,6 +7,16 @@ const baht = (satang) => `฿${(satang / 100).toLocaleString('th-TH', { minimumF
 // ราคาที่แสดงบนหน้าร้าน: 0 = "ฟรี"
 // ราคาที่แสดง: ของฟรี = "ฟรี" · ตัวพรีเมียม = อยู่ในแพ็กพรีเมียม (ซื้อแพ็กเดียวได้ทุกตัว)
 let PACK_PRICE = 15000;
+// เพจ Facebook ของร้าน (ตั้งจาก cfg.legal ผ่าน configure) ช่องทางหลักให้ลูกค้าทักเมื่อมีปัญหา
+let FB = { url: 'https://www.facebook.com/profile.php?id=61596788079753', name: 'อักษรไหว' };
+// ลิงก์ไปเพจ (เปิดแท็บใหม่) · ถ้าปิดเพจไว้ ใช้หน้าติดต่อร้านแทน
+function fbLink(inner, cls = '') {
+  const c = cls ? ` class="${cls}"` : '';
+  return FB.url ? `<a href="${esc(FB.url)}" target="_blank" rel="noopener noreferrer"${c}>${inner}</a>` : `<a href="/contact"${c}>${inner}</a>`;
+}
+const fbLabel = () => (FB.url ? `ทักเพจ ${esc(FB.name)}` : 'ติดต่อร้าน');
+// บรรทัดสำหรับอีเมล
+const fbMailLine = () => (FB.url ? `\nมีปัญหาหรืออยากสอบถาม ทักมาที่เพจ ${FB.name}: ${FB.url}\n` : '');
 const priceLabel = (p) => (p.free ? 'ฟรี' : p.pack ? baht(p.price) : `แพ็ก ${baht(PACK_PRICE)}`);
 // หน้าที่ลูกค้ากลับไปดูสินค้า/สั่งใหม่ (แพ็กไปหน้า /premium)
 const productHref = (p) => (p && p.pack ? '/premium' : `/p/${esc(p && p.slug)}`);
@@ -51,6 +61,7 @@ const ICON = {
   grid: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg>',
   list: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
   link: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>',
   mail: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
   stretch: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg>',
   user: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
@@ -103,6 +114,7 @@ function layout({ title, body, shopName, user = null, csrf = '', noindex = false
           <a href="/refund">${ICON.check}<span>นโยบายคืนเงิน</span></a>
           <a href="/privacy">${ICON.shield}<span>ความเป็นส่วนตัว (PDPA)</span></a>
           <a href="/contact">${ICON.mail}<span>ติดต่อร้าน</span></a>
+          ${FB.url ? fbLink(`${ICON.chat}<span>${fbLabel()}</span>`) : ''}
           <hr>
           <form method="post" action="/logout"><input type="hidden" name="csrf" value="${esc(csrf)}"><button type="submit" class="linklike">ออกจากระบบ</button></form>
         </div>
@@ -165,7 +177,8 @@ ${body}
 <footer class="foot">
   <div class="foot-in">
     <div class="foot-brand">${brand(shopName)}
-      <p>แอนิเมชันข้อความภาษาไทยสำหรับคนตัดต่อ ${esc(LICENSE.short)}</p></div>
+      <p>แอนิเมชันข้อความภาษาไทยสำหรับคนตัดต่อ ${esc(LICENSE.short)}</p>
+      ${FB.url ? `<p class="foot-help">มีปัญหาหรืออยากสอบถาม ${fbLink(`${ICON.chat}<span>${fbLabel()}</span>`, 'foot-fb')}</p>` : ''}</div>
     <nav class="foot-links" aria-label="ลิงก์ท้ายเว็บ">
       <a href="/#catalog">แอนิเมชันทั้งหมด</a>
       <a href="/premium">แพ็กพรีเมียม</a>
@@ -657,7 +670,7 @@ function transferReceivedEmail({ cfg, order, p }) {
 
 เมื่อร้านตรวจพบรายการโอนและอนุมัติ แอนิเมชันจะเข้าไปอยู่ในคลังของคุณ และเราจะส่งอีเมลแจ้งอีกครั้ง
 ดูสถานะได้ที่: ${cfg.baseUrl}/order/${order.id}
-
+${fbMailLine()}
 — ${cfg.shopName}`;
 }
 
@@ -669,7 +682,7 @@ function transferRejectedEmail({ cfg, order, p, reason }) {
 
 ถ้าโอนแล้วจริง ตรวจยอดและบัญชีผู้รับ แล้วกด "ยืนยันการโอนเงิน" อีกครั้งได้ที่:
 ${cfg.baseUrl}/pay/transfer/${order.id}
-
+${fbMailLine()}
 — ${cfg.shopName}`;
 }
 
@@ -710,7 +723,7 @@ ${order.status === 'refunded' ? `<p><a class="btn" href="${productHref(p)}">ไ�
 <h1>รอยืนยันการชำระเงิน…</h1>
 <p>ระบบกำลังรอการยืนยันจากผู้ให้บริการชำระเงิน หน้านี้จะเปลี่ยนเองเมื่อยืนยันแล้ว</p>
 <div class="spinner" data-poll="/order/${esc(order.id)}/status" aria-hidden="true"></div>
-<p class="muted small">ถ้ารอนานเกิน 5 นาที กรุณา<a href="/contact">ติดต่อร้าน</a>พร้อมรหัสคำสั่งซื้อ ${esc(order.id.slice(0, 8))}</p>
+<p class="muted small">ถ้ารอนานเกิน 5 นาที ${fbLink(fbLabel())} พร้อมรหัสคำสั่งซื้อ ${esc(order.id.slice(0, 8))}</p>
 </div>`,
   });
 }
@@ -719,13 +732,14 @@ function manualStatusBody({ order, p }) {
   const amt = bahtExact(order.transfer_amount);
   if (order.status === 'expired') return `
 <div class="narrow"><h1>ออเดอร์หมดอายุ</h1>
-<p>ออเดอร์นี้หมดเวลาแล้ว ยังไม่มีการอนุมัติ ถ้าโอนไปแล้ว กรุณาติดต่อร้านพร้อมรหัสอ้างอิง <b>${esc(order.pay_ref)}</b></p>
+<p>ออเดอร์นี้หมดเวลาแล้ว ยังไม่มีการอนุมัติ ถ้าโอนไปแล้ว ${fbLink(fbLabel())} พร้อมรหัสอ้างอิง <b>${esc(order.pay_ref)}</b></p>
 <p><a class="btn primary" href="${productHref(p)}">สั่งซื้อใหม่</a></p></div>`;
   if (order.status === 'rejected') return `
 <div class="narrow"><h1>ร้านยังไม่พบรายการโอน</h1>
 <div class="note warn"><span><b>เหตุผล:</b> ${esc(order.review_note || '')}</span></div>
 <p>ยอดที่ต้องโอน <b>${esc(amt)}</b> · รหัสอ้างอิง <b>${esc(order.pay_ref)}</b></p>
-<p><a class="btn primary lg" href="/pay/transfer/${esc(order.id)}">ตรวจแล้วแจ้งโอนอีกครั้ง</a></p></div>`;
+<p><a class="btn primary lg" href="/pay/transfer/${esc(order.id)}">ตรวจแล้วแจ้งโอนอีกครั้ง</a></p>
+<p class="muted small">โอนแล้วจริงแต่ยังไม่ผ่าน ${fbLink(fbLabel())} พร้อมรหัสอ้างอิง</p></div>`;
   if (order.status === 'pending') return `
 <div class="narrow"><h1>ยังไม่ได้แจ้งโอน</h1>
 <p>ยอดที่ต้องโอน <b>${esc(amt)}</b></p>
@@ -745,7 +759,7 @@ function manualStatusBody({ order, p }) {
     <div><dt>รหัสอ้างอิง</dt><dd><b>${esc(order.pay_ref)}</b></dd></div>
     <div><dt>แจ้งเมื่อ</dt><dd>${esc(thDate(order.confirmed_at))}</dd></div>
   </dl></div>
-  <p class="muted small">ถ้ารอนานผิดปกติ <a href="/contact">ติดต่อร้าน</a>พร้อมรหัสอ้างอิงด้านบน</p>
+  <p class="muted small">ถ้ารอนานผิดปกติ ${fbLink(fbLabel())} พร้อมรหัสอ้างอิงด้านบน</p>
 </div>`;
 }
 
@@ -1236,6 +1250,7 @@ ${fonts.length ? `<ul class="font-rows">${rows}</ul>` : '<p class="muted">ยั
 
 function account({ cfg, user, csrf, items = 0 }) {
   const row = (href, icon, label, sub = '') => `<a class="acc-row" href="${href}">${icon}<span><b>${label}</b>${sub ? `<small>${sub}</small>` : ''}</span><i>›</i></a>`;
+  const fbRow = () => (FB.url ? fbLink(`${ICON.chat}<span><b>${fbLabel()}</b><small>มีปัญหาหรืออยากสอบถาม ทักได้เลย</small></span><i>›</i>`, 'acc-row') : '');
   return layout({
     title: 'บัญชี', shopName: cfg.shopName, user, csrf, noindex: true, page: 'page-account',
     body: user ? `
@@ -1256,6 +1271,7 @@ function account({ cfg, user, csrf, items = 0 }) {
     ${row('/refund', ICON.check, 'นโยบายคืนเงิน')}
     ${row('/privacy', ICON.shield, 'ความเป็นส่วนตัว (PDPA)')}
     ${row('/contact', ICON.user, 'ติดต่อร้าน')}
+    ${fbRow()}
   </div>
   <form method="post" action="/logout" class="acc-logout"><input type="hidden" name="csrf" value="${esc(csrf)}"><button class="btn block" type="submit">ออกจากระบบ</button></form>
   <p class="muted small center" data-install-hint>เพิ่ม ${esc(cfg.shopName)} ลงหน้าจอโฮม: Safari กด แชร์ → "เพิ่มไปยังหน้าจอโฮม" · Chrome กด ⋮ → "ติดตั้งแอป"</p>
@@ -1270,6 +1286,7 @@ function account({ cfg, user, csrf, items = 0 }) {
     ${row('/terms', ICON.check, 'เงื่อนไขการใช้งาน')}
     ${row('/privacy', ICON.shield, 'ความเป็นส่วนตัว (PDPA)')}
     ${row('/contact', ICON.user, 'ติดต่อร้าน')}
+    ${fbRow()}
   </div>
 </div>`,
   });
@@ -1367,7 +1384,7 @@ function legalPage({ cfg, user, csrf, kind }) {
   const L = cfg.legal;
   const shop = esc(cfg.shopName);
   const who = `${legalFill(L.name, 'ชื่อผู้ประกอบการ / บริษัท')}`;
-  const contact = `อีเมล ${legalFill(L.contactEmail, 'อีเมลติดต่อ')}${L.phone ? ` · โทร ${esc(L.phone)}` : ''} · ที่อยู่ ${legalFill(L.address, 'ที่อยู่สำหรับติดต่อ')}${L.taxId ? ` · เลขประจำตัวผู้เสียภาษี ${esc(L.taxId)}` : ''}`;
+  const contact = `${FB.url ? `เพจ Facebook ${fbLink(esc(FB.name))} · ` : ''}อีเมล ${legalFill(L.contactEmail, 'อีเมลติดต่อ')}${L.phone ? ` · โทร ${esc(L.phone)}` : ''} · ที่อยู่ ${legalFill(L.address, 'ที่อยู่สำหรับติดต่อ')}${L.taxId ? ` · เลขประจำตัวผู้เสียภาษี ${esc(L.taxId)}` : ''}`;
   const updated = 'ปรับปรุงล่าสุด: 23 พฤศจิกายน 2569';
   const manual = cfg.paymentProvider === 'manual';
   const pages = {
@@ -1394,7 +1411,7 @@ ${manual
 <h2>ไม่คืนเงินเมื่อ</h2>
 <ul><li>เปลี่ยนใจหลังดาวน์โหลดหรือปรับแต่งไฟล์แล้ว</li><li>ใช้ไม่ได้เพราะโปรแกรมของคุณไม่รองรับฟอร์แมต ทั้งที่ร้านมีฟอร์แมตอื่นให้เลือก (ร้านจะช่วยแนะนำวิธีใช้ก่อน)</li><li>ปัญหาจากฟอนต์ที่คุณอัปโหลดเอง</li></ul>
 <h2>วิธีขอคืนเงิน</h2>
-<ol><li>ติดต่อภายใน ${esc(L.refundDays)} วันหลังซื้อ ทาง ${legalFill(L.contactEmail, 'อีเมลติดต่อ')}</li><li>แจ้งรหัสคำสั่งซื้อ (8 ตัวในอีเมลยืนยัน) อีเมลบัญชี และอธิบายปัญหาพร้อมภาพหน้าจอ</li><li>ร้านตอบกลับภายใน 3 วันทำการ หากอนุมัติ จะคืนเงิน${manual ? 'โดยโอนกลับเข้าบัญชีที่คุณแจ้ง' : 'ผ่านช่องทางเดิม'}ภายใน 7–14 วันทำการ และนำสินค้าออกจากคลังของบัญชี</li></ol>` },
+<ol><li>ติดต่อภายใน ${esc(L.refundDays)} วันหลังซื้อ ทาง${FB.url ? `เพจ Facebook ${fbLink(esc(FB.name))} หรืออีเมล ` : ' '}${legalFill(L.contactEmail, 'อีเมลติดต่อ')}</li><li>แจ้งรหัสคำสั่งซื้อ (8 ตัวในอีเมลยืนยัน) อีเมลบัญชี และอธิบายปัญหาพร้อมภาพหน้าจอ</li><li>ร้านตอบกลับภายใน 3 วันทำการ หากอนุมัติ จะคืนเงิน${manual ? 'โดยโอนกลับเข้าบัญชีที่คุณแจ้ง' : 'ผ่านช่องทางเดิม'}ภายใน 7–14 วันทำการ และนำสินค้าออกจากคลังของบัญชี</li></ol>` },
     privacy: { title: 'นโยบายความเป็นส่วนตัว (PDPA)', body: `
 <p>${who} ("ร้าน") เป็นผู้ควบคุมข้อมูลส่วนบุคคลตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 นโยบายนี้อธิบายว่าเราเก็บและใช้ข้อมูลของคุณอย่างไร</p>
 <h2>ข้อมูลที่เก็บ</h2>
@@ -1418,10 +1435,11 @@ ${manual
   });
 }
 
-// หน้าติดต่อร้าน (ข้อมูลจาก .env: CONTACT_EMAIL, CONTACT_LINE, CONTACT_PHONE)
+// หน้าติดต่อร้าน (ข้อมูลจาก .env: CONTACT_FACEBOOK, CONTACT_EMAIL, CONTACT_LINE, CONTACT_PHONE)
 function contactPage({ cfg, user, csrf }) {
   const L = cfg.legal;
   const rows = [
+    FB.url ? ['Facebook', fbLink(`เพจ ${esc(FB.name)}`)] : null,
     ['อีเมล', L.contactEmail ? `<a href="mailto:${esc(L.contactEmail)}">${esc(L.contactEmail)}</a>` : legalFill('', 'อีเมลติดต่อ')],
     L.line ? ['LINE', /^https:\/\//.test(L.line) ? `<a href="${esc(L.line)}" rel="noopener">${esc(L.line)}</a>` : esc(L.line)] : null,
     L.phone ? ['โทร', esc(L.phone)] : null,
@@ -1429,7 +1447,8 @@ function contactPage({ cfg, user, csrf }) {
   return layout({
     title: 'ติดต่อร้าน', shopName: cfg.shopName, user, csrf, page: 'page-legal',
     body: `<article class="narrow legal"><p class="eyebrow">${esc(cfg.shopName)}</p><h1>ติดต่อร้าน</h1>
-<p class="lead">มีปัญหาเรื่องการโอนเงิน ดาวน์โหลด หรือใช้ไฟล์ในโปรแกรมตัดต่อ ทักมาได้เลย</p>
+${FB.url ? `<p class="lead">มีปัญหาหรืออยากสอบถาม ทักมาที่เพจ <b>${esc(FB.name)}</b> ได้เลย เรื่องโอนเงิน ดาวน์โหลด หรือใช้ไฟล์ในโปรแกรมตัดต่อ</p>
+<p>${fbLink(`${ICON.chat} ทักเพจ ${esc(FB.name)}`, 'btn primary lg')}</p>` : `<p class="lead">มีปัญหาเรื่องการโอนเงิน ดาวน์โหลด หรือใช้ไฟล์ในโปรแกรมตัดต่อ ทักมาได้เลย</p>`}
 <section class="box"><dl class="contact-list">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></section>
 <h2>ช่วยให้ร้านตอบได้เร็วขึ้น</h2>
 <ul><li>แจ้งอีเมลที่ใช้สมัคร</li><li>ถ้าเป็นเรื่องการโอน แจ้งรหัสอ้างอิง (ขึ้นต้นด้วย AW-) ยอด และเวลาที่โอน</li><li>ถ้าไฟล์ใช้ไม่ได้ บอกชื่อโปรแกรมตัดต่อ และแนบภาพหน้าจอ</li></ul>
@@ -1615,10 +1634,14 @@ ${cfg.baseUrl}/library${p.pack ? '' : `/${order.id}`}
 อ่านเพิ่มเติม: ${cfg.baseUrl}/license
 
 รหัสคำสั่งซื้อ: ${order.id.slice(0, 8)}
+${fbMailLine()}
 — ${cfg.shopName} · แอนิเมชันข้อความไทย`;
 }
 
-module.exports = { packPage, configure: (cfg) => { PACK_PRICE = cfg.premiumPack.price; }, clerkAuth, clerkSignedOut, browserScripts, contactPage, transferPay, adminTransfers, transferReceivedEmail, transferRejectedEmail, adminTransferEmail, bahtExact, omisePay, account, forgot, reset, legalPage, verifyEmailBody, resetEmailBody, home, product, mockPay, orderStatus, library, libraryItem, customize, customStatus, presetsPage, fontsPage, login, signup, licensePage, message, admin, emailBody, esc, baht, LICENSE };
+module.exports = { packPage, configure: (cfg) => {
+  PACK_PRICE = cfg.premiumPack.price;
+  if (cfg.legal) FB = { url: cfg.legal.facebook || '', name: cfg.legal.facebookName || 'อักษรไหว' };
+}, clerkAuth, clerkSignedOut, browserScripts, contactPage, transferPay, adminTransfers, transferReceivedEmail, transferRejectedEmail, adminTransferEmail, bahtExact, omisePay, account, forgot, reset, legalPage, verifyEmailBody, resetEmailBody, home, product, mockPay, orderStatus, library, libraryItem, customize, customStatus, presetsPage, fontsPage, login, signup, licensePage, message, admin, emailBody, esc, baht, LICENSE };
 // ตัวช่วยสำหรับหน้าซับอัตโนมัติ (src/views-subtitles.js)
 module.exports._h = { browserScripts, layout, esc, ICON, V, fontFaces, fmtBytes, thDate, FILL_SWATCHES, STROKE_SWATCHES };
 Object.assign(module.exports, require('./views-subtitles'));

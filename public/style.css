@@ -993,6 +993,8 @@ img[loading="lazy"]:not(.loaded) { opacity: 0; }
 .lib-open-list a { display: flex; align-items: center; gap: 10px; padding: 12px 2px; color: inherit; text-decoration: none; }
 .lib-open-list a b { flex: 1; min-width: 0; }
 .lib-open-list a i { font-style: normal; color: var(--muted); }
+.foot-help { margin-top: 10px; font-size: .92rem; }
+.foot-fb { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--ink); }
 .contact-list { display: grid; grid-template-columns: max-content 1fr; gap: 10px 16px; margin: 0; }
 .contact-list dt { color: var(--muted); }
 .contact-list dd { margin: 0; overflow-wrap: anywhere; }
