@@ -241,7 +241,7 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
       const all = [];
       for (let k = 0; k < n; k++) all.push(...(st.parts[k] || []));
       all.sort((a, b) => a.start - b.start);
-      const cues = await cuesFrom(all, job);
+      const cues = await cuesFrom(require('./transcribe').dedupeWords(all), job);
       const fresh = q.get.get(job.id);
       if (!fresh || fresh.status !== 'transcribing') return { done: Boolean(fresh && fresh.cues_json) }; // ลูกค้าลบระหว่างทำ
       q.review.run(JSON.stringify(cues), 'groq', now(), job.id);
@@ -256,6 +256,8 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
   const restartAsr = (job) => q.asrRestart.run(now(), job.id).changes > 0;
   const resumeAsr = (job) => q.asrResume.run(now(), job.id).changes > 0;
   const failAsr = (job, msg) => q.fail.run(msg, now(), now(), job.id);
+  // ปัญหาชั่วคราว (คิว Groq เต็ม/ช้า): ไม่ทำให้งานล้ม แค่บอกสถานะ เบราว์เซอร์รอแล้วส่งท่อนนั้นใหม่เอง
+  const asrWaiting = (job, msg) => db.prepare("UPDATE subtitle_jobs SET stage = ?, updated_at = ? WHERE id = ? AND status = 'transcribing'").run(String(msg).slice(0, 120), now(), job.id);
   const renderedInBrowser = (job, bytes) => q.renderedBrowser.run(Math.max(0, Math.round(Number(bytes) || 0)), now(), now(), job.id).changes > 0;
 
   async function work(job) {
@@ -432,7 +434,7 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     get: (id) => q.get.get(String(id || '')),
     byUser: (userId) => q.byUser.all(userId),
     position: (job) => (job.status === 'queued' || job.status === 'queued_render' ? q.position.get(job.queued_at).n + 1 : 0),
-    limits, validateStyle, receive, saveCues, createBrowserJob, asrChunk, restartAsr, resumeAsr, failAsr, renderedInBrowser, setStyle, queueRender, retry, peaksOf, reopen, remove, sweep, pump, idle,
+    limits, validateStyle, receive, saveCues, createBrowserJob, asrChunk, restartAsr, resumeAsr, failAsr, asrWaiting, renderedInBrowser, setStyle, queueRender, retry, peaksOf, reopen, remove, sweep, pump, idle,
     cuesOf, srcOf, outOf, dirOf, busy: (job) => busyStates.includes(job.status),
     tmpDir: () => { const d = path.join(S.dir, '.incoming'); fs.mkdirSync(d, { recursive: true, mode: 0o700 }); return d; },
   };

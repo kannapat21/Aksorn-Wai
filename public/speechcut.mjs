@@ -60,6 +60,22 @@ export function cutSpeech(pcm, rate, { maxSec = 28, minSec = 14, silentRms = 80 
   return parts;
 }
 
+/*
+ * ท่อนที่จะส่งให้ร้านถอด: ตัดตรงช่วงเงียบ ข้ามท่อนเงียบสนิท แล้วเผื่อหัว/ท้ายท่อนละ pad วินาที
+ *   คลิปเกม/มีเพลงไม่มีช่วงเงียบให้ตัด จุดตัดจึงอาจตกกลางคำ และ Whisper มักทิ้งคำที่ถูกตัดครึ่งตรงขอบไฟล์
+ *   ร้านถอดทั้งส่วนเผื่อ แล้วเก็บเฉพาะคำที่กึ่งกลางอยู่ในช่วง keepA–keepB ของท่อน → คำตรงรอยต่อไม่ขาดและไม่ซ้ำ
+ * → [{ a, b (sample ที่ส่งจริง), start, end (วินาทีที่ส่งจริง), keepA, keepB (วินาที ช่วงของท่อนนี้) }]
+ */
+export function planParts(pcm, rate, { pad = 0.8, ...opt } = {}) {
+  const all = cutSpeech(pcm, rate, opt);
+  const loud = all.filter((p) => !p.silent);
+  const P = Math.round(rate * pad);
+  return (loud.length ? loud : all).map((p) => {
+    const a = Math.max(0, p.a - P), b = Math.min(pcm.length, p.b + P);
+    return { a, b, start: a / rate, end: b / rate, keepA: p.start, keepB: p.end };
+  });
+}
+
 // WAV 16-bit โมโน (หัว 44 ไบต์)
 export function wavBytes(pcm, rate) {
   const head = new DataView(new ArrayBuffer(44));

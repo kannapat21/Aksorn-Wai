@@ -155,7 +155,7 @@ function loadConfig(overrides = {}) {
       bucket: env.SUPABASE_BUCKET || 'shop-files',
     },
     // ถอดเสียงด้วย Groq (Whisper large-v3 บนคลาวด์ ฟรีตามโควตา) ใช้เมื่อ SUBTITLE_ENGINE=groq
-    groq: { apiKey: env.GROQ_API_KEY || '', model: env.GROQ_MODEL || 'whisper-large-v3', apiBase: env.GROQ_API_BASE || 'https://api.groq.com/openai/v1' },
+    groq: { apiKey: env.GROQ_API_KEY || '', model: env.GROQ_MODEL || 'whisper-large-v3', apiBase: env.GROQ_API_BASE || 'https://api.groq.com/openai/v1', rpm: Number(env.GROQ_ASR_RPM) || 18 },
     // แก้คำผิดในซับอัตโนมัติ: llm = กฎในเครื่อง + โมเดลภาษาบน Groq (ใช้คีย์เดียวกับถอดเสียง) · rules = กฎในเครื่องอย่างเดียว · off = ไม่แก้
     subtitleFix: {
       mode: env.SUBTITLE_FIX || (env.GROQ_API_KEY ? 'llm' : 'rules'),

@@ -9,7 +9,7 @@
  *  ซับ     : Mediabunny + WebCodecs (ฮาร์ดแวร์ของเครื่องลูกค้า) อ่านคลิป → วางแถบซับทีละเฟรม → MP4 H.264 + เสียงเดิม
  *  เสียง   : แยกเสียงเป็น WAV 16 kHz โมโน ส่งให้ร้านทีละท่อน (ร้านส่งต่อให้ Groq ถอดเสียง) คลิปไม่ถูกอัปโหลด
  */
-import { cutSpeech, wavBytes } from './speechcut.mjs';
+import { planParts, wavBytes } from './speechcut.mjs';
 
 const TT = window.TTMotion;
 const PLAN = window.TTSubPlan;
@@ -406,7 +406,9 @@ export async function playableClip(file, onProgress = () => {}) {
   try {
     await ff.createDir(dir);
     await ff.mount('WORKERFS', { files: [file] }, dir);
-    const code = await ff.exec(['-i', `${dir}/${file.name}`, '-map', '0:v:0', '-map', '0:a:0?',
+    // -fps_mode passthrough: คลิปจากมือถือ/อัดหน้าจอเกมมีเฟรมเรตไม่คงที่ (VFR) ถ้าให้ ffmpeg ทำเป็นเฟรมเรตคงที่
+    // มันจะใส่เฟรมซ้ำ/ทิ้งเฟรมเอง = ภาพกระตุกเป็นจังหวะ (ทดสอบ: คลิป 2,057 เฟรม → ได้ 2,400 เฟรม ซ้ำ 343 เฟรม) · เก็บเวลาเฟรมเดิมไว้ทุกเฟรม
+    const code = await ff.exec(['-i', `${dir}/${file.name}`, '-map', '0:v:0', '-map', '0:a:0?', '-fps_mode', 'passthrough',
       '-vf', "scale='min(iw,1920)':'min(ih,1920)':force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuv420p",
       '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '17', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', out]);
     if (code !== 0) throw new Error('แปลงคลิปไม่สำเร็จ: ' + (tail.filter((l) => /error|invalid|not/i.test(l)).pop() || `รหัส ${code}`));
@@ -463,9 +465,7 @@ async function toWav(file, sampleRate, onProgress = () => {}) {
 // เสียงพูด → ท่อนละไม่เกิน ~28 วินาที ตัดตรงช่วงเงียบ (ไม่ตัดกลางคำ) · ท่อนที่เงียบสนิทไม่ต้องส่ง
 export async function extractSpeech(file, onProgress = () => {}) {
   const { rate, pcm } = wavPcm(await toWav(file, 16000, onProgress));
-  const all = cutSpeech(pcm, rate);
-  const loud = all.filter((p) => !p.silent);
-  return (loud.length ? loud : all).map((p) => ({ start: p.start, end: p.end, blob: new Blob([wavBytes(pcm.subarray(p.a, p.b), rate)], { type: 'audio/wav' }) }));
+  return planParts(pcm, rate).map((p) => ({ start: p.start, end: p.end, keepA: p.keepA, keepB: p.keepB, blob: new Blob([wavBytes(pcm.subarray(p.a, p.b), rate)], { type: 'audio/wav' }) }));
 }
 
 // WAV 16-bit โมโน → { rate, pcm: Int16Array }

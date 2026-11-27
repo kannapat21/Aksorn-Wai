@@ -145,6 +145,9 @@ function dropFillerTokens(toks) {
   return out.filter((t, i) => !t.space || (i > 0 && i < out.length - 1 && !out[i - 1].space));
 }
 
+const SYSTEM_TEXT_RE = /^(?:error|undefined|null|nan|\[object|\{|groq\b|https?:|status\s*\d{3}|\d{3}\s*(?:error|too many)|too many requests|request failed|timeout|ถอดเสียงไม่สำเร็จ|ระบบถอดเสียง)/i;
+const isSystemText = (s) => SYSTEM_TEXT_RE.test(String(s).replace(/\s+/g, ' ').trim());
+
 const isBreakChar = (s) => /[.!?…。]$/.test(s);
 
 /*
@@ -198,6 +201,8 @@ function buildCues(words, { maxChars = 18, maxDur = 4.2, gap = 0.6, duration = I
   push(cur);
   // บรรทัดที่มีแต่เสียงประกอบ (ปัง บึ้ม ฮ่าๆ) ไม่ต้องขึ้นซับ · บรรทัดที่มีคำพูดปนอยู่ด้วยเก็บไว้ทั้งบรรทัด
   for (let i = cues.length - 1; i >= 0; i--) if (isSfxOnly(cues[i].toks.map((t) => t.text).join(' '))) cues.splice(i, 1);
+  // ข้อความระบบ/ข้อผิดพลาดที่อาจหลุดมากับผลถอดเสียง (Error, undefined, {"error"…) ต้องไม่ขึ้นเป็นซับ
+  for (let i = cues.length - 1; i >= 0; i--) if (isSystemText(cues[i].toks.map((t, k) => (k && t.sp ? ' ' : '') + t.text).join(''))) cues.splice(i, 1);
   // บรรทัดจิ๋ว (1–3 ตัวอักษร เช่น "ครับ" "นะ" ที่หลุดมาเดี่ยวๆ) รวมเข้ากับบรรทัดข้างเคียงที่อยู่ใกล้กัน
   for (let i = 0; i < cues.length; i++) {
     const c = cues[i];
@@ -326,4 +331,4 @@ function toSrt(cues) {
   return cues.map((c, i) => `${i + 1}\r\n${srtTime(c.start)} --> ${srtTime(c.end)}\r\n${c.text}\r\n`).join('\r\n');
 }
 
-module.exports = { MAX_LOOKS, dropFillers, dropFillerTokens, FILLER_RE, buildCues, tokensFromWords, validateCues, spreadWords, toSrt, srtTime, maxCharsFor, cleanText, ALLOWED_RE, MAX_CUE_GRAPHEMES, MAX_CUES, graphemes };
+module.exports = { isSystemText, MAX_LOOKS, dropFillers, dropFillerTokens, FILLER_RE, buildCues, tokensFromWords, validateCues, spreadWords, toSrt, srtTime, maxCharsFor, cleanText, ALLOWED_RE, MAX_CUE_GRAPHEMES, MAX_CUES, graphemes };
