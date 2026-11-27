@@ -1,0 +1,163 @@
+{
+  "slug": "sticker-pop",
+  "text": "ห้ามพลาด",
+  "fill": "#FF2D55",
+  "stroke": "#FFFFFF",
+  "motion": "sticker",
+  "fps": 60,
+  "duration": 3,
+  "timing": {
+    "popUp": 0.3,
+    "settle": 0.8,
+    "fadeStart": 2.5,
+    "fadeEnd": 2.9833333333333334,
+    "loop": 2.4,
+    "holdOff": 0
+  },
+  "parts": {
+    "introSeconds": 0.8,
+    "outroSeconds": 0.5,
+    "holdFrame": 48
+  },
+  "renderedAt": "2026-11-27T08:59:27.752Z",
+  "formats": {
+    "mp4_green": {
+      "ext": "mp4",
+      "label": "MP4 พื้นเขียว (Chroma Key)"
+    },
+    "mp4_black": {
+      "ext": "mp4",
+      "label": "MP4 พื้นดำ (Screen/Add)"
+    },
+    "prores4444": {
+      "ext": "mov",
+      "label": "MOV ProRes 4444 โปร่งใส"
+    },
+    "webm_alpha": {
+      "ext": "webm",
+      "label": "WebM VP9 โปร่งใส"
+    },
+    "parts_green": {
+      "ext": "mp4",
+      "label": "ส่วนเข้า/ออก MP4 พื้นเขียว"
+    },
+    "parts_prores": {
+      "ext": "mov",
+      "label": "ส่วนเข้า/ออก MOV ProRes 4444 โปร่งใส"
+    },
+    "still_png": {
+      "ext": "png",
+      "label": "ภาพนิ่ง PNG โปร่งใส (ยืดได้)"
+    }
+  },
+  "files": [
+    {
+      "format": "mp4_green",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "sticker-pop_mp4_green_1080x1920.mp4",
+      "bytes": 412666
+    },
+    {
+      "format": "mp4_black",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "sticker-pop_mp4_black_1080x1920.mp4",
+      "bytes": 395828
+    },
+    {
+      "format": "webm_alpha",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "sticker-pop_webm_alpha_1080x1920.webm",
+      "bytes": 656022
+    },
+    {
+      "format": "parts_green",
+      "part": "intro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "sticker-pop_parts_green_intro_1080x1920.mp4",
+      "bytes": 154801
+    },
+    {
+      "format": "parts_green",
+      "part": "outro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "sticker-pop_parts_green_outro_1080x1920.mp4",
+      "bytes": 102741
+    },
+    {
+      "format": "still_png",
+      "part": "hold",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "sticker-pop_still_1080x1920.png",
+      "bytes": 49033
+    },
+    {
+      "format": "mp4_green",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "sticker-pop_mp4_green_1920x1080.mp4",
+      "bytes": 434161
+    },
+    {
+      "format": "mp4_black",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "sticker-pop_mp4_black_1920x1080.mp4",
+      "bytes": 418236
+    },
+    {
+      "format": "webm_alpha",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "sticker-pop_webm_alpha_1920x1080.webm",
+      "bytes": 660235
+    },
+    {
+      "format": "parts_green",
+      "part": "intro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "sticker-pop_parts_green_intro_1920x1080.mp4",
+      "bytes": 157757
+    },
+    {
+      "format": "parts_green",
+      "part": "outro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "sticker-pop_parts_green_outro_1920x1080.mp4",
+      "bytes": 111190
+    },
+    {
+      "format": "still_png",
+      "part": "hold",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "sticker-pop_still_1920x1080.png",
+      "bytes": 48845
+    }
+  ]
+}

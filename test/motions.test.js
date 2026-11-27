@@ -14,7 +14,8 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 require('../public/motion.js');
 const TT = globalThis.TTMotion;
-const NEW = ['typewriter', 'rise', 'zoom', 'jump', 'highlight', 'glitch', 'gold', 'flip', 'karaoke', 'lower', 'impact', 'bubble'];
+const NEW = ['typewriter', 'rise', 'zoom', 'jump', 'highlight', 'glitch', 'gold', 'flip', 'karaoke', 'lower', 'impact', 'bubble',
+  'blur', 'wave', 'stamp', 'split', 'rainbow', 'liquid', 'sticker', 'scramble', 'hearts', 'retro'];
 const products = JSON.parse(fs.readFileSync(path.join(ROOT, 'config', 'products.json'), 'utf8'));
 
 let browser = null;

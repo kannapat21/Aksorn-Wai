@@ -19,7 +19,7 @@
     "outroSeconds": 0.6,
     "holdFrame": 60
   },
-  "renderedAt": "2026-11-26T15:36:47.018Z",
+  "renderedAt": "2026-11-27T09:02:16.837Z",
   "formats": {
     "mp4_green": {
       "ext": "mp4",
@@ -58,7 +58,7 @@
       "width": 1080,
       "height": 1920,
       "file": "lower-third_mp4_green_1080x1920.mp4",
-      "bytes": 159446
+      "bytes": 153874
     },
     {
       "format": "mp4_black",
@@ -67,7 +67,7 @@
       "width": 1080,
       "height": 1920,
       "file": "lower-third_mp4_black_1080x1920.mp4",
-      "bytes": 153192
+      "bytes": 146648
     },
     {
       "format": "webm_alpha",
@@ -76,7 +76,7 @@
       "width": 1080,
       "height": 1920,
       "file": "lower-third_webm_alpha_1080x1920.webm",
-      "bytes": 210328
+      "bytes": 195031
     },
     {
       "format": "parts_green",
@@ -112,7 +112,7 @@
       "width": 1920,
       "height": 1080,
       "file": "lower-third_mp4_green_1920x1080.mp4",
-      "bytes": 197717
+      "bytes": 191054
     },
     {
       "format": "mp4_black",
@@ -121,7 +121,7 @@
       "width": 1920,
       "height": 1080,
       "file": "lower-third_mp4_black_1920x1080.mp4",
-      "bytes": 188817
+      "bytes": 181742
     },
     {
       "format": "webm_alpha",
@@ -130,7 +130,7 @@
       "width": 1920,
       "height": 1080,
       "file": "lower-third_webm_alpha_1920x1080.webm",
-      "bytes": 248168
+      "bytes": 229492
     },
     {
       "format": "parts_green",

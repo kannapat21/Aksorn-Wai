@@ -791,7 +791,7 @@
         el.__bar = addBox(el, 'tt-bar', 'left:.22em;right:.1em;top:.4em;bottom:.4em;border-radius:.06em;overflow:hidden;background:' + o.stroke + ';' +
           (o.shadow ? 'box-shadow:0 .06em .2em rgba(0,0,0,.4);' : ''));
         var sh = el.ownerDocument.createElement('i');
-        sh.style.cssText = 'position:absolute;top:0;bottom:0;left:0;width:35%;opacity:0;background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);';
+        sh.style.cssText = 'position:absolute;top:-10%;bottom:-10%;left:0;width:16%;opacity:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.28) 50%,transparent);';
         el.__bar.appendChild(sh);
         el.__barShine = sh;
         el.__acc = addBox(el, 'tt-acc', 'left:0;width:.13em;top:.32em;bottom:.32em;border-radius:.03em;background:' + o.fill + ';');
@@ -818,7 +818,7 @@
           acc = 1 - easeInCubic(clamp((q - 0.6) / 0.35, 0, 1));
         }
         if (el.__bar) { el.__bar.style.transformOrigin = barOrigin; el.__bar.style.transform = 'scaleX(' + bar.toFixed(4) + ')'; el.__bar.style.opacity = bar > 0.002 ? '1' : '0'; }
-        if (el.__barShine) { el.__barShine.style.opacity = shine >= 0 ? '1' : '0'; el.__barShine.style.transform = 'translateX(' + (lerp(-110, 300, Math.max(0, shine))).toFixed(2) + '%)'; }
+        if (el.__barShine) { el.__barShine.style.opacity = shine >= 0 ? '1' : '0'; el.__barShine.style.transform = 'translateX(' + (lerp(-120, 720, Math.max(0, shine))).toFixed(2) + '%) skewX(-22deg)'; }
         if (el.__acc) { el.__acc.style.transform = 'scaleY(' + acc.toFixed(4) + ')'; el.__acc.style.opacity = acc > 0.002 ? '1' : '0'; }
         fill.style.clipPath = 'inset(-20% -10% -20% 0)';
         fill.style.transform = tx ? 'translateX(' + tx.toFixed(2) + 'px)' : '';
@@ -935,6 +935,366 @@
         fill.style.transform = ty ? 'translateY(' + ty.toFixed(2) + 'px)' : '';
         el.style.transformOrigin = '18% 100%';
         return { transform: 'rotate(' + rot.toFixed(3) + 'deg) scale(' + Math.max(0, s).toFixed(5) + ')', opacity: op };
+      },
+    },
+
+    /* ==================== ท่าชุดที่ 3 (ฟรี 4 · พรีเมียม 6) ====================
+     * กติกาเดียวกับชุดก่อน: ภาพตอนจบท่าเข้า = ภาพท้ายรอบค้าง = ภาพเริ่มท่าออก · timing.still (โหมดซับ) ช่วงค้างนิ่ง
+     */
+
+    // ชัดขึ้นนุ่มๆ (ฟรี): ตัวอักษรค่อยๆ ชัดจากความเบลอ ระยะห่างหดเข้าเล็กน้อย · ออก: เบลอจางหาย (สายมินิมอล/Vlog)
+    blur: {
+      intro: 0.9, outro: 0.5, loop: 0, fit: 1.1, premium: false,
+      build: function (el, o) {
+        el.__units = buildUnits(el.querySelector('.fill'), graphemeUnits(o.text));
+      },
+      frame: function (el, t, timing) {
+        var units = el.__units || [], n = units.length || 1;
+        var fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var st = Math.min(0.035, (intro * 0.4) / Math.max(1, n - 1)), dur = Math.max(0.1, intro - st * (n - 1) - 0.02);
+        var mid = (n - 1) / 2, sc = 1, op = 1;
+        if (t < intro) sc = lerp(1.06, 1, easeOutCubic(clamp(t / intro, 0, 1)));
+        var q = t >= timing.fadeStart ? clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1) : -1;
+        if (q >= 0) { sc = lerp(1, 0.96, easeInCubic(q)); op = 1 - easeInCubic(q); }
+        units.forEach(function (s, i) {
+          var x = 0, blur = 0, o2 = 1;
+          if (t < intro) {
+            var e = easeOutCubic(clamp((t - st * i) / dur, 0, 1));
+            o2 = clamp(e * 1.3, 0, 1); blur = (1 - e) * 0.16 * fs; x = (1 - e) * (i - mid) * 0.05 * fs;
+          }
+          if (q >= 0) { blur += easeInCubic(q) * 0.14 * fs; x += easeInCubic(q) * (i - mid) * 0.04 * fs; }
+          s.style.opacity = o2.toFixed(4);
+          s.style.filter = blur > 0.05 ? 'blur(' + blur.toFixed(2) + 'px)' : 'none';
+          s.style.transform = x ? 'translateX(' + x.toFixed(2) + 'px)' : 'none';
+        });
+        return { transform: 'scale(' + sc.toFixed(5) + ')', opacity: t >= timing.fadeEnd ? 0 : op };
+      },
+    },
+
+    // คลื่นตัวอักษร (ฟรี): ตัวอักษรเด้งขึ้นทีละตัว · ค้าง: คลื่นวิ่งผ่านจากซ้ายไปขวา · ออก: ร่วงลงทีละตัว
+    wave: {
+      intro: 0.9, outro: 0.5, loop: 1.8, fit: 1.14, premium: false,
+      build: function (el, o) {
+        el.__units = buildUnits(el.querySelector('.fill'), graphemeUnits(o.text));
+        el.__units.forEach(function (s) { s.style.transformOrigin = '50% 100%'; });
+      },
+      frame: function (el, t, timing) {
+        var units = el.__units || [], n = units.length || 1;
+        var fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var st = Math.min(0.05, (intro * 0.45) / Math.max(1, n - 1)), dur = Math.max(0.12, intro - st * (n - 1) - 0.02);
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 1.8) : -1;
+        units.forEach(function (s, i) {
+          var y = 0, sc = 1, op = 1;
+          if (t < intro) {
+            var p = clamp((t - st * i) / dur, 0, 1);
+            y = (1 - easeOutBack(p)) * 0.55 * fs; op = clamp(p * 4, 0, 1); sc = lerp(0.6, 1, easeOutCubic(p));
+          }
+          if (h >= 0) {
+            var u = (h - 0.1 - 0.6 * (i / Math.max(1, n - 1))) / 0.5;
+            if (u > 0 && u < 1) { var a = Math.sin(u * Math.PI); y -= a * 0.2 * fs; sc *= 1 + 0.06 * a; }
+          }
+          if (t >= timing.fadeStart) {
+            var q = clamp((t - timing.fadeStart - (outLen * 0.35) * (i / Math.max(1, n - 1))) / (outLen * 0.5), 0, 1);
+            y += easeInCubic(q) * 0.6 * fs; op = Math.min(op, 1 - q);
+          }
+          s.style.opacity = op.toFixed(4);
+          s.style.transform = (y || sc !== 1) ? 'translateY(' + y.toFixed(2) + 'px) scale(' + sc.toFixed(4) + ')' : 'none';
+        });
+        return { transform: 'none', opacity: t >= timing.fadeEnd ? 0 : 1 };
+      },
+    },
+
+    // ปั๊มตรา (ฟรี): ข้อความในกรอบกระแทกลงเหมือนตรายาง เอียงนิดๆ · สีตัวอักษร = สีตราและกรอบ
+    stamp: {
+      intro: 0.6, outro: 0.5, loop: 0, fit: 1.16, premium: false,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        fill.style.position = 'relative';
+        fill.style.zIndex = '1';
+        var bw = Math.max(2, Math.round(o.size * 0.07)), ow = Math.max(1, Math.round(o.size * (o.strokeRatio || 0) * 0.6));
+        var sh = [];
+        if (o.strokeRatio > 0) sh.push('0 0 0 ' + ow + 'px ' + o.stroke, 'inset 0 0 0 ' + ow + 'px ' + o.stroke);
+        if (o.shadow) sh.push('0 ' + (o.size * 0.05).toFixed(1) + 'px ' + (o.size * 0.08).toFixed(1) + 'px rgba(0,0,0,.4)');
+        el.__box = addBox(el, 'tt-stamp', 'left:.08em;right:.08em;top:.3em;bottom:.3em;border-radius:.16em;border:' + bw + 'px solid ' + o.fill + ';' + (sh.length ? 'box-shadow:' + sh.join(',') + ';' : ''));
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var T = intro * 0.5, s = 1, op = 1, dx = 0, dy = 0, rot = -6;
+        if (t < T) { var p = clamp(t / T, 0, 1); s = lerp(2.4, 1, easeInCubic(p)); op = clamp(p * 2.2, 0, 1); rot = lerp(-14, -6, p); }
+        else if (t < intro) {
+          var r = clamp((t - T) / (intro - T), 0, 1), d = 1 - r;
+          s = 1 - 0.07 * Math.sin(r * Math.PI) * d;
+          var sd = Math.floor(t * 60), amp = d * d * 0.035 * fs;
+          dx = (hash(sd + 3) - 0.5) * 2 * amp; dy = (hash(sd + 900) - 0.5) * 2 * amp;
+        }
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1); s *= lerp(1, 1.3, easeInCubic(q)); op = 1 - easeInCubic(q); }
+        if (t >= timing.fadeEnd) op = 0;
+        return { transform: 'translate(' + dx.toFixed(2) + 'px,' + dy.toFixed(2) + 'px) rotate(' + rot.toFixed(3) + 'deg) scale(' + s.toFixed(5) + ')', opacity: op };
+      },
+    },
+
+    // ประกบสองซีก (ฟรี): ครึ่งบนพุ่งมาจากซ้าย ครึ่งล่างจากขวา มาประกบกันพอดี · ออก: แยกออกคนละทาง
+    split: {
+      intro: 0.8, outro: 0.5, loop: 0, fit: 1.06, premium: false,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        var f = fill.style.filter ? 'filter:' + fill.style.filter + ';' : '';
+        el.__halves = [['inset(-40% -60% 50% -60%)'], ['inset(50% -60% -40% -60%)']].map(function (c) {
+          return overlayText(el, 'tt-half', o.text, 'color:' + o.fill + ';' + f + 'clip-path:' + c[0] + ';visibility:hidden;');
+        });
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var fill = el.querySelector('.fill');
+        var W = el.offsetWidth || 400;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var off = 0, op = 1;
+        if (t < intro) { var p = clamp(t / intro, 0, 1); off = 1 - easeOutExpo(p); op = clamp(p * 3, 0, 1); }
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1); off = -easeInCubic(q); op = 1 - easeInCubic(clamp((q - 0.2) / 0.8, 0, 1)); }
+        if (t >= timing.fadeEnd) op = 0;
+        // นิ่งแล้ว: ใช้ตัวหลักชิ้นเดียว (ไม่มีรอยต่อกลางตัวอักษร)
+        var moving = Math.abs(off) > 0.0005;
+        fill.style.visibility = moving ? 'hidden' : '';
+        (el.__halves || []).forEach(function (s, i) {
+          s.style.visibility = moving ? 'visible' : 'hidden';
+          s.style.transform = 'translateX(' + ((i ? 1 : -1) * off * W * 0.7).toFixed(2) + 'px)';
+        });
+        return { transform: 'none', opacity: op };
+      },
+    },
+
+    // สีรุ้งไหล (พรีเมียม): ตัวอักษรเด้งเข้าทีละตัว · ค้าง: สีรุ้งไหลผ่านตัวอักษรต่อเนื่อง (วนครบรอบพอดี) · ไม่ใช้สีตัวอักษร
+    rainbow: {
+      intro: 0.9, outro: 0.5, loop: 1.6, fit: 1.12, premium: true,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        el.style.position = 'relative';
+        el.__units = buildUnits(fill, graphemeUnits(o.text));
+        var grad = 'linear-gradient(90deg,#ff3b6b,#ff9f1c,#ffe14d,#3ddc84,#1fb6ff,#8b5cf6,#ff3b6b)';
+        var W = Math.max(1, fill.offsetWidth), x0 = fill.offsetLeft;
+        el.__rbW = W;
+        el.__units.forEach(function (s) {
+          s.style.backgroundImage = grad;
+          s.style.backgroundSize = W + 'px 100%';
+          s.style.backgroundRepeat = 'repeat-x';
+          s.style.webkitBackgroundClip = 'text';
+          s.style.backgroundClip = 'text';
+          s.style.webkitTextFillColor = 'transparent';
+          s.style.color = 'transparent';
+          s.__x = s.offsetLeft - x0;
+        });
+      },
+      frame: function (el, t, timing) {
+        var units = el.__units || [], n = units.length || 1;
+        var fs = parseFloat(el.style.fontSize) || 100, W = el.__rbW || 1;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var st = Math.min(0.05, (intro * 0.45) / Math.max(1, n - 1)), dur = Math.max(0.12, intro - st * (n - 1) - 0.02);
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 1.6) : 0;
+        var shift = (h / (timing.loop || 1.6)) * W; // ไหลครบหนึ่งช่วงสีพอดีรอบ → วนต่อกันเนียน
+        units.forEach(function (s, i) {
+          var sc = 1, y = 0, op = 1, rot = 0;
+          if (t < intro) { var p = clamp((t - st * i) / dur, 0, 1); sc = p <= 0 ? 0 : easeOutBack(p); y = (1 - easeOutCubic(p)) * 0.25 * fs; rot = (1 - easeOutCubic(p)) * (i % 2 ? 10 : -10); op = clamp(p * 4, 0, 1); }
+          if (t >= timing.fadeStart) {
+            var q = clamp((t - timing.fadeStart - (outLen * 0.35) * (i / Math.max(1, n - 1))) / (outLen * 0.5), 0, 1);
+            sc *= 1 - easeInBack(q); op = Math.min(op, q >= 1 ? 0 : 1);
+          }
+          s.style.backgroundPosition = (shift - (s.__x || 0)).toFixed(2) + 'px 0';
+          s.style.opacity = op.toFixed(4);
+          s.style.transform = (sc === 1 && !y && !rot) ? 'none' : 'translateY(' + y.toFixed(2) + 'px) rotate(' + rot.toFixed(2) + 'deg) scale(' + Math.max(0, sc).toFixed(5) + ')';
+        });
+        return { transform: 'none', opacity: t >= timing.fadeEnd ? 0 : 1 };
+      },
+    },
+
+    // น้ำเติมตัวอักษร (พรีเมียม): ตัวอักษรว่างเปล่า แล้วน้ำสีไหลขึ้นมาเต็มเป็นคลื่น · ค้าง: น้ำลดแล้วเติมใหม่ · สีตัวอักษร = สีน้ำ
+    liquid: {
+      intro: 1.2, outro: 0.5, loop: 2.2, fit: 1.08, premium: true,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        fill.style.color = mix(o.fill, o.strokeRatio > 0 ? o.stroke : '#000000', 0.72);
+        el.__back = overlayText(el, 'tt-liq', o.text, 'color:' + mix(o.fill, '#ffffff', 0.45) + ';');
+        el.__front = overlayText(el, 'tt-liq', o.text, 'color:' + o.fill + ';');
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var L = 1, op = 1, ph = t * Math.PI * 2 * 0.9;
+        if (t < intro) { L = easeInOutSine(clamp((t - 0.12) / (intro * 0.86 - 0.12), 0, 1)); op = clamp(t / 0.12, 0, 1); }
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 2.2) : -1;
+        if (h >= 0.15 && h < 1.25) { var w = Math.sin(Math.PI * (h - 0.15) / 1.1); L = 1 - 0.55 * w * w; }
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1); L = 1 - easeInCubic(clamp(q / 0.7, 0, 1)); op = 1 - easeInCubic(clamp((q - 0.35) / 0.65, 0, 1)); }
+        if (t >= timing.fadeEnd) op = 0;
+        // ระดับน้ำ: ตัวอักษรอยู่ราว 22%–80% ของกล่อง · คลื่นแรงตอนครึ่งๆ หายไปเมื่อเต็มหรือว่าง
+        var amp = 6 * Math.sin(Math.PI * clamp(L, 0, 1));
+        var shape = function (lvl, phase, a) {
+          if (lvl >= 1 && a < 0.01) return 'inset(-40% -40% -40% -40%)'; // เต็ม (ไม่ใช้ none: Chrome บางรุ่นไม่วาดใหม่ตอนลบ clip-path)
+          var y0 = lerp(82, 20, lvl), pts = [];
+          for (var k = 0; k <= 24; k++) { var x = -10 + k * 5; pts.push(x + '% ' + (y0 + a * Math.sin(phase + x / 100 * Math.PI * 3)).toFixed(2) + '%'); }
+          pts.push('110% 140%', '-10% 140%');
+          return 'polygon(' + pts.join(',') + ')';
+        };
+        if (el.__front) el.__front.style.clipPath = shape(L, ph, amp);
+        if (el.__back) {
+          el.__back.style.clipPath = shape(Math.min(1, L + 0.05 * Math.sin(Math.PI * L)), ph + Math.PI * 0.8, amp * 0.8);
+          el.__back.style.opacity = L > 0.001 && L < 0.999 ? '1' : '0';
+        }
+        if (el.__front) el.__front.style.opacity = L > 0.001 ? '1' : '0';
+        return { transform: 'none', opacity: op };
+      },
+    },
+
+    // สติกเกอร์ (พรีเมียม): ขอบขาวหนาแบบสติกเกอร์ไดคัท ตบลงจอเอียงนิดๆ · ค้าง: โยกดุ๊กดิ๊ก แสงวาบ · สีขอบ = สีขอบสติกเกอร์ (หนาเสมอ)
+    sticker: {
+      intro: 0.8, outro: 0.5, loop: 2.4, fit: 1.3, premium: true,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        var id = o.filterId || 'outline', f = el.ownerDocument.getElementById(id);
+        if (f) {
+          f.querySelector('.m-grow').setAttribute('radius', Math.max(2, Math.round(o.size * 0.085)));
+          f.querySelector('.m-outline').setAttribute('flood-color', o.stroke || '#ffffff');
+          f.querySelector('.m-outline').setAttribute('flood-opacity', '1');
+          f.querySelector('.m-blur').setAttribute('stdDeviation', (o.size * 0.03).toFixed(2));
+          f.querySelector('.m-off').setAttribute('dy', (o.size * 0.045).toFixed(2));
+          f.querySelector('.m-shadow').setAttribute('flood-opacity', o.shadow ? '0.45' : '0.25');
+        }
+        fill.style.filter = 'url(#' + id + ')';
+        el.__shine = overlayText(el, 'tt-shine', o.text, 'color:#fff;visibility:hidden;opacity:.75;');
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var s = 1, rot = -4, op = 1, band = -1;
+        if (t < intro) { var p = clamp(t / intro, 0, 1); s = Math.max(0, easeOutBack(p)); rot = lerp(-28, -4, easeOutBack(p)); op = clamp(p * 5, 0, 1); }
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 2.4) : -1;
+        if (h >= 0.1 && h < 1.0) { var w = (h - 0.1) / 0.9; rot += Math.sin(w * Math.PI * 4) * 4 * (1 - w); s *= 1 + 0.05 * Math.sin(w * Math.PI); }
+        if (h >= 1.0 && h < 1.6) band = easeInOutSine((h - 1.0) / 0.6);
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1); s *= 1 - easeInBack(q); rot += q * 20; op = 1 - clamp((q - 0.6) / 0.4, 0, 1); }
+        if (t >= timing.fadeEnd) op = 0;
+        var sh = el.__shine;
+        if (sh) {
+          if (band < 0) sh.style.visibility = 'hidden';
+          else {
+            var c = lerp(-25, 125, band);
+            var g2 = 'linear-gradient(115deg,transparent ' + (c - 12).toFixed(2) + '%,#000 ' + c.toFixed(2) + '%,transparent ' + (c + 12).toFixed(2) + '%)';
+            sh.style.visibility = 'visible'; sh.style.webkitMaskImage = g2; sh.style.maskImage = g2;
+          }
+        }
+        return { transform: 'rotate(' + rot.toFixed(3) + 'deg) scale(' + Math.max(0, s).toFixed(5) + ')', opacity: op };
+      },
+    },
+
+    // ถอดรหัส (พรีเมียม): ตัวอักษรสุ่มรัวๆ แล้วล็อกเป็นคำจริงทีละตัวจากซ้ายไปขวา · ค้าง: บางตัวสุ่มใหม่แล้วล็อกกลับ · ออก: สุ่มแล้วหาย
+    scramble: {
+      intro: 1.2, outro: 0.5, loop: 2.6, fit: 1.1, premium: true,
+      build: function (el, o) {
+        var units = graphemeUnits(o.text);
+        el.__units = buildUnits(el.querySelector('.fill'), units);
+        el.__real = el.__units.map(function (s) { return s.textContent; });
+        // ล็อกความกว้างแต่ละช่อง ตัวที่สุ่มกว้าง/แคบไม่ทำให้ทั้งคำขยับ
+        var ws = el.__units.map(function (s) { return s.getBoundingClientRect().width; });
+        el.__units.forEach(function (s, i) { s.style.width = ws[i].toFixed(2) + 'px'; s.style.textAlign = 'center'; });
+        el.__acc = luminance(o.fill) > 0.55 ? mix(o.fill, '#3ddc84', 0.6) : mix(o.fill, '#ffffff', 0.55);
+      },
+      frame: function (el, t, timing) {
+        var units = el.__units || [], n = units.length || 1, real = el.__real || [];
+        var GL = 'กขคงจฉชซญดตถทธนบปผพฟมยรลวศสหอฮ0123456789#%&@?';
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var seed = Math.floor(t * 20);
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 2.6) : -1;
+        var q = t >= timing.fadeStart ? clamp((t - timing.fadeStart) / outLen, 0, 1) : -1;
+        units.forEach(function (s, i) {
+          var r = n > 1 ? i / (n - 1) : 0, locked = true, op = 1;
+          if (t < intro) { locked = t >= 0.12 * intro + 0.72 * intro * r; op = clamp((t - 0.6 * intro * r * 0.3) / 0.06, 0, 1); }
+          if (h >= 0 && hash(i + 13) > 0.55) { var a = 0.3 + hash(i + 31) * 0.4; if (h >= a && h < a + 0.4) locked = false; }
+          if (q >= 0) { if (q >= 0.5 * r) locked = false; op = 1 - clamp((q - 0.25 - 0.45 * r) / 0.2, 0, 1); }
+          var txt = locked ? real[i] : GL.charAt(Math.floor(hash(seed * 7 + i * 13 + 1) * GL.length));
+          if (s.textContent !== txt) s.textContent = txt;
+          s.style.color = locked ? '' : el.__acc;
+          s.style.opacity = op.toFixed(4);
+        });
+        return { transform: 'none', opacity: t >= timing.fadeEnd ? 0 : 1 };
+      },
+    },
+
+    // หัวใจลอย (พรีเมียม): ข้อความเด้งเข้าพร้อมหัวใจกระจาย · ค้าง: ข้อความเต้นตึกตัก หัวใจลอยขึ้น · สีขอบ = สีหัวใจ
+    hearts: {
+      intro: 0.8, outro: 0.5, loop: 2.4, fit: 1.3, premium: true,
+      build: function (el, o) {
+        var doc = el.ownerDocument;
+        var sc0 = hexRgb(o.stroke), colorful = Math.max.apply(null, sc0) - Math.min.apply(null, sc0) > 60;
+        var col = o.strokeRatio > 0 && colorful ? o.stroke : '#ff3d7f'; // ขอบดำ/ขาว/เทา → หัวใจสีชมพู
+        el.__hearts = [];
+        for (var j = 0; j < 9; j++) {
+          var s = doc.createElement('span');
+          s.className = 'tt-x tt-heart';
+          s.setAttribute('aria-hidden', 'true');
+          var sz = (0.32 + hash(j + 200) * 0.3).toFixed(3), c = j % 3 === 1 ? mix(col, '#ffffff', 0.45) : col;
+          s.style.cssText = 'position:absolute;left:0;top:0;width:' + sz + 'em;height:' + sz + 'em;margin:-' + (sz / 2).toFixed(3) + 'em 0 0 -' + (sz / 2).toFixed(3) + 'em;opacity:0;pointer-events:none;z-index:2;';
+          s.innerHTML = '<svg viewBox="-6 -7 12 12" width="100%" height="100%" style="display:block;overflow:visible"><path d="M0 4.2C-2.6 2.2-5.6 0-5.6-2.9-5.6-5-4-6.4-2.3-6.4-1.2-6.4-.4-5.8 0-4.9.4-5.8 1.2-6.4 2.3-6.4 4-6.4 5.6-5 5.6-2.9 5.6 0 2.6 2.2 0 4.2Z" fill="' + c + '" stroke="#ffffff" stroke-width=".9"/></svg>';
+          el.appendChild(s);
+          el.__hearts.push({ el: s, x: 0.08 + 0.84 * ((j * 0.37 + hash(j + 210) * 0.2) % 1), a: (j / 9) * Math.PI * 2 + 0.3, sw: (hash(j + 220) - 0.5) * 2 });
+        }
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var s = 1, op = 1;
+        if (t < intro) { var p = clamp(t / (intro * 0.75), 0, 1); s = lerp(0.3, 1, easeOutBack(p)); op = clamp(p * 4, 0, 1); }
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 2.4) : -1;
+        if (h >= 0.1 && h < 0.7) { var b = (h - 0.1) / 0.6; s *= 1 + 0.07 * Math.max(0, Math.sin(b * Math.PI * 2)) * (b < 0.5 ? 1 : 0.6); }
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1); s *= 1 - easeInBack(q) * 0.9; op = 1 - easeInCubic(q); }
+        if (t >= timing.fadeEnd) op = 0;
+        var W = el.offsetWidth, H = el.offsetHeight;
+        (el.__hearts || []).forEach(function (hh, j) {
+          var x, y, a = 0, sc = 1, rot = 0;
+          if (t < intro && !timing.still && intro > 0.5) {
+            // ตอนเข้า: หัวใจพุ่งออกจากกลางคำ
+            var u = (t - 0.12 - j * 0.02) / (intro - 0.05);
+            if (u > 0 && u < 1) { var e = easeOutCubic(u); x = W / 2 + Math.cos(hh.a) * W * 0.55 * e; y = H / 2 + Math.sin(hh.a) * H * 0.75 * e; a = Math.sin(u * Math.PI); sc = 0.4 + 0.8 * e; rot = hh.sw * 30 * e; }
+          } else if (h >= 0) {
+            // ช่วงค้าง: ลอยขึ้นแกว่งไปมา ทุกดวงหายก่อนจบรอบ
+            var v = (h - 0.1 - j * 0.08) / 0.9;
+            if (v > 0 && v < 1) { x = W * hh.x + Math.sin(v * Math.PI * 2) * W * 0.03 * hh.sw; y = lerp(H * 0.72, -H * 0.25, easeOutCubic(v)); a = Math.sin(v * Math.PI); sc = 0.6 + 0.5 * v; rot = hh.sw * 18 * Math.sin(v * Math.PI * 2); }
+          }
+          if (!a) { hh.el.style.opacity = '0'; return; }
+          hh.el.style.opacity = a.toFixed(4);
+          hh.el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) rotate(' + rot.toFixed(2) + 'deg) scale(' + sc.toFixed(3) + ')';
+        });
+        return { transform: 'scale(' + Math.max(0, s).toFixed(5) + ')', opacity: op };
+      },
+    },
+
+    // ย้อนยุค 3D (พรีเมียม): ตัวอักษรเด้งเข้า เงายาวแบบยุค 80 ยืดออก · ค้าง: เงาหดแล้วยืดกลับ · สีขอบ = สีเงา 3D
+    retro: {
+      intro: 0.9, outro: 0.5, loop: 2.4, fit: 1.2, premium: true,
+      build: function (el, o) {
+        el.__ext = o.strokeRatio > 0 ? o.stroke : mix(o.fill, '#000000', 0.55);
+        el.__soft = !!o.shadow;
+        var id = o.filterId || 'outline', f = el.ownerDocument.getElementById(id);
+        // ขอบเข้มกว่าเงา 3D เล็กน้อย ให้แยกชั้นชัด
+        if (f && o.strokeRatio > 0) f.querySelector('.m-outline').setAttribute('flood-color', mix(o.stroke, '#000000', 0.55));
+      },
+      frame: function (el, t, timing) {
+        var fill = el.querySelector('.fill');
+        var fs = parseFloat(el.style.fontSize) || 100, D = fs * 0.18;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var s = 1, op = 1, k = 1;
+        if (t < intro) { var p = clamp(t / (intro * 0.55), 0, 1); s = lerp(0.6, 1, easeOutBack(p)); op = clamp(p * 4, 0, 1); k = easeOutCubic(clamp((t - intro * 0.35) / (intro * 0.65), 0, 1)); }
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 2.4) : -1;
+        if (h >= 0.15 && h < 1.55) { var w = Math.sin(Math.PI * (h - 0.15) / 1.4); k = 1 - 0.65 * w * w; }
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1); k = 1 - easeInCubic(clamp(q / 0.6, 0, 1)); s = lerp(1, 0.85, easeInCubic(q)); op = 1 - easeInCubic(clamp((q - 0.3) / 0.7, 0, 1)); }
+        if (t >= timing.fadeEnd) op = 0;
+        var d = D * k, steps = Math.max(1, Math.min(28, Math.round(d))), sh = [];
+        if (d > 0.3) for (var i = 1; i <= steps; i++) { var o2 = (d * i / steps).toFixed(2); sh.push(o2 + 'px ' + o2 + 'px 0 ' + el.__ext); }
+        if (el.__soft && d > 0.3) sh.push((d + fs * 0.03).toFixed(2) + 'px ' + (d + fs * 0.04).toFixed(2) + 'px ' + (fs * 0.06).toFixed(2) + 'px rgba(0,0,0,.35)');
+        fill.style.textShadow = sh.length ? sh.join(',') : 'none';
+        // ตัวอักษรเลื่อนขึ้นซ้ายครึ่งหนึ่งของความลึก ภาพรวมจึงอยู่กลางเสมอ
+        fill.style.transform = d > 0.01 ? 'translate(' + (-d / 2).toFixed(2) + 'px,' + (-d / 2).toFixed(2) + 'px)' : '';
+        return { transform: 'scale(' + s.toFixed(5) + ')', opacity: op };
       },
     },
   };
