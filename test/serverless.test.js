@@ -23,6 +23,7 @@ const { productKey } = require('../src/storage');
 
 let server, base, ctx, cfg, mock, mockBase;
 const groqCalls = [];
+const chatCalls = [];
 const stored = new Map();
 let groqStatus = 200;
 
@@ -48,6 +49,14 @@ before(async () => {
           segments: [{ start: 0, end: 2, text: `สวัสดีครับ ท่อน${n}` }],
           words: [{ word: 'สวัสดี', start: 0.1, end: 0.6 }, { word: 'ครับ', start: 0.6, end: 1 }, { word: `ท่อน${n}`, start: 1.2, end: 1.9 }],
         }));
+      }
+      if (u.pathname === '/openai/v1/chat/completions') {
+        // ตัวแก้คำผิดจำลอง: "ท่อน1" → "ท่อนที่ 1"
+        const j = JSON.parse(body.toString());
+        chatCalls.push(j);
+        const lines = JSON.parse(j.messages[1].content).lines.map((t) => t.replace(/ท่อน(\d)/g, 'ท่อนที่ $1'));
+        res.writeHead(200, { 'content-type': 'application/json' });
+        return res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ lines }) } }] }));
       }
       const m = /^\/storage\/v1\/object\/(sign|authenticated|info\/authenticated)?\/?([^/]+)\/(.+)$/.exec(u.pathname);
       if (req.headers.authorization !== 'Bearer service-key') { res.writeHead(401); return res.end('no'); }
@@ -258,6 +267,11 @@ test('ซับในเบราว์เซอร์: คลิปไม่ข
   assert.ok(cues.length >= 2);
   assert.ok(cues[0].start < 1 && cues[cues.length - 1].start >= 110, 'ท่อนที่ 2 เลื่อนเวลาไป 110 วินาที');
   assert.match(cues.map((x) => x.text).join(' '), /สวัสดีครับ/);
+  // แก้คำผิดด้วยโมเดลภาษา (คีย์ Groq เดียวกัน) · เวลาไม่เปลี่ยน · เก็บข้อความเดิมไว้ให้กดใช้คืน
+  assert.equal(chatCalls.at(-1).model, 'openai/gpt-oss-120b');
+  const fixedCue = cues.find((x) => /ท่อนที่ \d/.test(x.text));
+  assert.ok(fixedCue, cues.map((x) => x.text).join(' | '));
+  assert.match(fixedCue.o, /ท่อน\d/);
   // หน้าแก้ซับ: ไม่มีลิงก์คลิปบนเซิร์ฟเวอร์ ใช้คลิปในเครื่อง
   const page = await (await c.req(`/subtitles/${id}`)).text();
   assert.doesNotMatch(page, /\/source"/);

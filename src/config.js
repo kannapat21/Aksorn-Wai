@@ -156,6 +156,12 @@ function loadConfig(overrides = {}) {
     },
     // ถอดเสียงด้วย Groq (Whisper large-v3 บนคลาวด์ ฟรีตามโควตา) ใช้เมื่อ SUBTITLE_ENGINE=groq
     groq: { apiKey: env.GROQ_API_KEY || '', model: env.GROQ_MODEL || 'whisper-large-v3', apiBase: env.GROQ_API_BASE || 'https://api.groq.com/openai/v1' },
+    // แก้คำผิดในซับอัตโนมัติ: llm = กฎในเครื่อง + โมเดลภาษาบน Groq (ใช้คีย์เดียวกับถอดเสียง) · rules = กฎในเครื่องอย่างเดียว · off = ไม่แก้
+    subtitleFix: {
+      mode: env.SUBTITLE_FIX || (env.GROQ_API_KEY ? 'llm' : 'rules'),
+      model: env.SUBTITLE_FIX_MODEL || 'openai/gpt-oss-120b',
+      timeoutMs: Number(env.SUBTITLE_FIX_TIMEOUT_MS || 20000),
+    },
     userFontMax: Number(env.USER_FONT_MAX || 20), // ฟอนต์ที่อัปโหลดได้ต่อบัญชี
     // ซับอัตโนมัติ: ลูกค้าอัปคลิป ร้านถอดเสียงด้วย Whisper ในเครื่อง แล้วเบิร์นซับด้วยแบบในคลัง
     subtitles: {
@@ -229,6 +235,7 @@ function loadConfig(overrides = {}) {
   const S = cfg.subtitles;
   if (!['auto', 'mlx', 'faster-whisper', 'groq', 'off'].includes(S.engine)) problems.push('SUBTITLE_ENGINE ต้องเป็น auto / mlx / faster-whisper / groq / off');
   if (S.engine === 'groq' && !cfg.groq.apiKey) problems.push('SUBTITLE_ENGINE=groq ต้องตั้ง GROQ_API_KEY (สมัครฟรีที่ console.groq.com)');
+  if (!['llm', 'rules', 'off'].includes(cfg.subtitleFix.mode)) problems.push('SUBTITLE_FIX ต้องเป็น llm / rules / off');
   if (!['server', 'browser'].includes(cfg.renderMode)) problems.push('RENDER_MODE ต้องเป็น server หรือ browser');
   if (cfg.renderMode === 'browser' && S.engine !== 'groq' && S.engine !== 'off') problems.push('RENDER_MODE=browser ถอดเสียงในเซิร์ฟเวอร์ไม่ได้: ตั้ง GROQ_API_KEY (หรือ SUBTITLE_ENGINE=off)');
   const ST = cfg.storage;

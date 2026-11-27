@@ -7,6 +7,7 @@
  * ภาษาไทยไม่เว้นวรรคระหว่างคำ จึงตัดคำด้วย Intl.Segmenter('th') แล้วแบ่งบรรทัดที่ช่องว่าง/ช่วงเงียบก่อน
  */
 const crypto = require('crypto');
+const { cleanOriginal, isSfxOnly } = require('./subfix');
 
 // อักษรไทย, ASCII ที่พิมพ์ได้ (ยกเว้น < > ` \), ช่องว่าง และเครื่องหมายที่ใช้บ่อย (ชุดเดียวกับหน้าปรับแต่ง)
 const ALLOWED_RE = /^[ก-ฺ฿-๛ !"#$%&'()*+,\-./0-9:;=?@A-Z[\]^_a-z{|}~ ‘’“”…–—•·×÷°]*$/u;
@@ -43,25 +44,25 @@ function maxCharsFor(width, height) {
  */
 const FILLER_RE = /(?<![\u0E01-\u0E2E\u0E40-\u0E44])(?:เอ[่๋้]อ+(?!ล้น)|อ[่้]า+(?![\u0E31-\u0E3A\u0E47-\u0E4Eนวงยม])|อื+ม+(?![\u0E31-\u0E3A\u0E47-\u0E4E])|อึ+ม+(?![\u0E31-\u0E3A\u0E47-\u0E4E])|เออ+(?![ร\u0E31-\u0E3A\u0E47-\u0E4E]))(?:\s*ๆ)?|\b(?:u+h+|u+m+|e+r+m+|h+m+)\b[,.]?/giu;
 
-function dropFillers(text, times, bounds, ends = []) {
+function dropFillers(text, times, bounds, ends = [], src = null) {
   const kill = new Uint8Array(text.length);
   let any = false;
   for (const m of text.matchAll(FILLER_RE)) { any = true; for (let k = m.index; k < m.index + m[0].length; k++) kill[k] = 1; }
-  if (!any) return { text, times, ends };
+  if (!any) return { text, times, ends, src };
   let t = '';
-  const tt = [], te = [];
+  const tt = [], te = [], ts = src ? [] : null;
   const nb = new Set();
   for (let i = 0; i < text.length; i++) {
     if (bounds.has(i)) nb.add(t.length);
     if (kill[i]) continue;
     const ch = text[i];
     if (ch === ' ' && (!t || t.endsWith(' '))) continue; // ไม่ให้มีช่องว่างซ้อนตรงที่ตัดคำเติม
-    t += ch; tt.push(times[i]); te.push(ends[i]);
+    t += ch; tt.push(times[i]); te.push(ends[i]); if (ts) ts.push(src[i]);
   }
-  if (t.endsWith(' ')) { t = t.slice(0, -1); tt.pop(); te.pop(); }
+  if (t.endsWith(' ')) { t = t.slice(0, -1); tt.pop(); te.pop(); if (ts) ts.pop(); }
   tt.lastEnd = times.lastEnd;
   bounds.clear(); nb.forEach((b) => bounds.add(b));
-  return { text: t, times: tt, ends: te };
+  return { text: t, times: tt, ends: te, src: ts };
 }
 
 /*
@@ -72,6 +73,7 @@ function tokensFromWords(words) {
   let text = '';
   let times = []; // เวลาเริ่มของแต่ละ code unit
   let ends = []; // เวลาจบของแต่ละ code unit (ใช้หาเวลาจบของคำ ไม่ให้ช่วงเงียบหลังคำถูกนับเป็นเวลาพูด)
+  let src = []; // ตำแหน่งในข้อความดิบก่อนแก้คำผิด (มาจาก subfix.fixWords · -1 = ไม่รู้)
   let prevEnd = 0;
   const bounds = new Set([0]); // จุดต่อระหว่างชิ้นของ Whisper (ตัดบรรทัดตรงนี้ได้สบายใจกว่ากลางชิ้น)
   for (const w of words || []) {
@@ -85,17 +87,19 @@ function tokensFromWords(words) {
     s = s.replace(/\s+/g, ' ').trim();
     if (!s) continue;
     // ช่องว่างระหว่างชิ้น = ที่แบ่งบรรทัดได้ (Whisper ใส่ช่องว่างตามที่คนไทยเว้นวรรคจริง)
-    if (text && lead && !text.endsWith(' ')) { text += ' '; times.push(start); ends.push(start); }
+    if (text && lead && !text.endsWith(' ')) { text += ' '; times.push(start); ends.push(start); src.push(-1); }
     bounds.add(text.length);
     const g = graphemes(s);
     const per = (end - start) / g.length;
-    g.forEach((ch, i) => { for (let k = 0; k < ch.length; k++) { times.push(start + per * i); ends.push(start + per * (i + 1)); } });
+    const ws = Array.isArray(w.src) && w.src.length === s.length ? w.src : null;
+    let u = 0;
+    g.forEach((ch, i) => { for (let k = 0; k < ch.length; k++) { times.push(start + per * i); ends.push(start + per * (i + 1)); src.push(ws ? ws[u] : -1); u++; } });
     text += s;
     prevEnd = end;
     times.lastEnd = end;
   }
   // ตัดคำเติม (เอ่อ อ่า อืม) ทิ้ง ทั้งตัวอักษรและเวลา ก่อนตัดคำ
-  ({ text, times, ends } = dropFillers(text, times, bounds, ends));
+  ({ text, times, ends, src } = dropFillers(text, times, bounds, ends, src));
   // ตัดคำ
   const out = [];
   for (const seg of segW().segment(text)) {
@@ -103,7 +107,11 @@ function tokensFromWords(words) {
     const t0 = times[i];
     const t1 = ends[i + seg.segment.length - 1] ?? times.lastEnd ?? t0;
     if (/^\s+$/.test(seg.segment)) { out.push({ space: true, text: ' ', start: t0, end: t1 }); continue; }
-    out.push({ text: seg.segment, start: t0, end: Math.max(t0, t1), inChunk: !bounds.has(i) });
+    let lo = Infinity, hi = -1;
+    for (let k = i; k < i + seg.segment.length; k++) { const v = src[k]; if (v >= 0) { if (v < lo) lo = v; if (v > hi) hi = v; } }
+    const tok = { text: seg.segment, start: t0, end: Math.max(t0, t1), inChunk: !bounds.has(i) };
+    if (hi >= 0) { tok.lo = lo; tok.hi = hi; }
+    out.push(tok);
   }
   // เวลาจบของคำ: ใช้เวลาเริ่มของตัวถัดไปถ้าอยู่ติดกัน (ชิ้นสุดท้ายของแต่ละช่วงพูดใช้ end ของชิ้นนั้น)
   return out;
@@ -144,7 +152,7 @@ const isBreakChar = (s) => /[.!?…。]$/.test(s);
  *   - ตัดเมื่อเงียบเกิน gap วินาที, ยาวเกิน maxChars, นานเกิน maxDur
  *   - ถ้าบรรทัดยาวเกินครึ่งแล้วเจอช่องว่าง/จบประโยค ตัดตรงนั้น (อ่านง่ายกว่าตัดกลางวลี)
  */
-function buildCues(words, { maxChars = 18, maxDur = 4.2, gap = 0.6, duration = Infinity } = {}) {
+function buildCues(words, { maxChars = 18, maxDur = 4.2, gap = 0.6, duration = Infinity, raw = '' } = {}) {
   const toks = dropFillerTokens(tokensFromWords(words));
   const cues = [];
   const lenOf = (list) => list.reduce((a, t) => a + (t.sp ? 1 : 0) + glen(t.text), 0);
@@ -188,6 +196,8 @@ function buildCues(words, { maxChars = 18, maxDur = 4.2, gap = 0.6, duration = I
     }
   }
   push(cur);
+  // บรรทัดที่มีแต่เสียงประกอบ (ปัง บึ้ม ฮ่าๆ) ไม่ต้องขึ้นซับ · บรรทัดที่มีคำพูดปนอยู่ด้วยเก็บไว้ทั้งบรรทัด
+  for (let i = cues.length - 1; i >= 0; i--) if (isSfxOnly(cues[i].toks.map((t) => t.text).join(' '))) cues.splice(i, 1);
   // บรรทัดจิ๋ว (1–3 ตัวอักษร เช่น "ครับ" "นะ" ที่หลุดมาเดี่ยวๆ) รวมเข้ากับบรรทัดข้างเคียงที่อยู่ใกล้กัน
   for (let i = 0; i < cues.length; i++) {
     const c = cues[i];
@@ -210,13 +220,26 @@ function buildCues(words, { maxChars = 18, maxDur = 4.2, gap = 0.6, duration = I
     end = Math.min(end, limit);
     if (end - c.start < MIN_CUE) end = Math.min(c.start + MIN_CUE, duration);
     const start = round2(c.start);
-    return {
+    const cue = {
       id: newId(),
       start,
       end: round2(Math.max(end, start + 0.1)),
       text: c.toks.map((t) => (t.sp ? ' ' : '') + t.text).join(''),
       w: c.toks.flatMap((t) => [...(t.sp ? [[' ', null]] : []), [t.text, round2(Math.max(0, t.start - c.start))]]),
     };
+    // ข้อความเดิมก่อนแก้คำผิด (ให้กด ↺ ใช้คำเดิมได้) · เก็บเฉพาะบรรทัดที่ตัวอักษรเปลี่ยนจริง
+    if (raw) {
+      const lo = Math.min(...c.toks.map((t) => (t.hi >= 0 ? t.lo : Infinity)));
+      let hi = Math.max(...c.toks.map((t) => (t.hi >= 0 ? t.hi : -1)));
+      // ตัวอักษรดิบที่ถูกแก้หายไปท้ายบรรทัด (ติกตอ|ค → TikTok) นับเป็นของบรรทัดนี้ จนถึงช่องว่างหรือบรรทัดถัดไป
+      const nextLo = next ? Math.min(...next.toks.map((t) => (t.hi >= 0 ? t.lo : Infinity))) : Infinity;
+      while (hi >= lo && hi + 1 < raw.length && hi + 1 < nextLo && !/\s/.test(raw[hi + 1])) hi++;
+      if (hi >= lo) {
+        const o = cleanOriginal(raw.slice(lo, hi + 1), FILLER_RE);
+        if (o && glen(o) <= MAX_CUE_GRAPHEMES && o.replace(/\s+/g, '') !== cue.text.replace(/\s+/g, '')) cue.o = o;
+      }
+    }
+    return cue;
   });
 }
 
@@ -283,7 +306,10 @@ function validateCues(input, { duration, prev = [], styles = null, main = null }
     } else {
       w = spreadWords(text, end - start);
     }
-    return p ? { id, start, end, text, w, p } : { id, start, end, text, w };
+    const out = p ? { id, start, end, text, w, p } : { id, start, end, text, w };
+    // ข้อความเดิมก่อนแก้คำผิด: เก็บต่อจากซับเดิม (ไม่เชื่อค่าจากเบราว์เซอร์) · ลูกค้าใช้คำเดิมแล้ว = ไม่ต้องเก็บ
+    if (old && typeof old.o === 'string' && old.o && old.o !== text) out.o = old.o;
+    return out;
   });
   return { cues };
 }
