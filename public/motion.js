@@ -1297,6 +1297,316 @@
         return { transform: 'scale(' + s.toFixed(5) + ')', opacity: op };
       },
     },
+
+    /* ==================== ท่าชุดที่ 4 (ฟรี 5 · พรีเมียม 6) ====================
+     * กติกาเดิม + ส่วนที่ขยับของรอบค้างต้องจบภายในช่วงค้างของคลิป 3 วินาที (3 - เข้า - ออก)
+     */
+
+    // สไลด์เข้า (ฟรี): ข้อความพุ่งเข้าจากซ้าย เอียงนิดๆ แล้วตั้งตรง · ออก: พุ่งออกขวา
+    slide: {
+      intro: 0.7, outro: 0.5, loop: 0, fit: 1.06, premium: false,
+      frame: function (el, t, timing) {
+        var W = el.offsetWidth || 400, fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var x = 0, sk = 0, op = 1, blur = 0;
+        if (t < intro) { var p = clamp(t / intro, 0, 1), e = easeOutExpo(p); x = -(1 - e) * W * 0.55; sk = (1 - e) * -18; op = clamp(p * 4, 0, 1); blur = (1 - e) * 0.06 * fs; }
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1), eq = easeInCubic(q); x += eq * W * 0.55; sk += eq * 18; op = Math.min(op, 1 - eq); blur += eq * 0.06 * fs; }
+        if (t >= timing.fadeEnd) op = 0;
+        el.style.filter = blur > 0.05 ? 'blur(' + blur.toFixed(2) + 'px)' : '';
+        return { transform: 'translateX(' + x.toFixed(2) + 'px) skewX(' + sk.toFixed(3) + 'deg)', opacity: op };
+      },
+    },
+
+    // ลอยขึ้นทีละคำ (ฟรี): แต่ละคำค่อยๆ ลอยขึ้นและชัดตามจังหวะ (สไตล์แคปชันรีลส์) · ออก: ลอยต่อขึ้นแล้วหาย
+    fadeup: {
+      intro: 1.0, outro: 0.5, loop: 0, fit: 1.08, premium: false,
+      build: function (el, o) { el.__units = buildUnits(el.querySelector('.fill'), wordUnits(o.text)); },
+      frame: function (el, t, timing) {
+        var units = el.__units || [], n = units.length || 1;
+        var fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var dur = Math.min(0.5, intro * 0.6), st = n > 1 ? Math.max(0, (intro - dur - 0.02) / (n - 1)) : 0;
+        st = Math.min(st, 0.22);
+        units.forEach(function (s, i) {
+          var y = 0, op = 1, blur = 0;
+          if (t < intro) { var e = easeOutCubic(clamp((t - st * i) / dur, 0, 1)); y = (1 - e) * 0.45 * fs; op = e; blur = (1 - e) * 0.07 * fs; }
+          if (t >= timing.fadeStart) {
+            var q = clamp((t - timing.fadeStart - (outLen * 0.3) * (i / Math.max(1, n - 1))) / (outLen * 0.6), 0, 1), eq = easeInCubic(q);
+            y -= eq * 0.35 * fs; op = Math.min(op, 1 - eq); blur += eq * 0.06 * fs;
+          }
+          s.style.opacity = op.toFixed(4);
+          s.style.filter = blur > 0.05 ? 'blur(' + blur.toFixed(2) + 'px)' : 'none';
+          s.style.transform = y ? 'translateY(' + y.toFixed(2) + 'px)' : 'none';
+        });
+        return { transform: 'none', opacity: t >= timing.fadeEnd ? 0 : 1 };
+      },
+    },
+
+    // ขีดเส้นใต้ (ฟรี): ข้อความโผล่ แล้วเส้นใต้ลากจากซ้ายไปขวา · ออก: เส้นหดไปทางขวา ข้อความจาง · สีตัวอักษร = สีเส้น
+    underline: {
+      intro: 0.9, outro: 0.5, loop: 0, fit: 1.08, premium: false,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        fill.style.position = 'relative'; fill.style.zIndex = '1';
+        var ow = Math.max(1, Math.round(o.size * (o.strokeRatio || 0) * 0.6));
+        el.__line = addBox(el, 'tt-uline', 'left:.42em;right:.42em;bottom:.36em;height:.1em;border-radius:.05em;background:' + o.fill + ';z-index:2;' +
+          ((o.strokeRatio > 0 || o.shadow) ? 'box-shadow:' + [o.strokeRatio > 0 ? '0 0 0 ' + ow + 'px ' + o.stroke : '', o.shadow ? '0 ' + (o.size * 0.05).toFixed(1) + 'px ' + (o.size * 0.06).toFixed(1) + 'px rgba(0,0,0,.45)' : ''].filter(Boolean).join(',') + ';' : ''));
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var fill = el.querySelector('.fill');
+        var fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var ty = 0, top = 1, lw = 1, origin = '0% 50%';
+        if (t < intro) {
+          var e = easeOutCubic(clamp(t / (intro * 0.55), 0, 1)); ty = (1 - e) * 0.25 * fs; top = e;
+          lw = easeInOutCubic(clamp((t - intro * 0.35) / (intro * 0.6), 0, 1));
+        }
+        if (t >= timing.fadeStart) {
+          var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1);
+          lw = 1 - easeInCubic(clamp(q / 0.6, 0, 1)); origin = '100% 50%';
+          top = 1 - easeInCubic(clamp((q - 0.25) / 0.75, 0, 1)); ty = -easeInCubic(q) * 0.15 * fs;
+        }
+        if (el.__line) { el.__line.style.transformOrigin = origin; el.__line.style.transform = 'scaleX(' + lw.toFixed(4) + ')'; el.__line.style.opacity = lw > 0.002 ? '1' : '0'; }
+        fill.style.opacity = top.toFixed(4);
+        fill.style.transform = ty ? 'translateY(' + ty.toFixed(2) + 'px)' : '';
+        return { transform: 'none', opacity: t >= timing.fadeEnd ? 0 : 1 };
+      },
+    },
+
+    // ป้ายแขวน (ฟรี): ป้ายร่วงลงมาแล้วแกว่งไปมาเหมือนแขวนเชือก ค่อยๆ หยุดนิ่ง · ออก: ร่วงลงหาย
+    swing: {
+      intro: 1.3, outro: 0.5, loop: 0, fit: 1.16, premium: false,
+      frame: function (el, t, timing) {
+        var H = el.__H || 1080;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var y = 0, rot = 0, op = 1, T = Math.min(0.25, intro * 0.3);
+        el.style.transformOrigin = '50% 8%';
+        if (t < T) { var p = clamp(t / T, 0, 1); y = -(1 - easeOutCubic(p)) * H * 0.35; rot = 16 * easeOutCubic(p); op = clamp(p * 3, 0, 1); }
+        else if (t < intro) { var u = clamp((t - T) / (intro - T), 0, 1); rot = 16 * Math.pow(1 - u, 2) * Math.cos(u * Math.PI * 5); }
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1), eq = easeInCubic(q); y += eq * H * 0.25; rot -= eq * 14; op = 1 - eq; }
+        if (t >= timing.fadeEnd) op = 0;
+        return { transform: 'translateY(' + y.toFixed(2) + 'px) rotate(' + rot.toFixed(3) + 'deg)', opacity: op };
+      },
+    },
+
+    // ขีดฆ่าราคา (ฟรี): ข้อความเด้งเข้า แล้วเส้นขีดฆ่าปาดผ่าน (ราคาเดิม/คำที่ไม่ใช่) · สีขอบ = สีเส้นขีด
+    strike: {
+      intro: 0.9, outro: 0.5, loop: 0, fit: 1.1, premium: false,
+      build: function (el, o) {
+        var c0 = hexRgb(o.stroke), sh = Math.max.apply(null, c0) - Math.min.apply(null, c0) > 60 ? o.stroke : '#FF3B30'; // ขอบดำ/ขาว/เทา → เส้นแดง
+        el.__strike = addBox(el, 'tt-strike', 'left:.25em;right:.25em;top:calc(54% - .055em);height:.11em;border-radius:.06em;z-index:2;background:' + sh + ';' +
+          (o.shadow ? 'box-shadow:0 ' + (o.size * 0.03).toFixed(1) + 'px ' + (o.size * 0.05).toFixed(1) + 'px rgba(0,0,0,.4);' : ''));
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var s = 1, op = 1, lw = 1;
+        if (t < intro) { var p = clamp(t / (intro * 0.45), 0, 1); s = lerp(0.7, 1, easeOutBack(p)); op = clamp(p * 3, 0, 1); lw = easeOutExpo(clamp((t - intro * 0.5) / (intro * 0.45), 0, 1)); }
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1); s = lerp(1, 0.9, easeInCubic(q)); op = 1 - easeInCubic(q); }
+        if (t >= timing.fadeEnd) op = 0;
+        if (el.__strike) { el.__strike.style.transformOrigin = '50% 50%'; el.__strike.style.transform = 'rotate(-4deg) translateX(' + (-(1 - lw) * 50).toFixed(3) + '%) scaleX(' + lw.toFixed(4) + ')'; el.__strike.style.opacity = lw > 0.002 ? '1' : '0'; }
+        return { transform: 'scale(' + s.toFixed(5) + ')', opacity: op };
+      },
+    },
+
+    // สปอตไลต์ (พรีเมียม): ข้อความมืด แสงไฟฉายส่องกวาดแล้วสว่างเต็ม · ค้าง: ไฟหรี่เหลือวงเดียว กวาดไปมาแล้วสว่างกลับ
+    spotlight: {
+      intro: 1.1, outro: 0.5, loop: 2.2, fit: 1.1, premium: true,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        fill.style.color = mix(o.fill, '#000000', 0.72);
+        el.__lit = overlayText(el, 'tt-lit', o.text, 'color:' + o.fill + ';text-shadow:0 0 ' + (o.size * 0.12).toFixed(1) + 'px ' + mix(o.fill, '#ffffff', 0.5) + ';');
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var X = 50, R = 260, op = 1;
+        if (t < intro) {
+          op = clamp(t / 0.15, 0, 1);
+          X = lerp(-20, 50, easeInOutSine(clamp((t - 0.05) / (intro * 0.6), 0, 1)));
+          R = lerp(24, 260, easeInCubic(clamp((t - intro * 0.55) / (intro * 0.45), 0, 1)));
+        }
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 2.2) : -1;
+        if (h >= 0.1 && h < 1.4) { var w = (h - 0.1) / 1.3, k = Math.sin(Math.PI * w); X = 50 + 42 * Math.sin(2 * Math.PI * w); R = lerp(260, 24, Math.min(1, k * 2.2)); }
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1); R = lerp(260, 0, easeInCubic(clamp(q / 0.7, 0, 1))); op = 1 - easeInCubic(q); }
+        if (t >= timing.fadeEnd) op = 0;
+        var m = R >= 259.9 ? 'linear-gradient(#000,#000)' : 'radial-gradient(' + R.toFixed(2) + '% 160% at ' + X.toFixed(2) + '% 50%,#000 55%,transparent 100%)';
+        if (el.__lit) { el.__lit.style.webkitMaskImage = m; el.__lit.style.maskImage = m; }
+        return { transform: 'none', opacity: op };
+      },
+    },
+
+    // พลุกระดาษ (พรีเมียม): ข้อความเด้งเข้า · ค้าง: กระดาษสีพุ่งขึ้นแล้วร่วงหมุนติ้ว · เหมาะฉลอง/ขอบคุณ
+    confetti: {
+      intro: 0.8, outro: 0.5, loop: 2.4, fit: 1.25, premium: true,
+      build: function (el, o) {
+        var doc = el.ownerDocument, C = ['#ff3b6b', '#ffd400', '#3ddc84', '#1fb6ff', '#a259ff', '#ff9f1c'];
+        el.__bits = [];
+        for (var j = 0; j < 28; j++) {
+          var b = doc.createElement('i');
+          b.className = 'tt-x tt-conf';
+          b.setAttribute('aria-hidden', 'true');
+          var round = j % 4 === 3, w = round ? 0.2 : 0.15 + hash(j + 300) * 0.08, hh = round ? 0.2 : 0.28 + hash(j + 310) * 0.12;
+          b.style.cssText = 'position:absolute;left:0;top:0;width:' + w.toFixed(3) + 'em;height:' + hh.toFixed(3) + 'em;margin:-' + (hh / 2).toFixed(3) + 'em 0 0 -' + (w / 2).toFixed(3) + 'em;border-radius:' + (round ? '50%' : '.02em') + ';opacity:0;pointer-events:none;z-index:2;background:' + C[j % C.length] + ';';
+          el.appendChild(b);
+          var a = -Math.PI / 2 + (hash(j + 320) - 0.5) * 2.2;
+          el.__bits.push({ el: b, vx: Math.cos(a) * (0.5 + hash(j + 330) * 0.6), vy: Math.sin(a) * (0.9 + hash(j + 340) * 0.7), spin: (hash(j + 350) - 0.5) * 1440, x0: (hash(j + 360) - 0.5) * 0.5, d: hash(j + 370) * 0.15 });
+        }
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var s = 1, op = 1, rot = 0;
+        if (t < intro) { var p = clamp(t / intro, 0, 1); s = Math.max(0, lerp(0.2, 1, easeOutBack(p))); rot = (1 - easeOutCubic(p)) * -8; op = clamp(p * 4, 0, 1); }
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 2.4) : -1;
+        if (h >= 0.05 && h < 0.35) s = 1 + 0.08 * Math.sin(Math.PI * (h - 0.05) / 0.3);
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1); s = 1 - easeInBack(q); op = 1 - clamp((q - 0.5) / 0.5, 0, 1); }
+        if (t >= timing.fadeEnd) op = 0;
+        var W = el.offsetWidth, H = el.offsetHeight;
+        (el.__bits || []).forEach(function (b) {
+          var u = h >= 0 ? (h - 0.08 - b.d) / 1.2 : -1;
+          if (!(u > 0 && u < 1)) { b.el.style.opacity = '0'; return; }
+          var x = W * (0.5 + b.x0) + b.vx * W * 0.8 * u;
+          var y = H * 0.4 + b.vy * H * 2.3 * u + H * 3.0 * u * u;
+          var fl = Math.cos((b.spin * u) * Math.PI / 180 * 2);
+          b.el.style.opacity = (u < 0.75 ? 1 : (1 - u) / 0.25).toFixed(4);
+          b.el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) rotate(' + (b.spin * u).toFixed(1) + 'deg) scaleX(' + fl.toFixed(3) + ')';
+        });
+        return { transform: 'rotate(' + rot.toFixed(3) + 'deg) scale(' + s.toFixed(5) + ')', opacity: op };
+      },
+    },
+
+    // บล็อกเปิดเผย (พรีเมียม): แถบสีปาดคลุมแล้วเปิดเผยข้อความ สไตล์โมชันกราฟิก · ค้าง: ปาดซ้ำอีกรอบ · สีขอบ = สีแถบ
+    reveal: {
+      intro: 1.0, outro: 0.6, loop: 2.6, fit: 1.06, premium: true,
+      build: function (el, o) {
+        var bc = luminance(o.stroke) < 0.05 ? mix(o.fill, '#000000', 0.15) : o.stroke;
+        el.__blk = addBox(el, 'tt-blk', 'left:.3em;right:.3em;top:.32em;bottom:.32em;z-index:3;background:' + bc + ';');
+        el.__blk2 = addBox(el, 'tt-blk', 'left:.3em;right:.3em;top:.32em;bottom:.32em;z-index:2;background:' + mix(bc, '#ffffff', 0.55) + ';');
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var fill = el.querySelector('.fill');
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        // หนึ่งรอบปาด: c=0..1 · แถบ 1 ขยายจากซ้าย (0–.45) แล้วหดออกขวา (.5–1) · แถบ 2 (สีอ่อน) นำหน้าเล็กน้อย · ข้อความเปลี่ยนตอนแถบคลุมเต็ม
+        var wipe = function (c, k0) {
+          var a = clamp((c - k0) / 0.42, 0, 1), b = clamp((c - k0 - 0.5) / 0.42, 0, 1);
+          if (c - k0 < 0.5) return { s: easeInOutCubic(a), o: '0% 50%' };
+          return { s: 1 - easeInOutCubic(b), o: '100% 50%' };
+        };
+        var c = -1, textOn = 1;
+        if (t < intro) { c = clamp(t / intro, 0, 1); textOn = c >= 0.48 ? 1 : 0; }
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 2.6) : -1;
+        if (h >= 0.25 && h < 1.25) c = (h - 0.25) / 1.0;
+        var out = t >= timing.fadeStart ? clamp((t - timing.fadeStart) / (outLen * 0.95), 0, 1) : -1;
+        if (out >= 0) { c = out; textOn = out < 0.48 ? 1 : 0; }
+        var w1 = c >= 0 ? wipe(c, 0.06) : { s: 0, o: '0% 50%' }, w2 = c >= 0 ? wipe(c, 0) : { s: 0, o: '0% 50%' };
+        [[el.__blk, w1], [el.__blk2, w2]].forEach(function (x) {
+          if (!x[0]) return;
+          x[0].style.transformOrigin = x[1].o; x[0].style.transform = 'scaleX(' + x[1].s.toFixed(4) + ')'; x[0].style.opacity = x[1].s > 0.002 ? '1' : '0';
+        });
+        fill.style.opacity = String(textOn);
+        return { transform: 'none', opacity: t >= timing.fadeEnd ? 0 : 1 };
+      },
+    },
+
+    // เงาซ้อน (พรีเมียม): ข้อความกลางเด้งเข้า เส้นขอบซ้ำบน-ล่างกางออก · ค้าง: เงาซ้อนยุบเข้าแล้วกางใหม่เป็นคลื่น
+    echo: {
+      intro: 1.0, outro: 0.5, loop: 2.0, fit: 1.12, premium: true,
+      build: function (el, o) {
+        var sw = Math.max(1, o.size * 0.022).toFixed(2);
+        el.__echo = [-2, -1, 1, 2].map(function (k) {
+          var s = overlayText(el, 'tt-echo', o.text, 'color:transparent;-webkit-text-fill-color:transparent;-webkit-text-stroke:' + sw + 'px ' + o.fill + ';opacity:0;', true);
+          s.__k = k; return s;
+        });
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var fill = el.querySelector('.fill');
+        var fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var s = 1, op = 1, sp = 1;
+        if (t < intro) { var p = clamp(t / (intro * 0.5), 0, 1); s = lerp(0.6, 1, easeOutBack(p)); op = clamp(p * 3, 0, 1); sp = easeOutBack(clamp((t - intro * 0.35) / (intro * 0.65), 0, 1)); }
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 2.0) : -1;
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1); sp = 1 - easeInCubic(clamp(q / 0.6, 0, 1)); s = lerp(1, 1.15, easeInCubic(q)); op = 1 - easeInCubic(q); }
+        if (t >= timing.fadeEnd) op = 0;
+        (el.__echo || []).forEach(function (e, i) {
+          var a = Math.abs(e.__k), k = sp;
+          if (h >= 0) { var u = (h - 0.1 - (a - 1) * 0.12) / 0.9; if (u > 0 && u < 1) k = 1 - Math.sin(Math.PI * u); }
+          e.style.transform = 'translateY(' + (e.__k * 0.42 * fs * k).toFixed(2) + 'px)';
+          e.style.opacity = (k <= 0.001 ? 0 : (a === 1 ? 0.75 : 0.4) * clamp(k * 2, 0, 1)).toFixed(4);
+        });
+        fill.style.transform = 'scale(' + s.toFixed(5) + ')';
+        return { transform: 'none', opacity: op };
+      },
+    },
+
+    // เยลลี่เด้งดึ๋ง (พรีเมียม): ตกลงมายุบแล้วเด้งดึ๋งเหมือนเยลลี่ · ค้าง: ตัวอักษรสั่นดึ๋งเป็นคลื่น · ออก: ยุบแบนหาย
+    jelly: {
+      intro: 1.1, outro: 0.5, loop: 2.0, fit: 1.22, premium: true,
+      build: function (el, o) {
+        el.__units = buildUnits(el.querySelector('.fill'), graphemeUnits(o.text));
+        el.__units.forEach(function (s) { s.style.transformOrigin = '50% 90%'; });
+      },
+      frame: function (el, t, timing) {
+        var units = el.__units || [], n = units.length || 1;
+        var fs = parseFloat(el.style.fontSize) || 100;
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var T = Math.min(0.32, intro * 0.3);
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 2.0) : -1;
+        units.forEach(function (s, i) {
+          var y = 0, sx = 1, sy = 1, op = 1, r = n > 1 ? i / (n - 1) : 0;
+          if (t < intro) {
+            var t2 = t - r * 0.08;
+            if (t2 < T) { var p = clamp(t2 / T, 0, 1); y = -(1 - p * p) * 1.1 * fs; sy = 1 + 0.18 * (1 - p); sx = 1 - 0.1 * (1 - p); op = clamp(p * 4, 0, 1); if (t2 < 0) op = 0; }
+            else { var d = clamp((t2 - T) / (intro - T - 0.08), 0, 1), k = 0.32 * Math.pow(1 - d, 2) * Math.cos(d * Math.PI * 4); sy = 1 - k; sx = 1 + k * 0.8; }
+          }
+          if (h >= 0) { var u = (h - 0.1 - r * 0.35) / 0.65; if (u > 0 && u < 1) { var k2 = 0.14 * Math.sin(u * Math.PI * 3) * (1 - u); sy *= 1 - k2; sx *= 1 + k2 * 0.8; } }
+          if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart - outLen * 0.3 * r) / (outLen * 0.6), 0, 1); sy *= 1 - easeInBack(q) * 0.98; sx *= 1 + q * 0.5; op = Math.min(op, q >= 1 ? 0 : 1); }
+          s.style.opacity = op.toFixed(4);
+          s.style.transform = (y || sx !== 1 || sy !== 1) ? 'translateY(' + y.toFixed(2) + 'px) scale(' + sx.toFixed(4) + ',' + Math.max(0, sy).toFixed(4) + ')' : 'none';
+        });
+        return { transform: 'none', opacity: t >= timing.fadeEnd ? 0 : 1 };
+      },
+    },
+
+    // การ์ตูนบึ้ม (พรีเมียม): ข้อความกระแทกบนดาวระเบิดแบบหนังสือการ์ตูน · ค้าง: ดาวหมุนช้าๆ ต่อเนื่อง · สีขอบ = สีดาว
+    comic: {
+      intro: 0.7, outro: 0.5, loop: 1.8, fit: 1.45, premium: true,
+      build: function (el, o) {
+        var fill = el.querySelector('.fill');
+        fill.style.position = 'relative'; fill.style.zIndex = '2';
+        var id = o.filterId || 'outline', f = el.ownerDocument.getElementById(id);
+        if (f && o.strokeRatio > 0) f.querySelector('.m-outline').setAttribute('flood-color', '#111111');
+        var N = 14, pts = function (ro, ri, off) {
+          var a = [];
+          for (var j = 0; j < N * 2; j++) { var ang = ((j + (off || 0) * 2) / (N * 2)) * Math.PI * 2 - Math.PI / 2, r = j % 2 ? ri : ro - ((j / 2) % 2) * 6; a.push((50 + r * Math.cos(ang)).toFixed(2) + '% ' + (50 + r * Math.sin(ang)).toFixed(2) + '%'); }
+          return 'polygon(' + a.join(',') + ')';
+        };
+        el.__pts = pts;
+        var col = o.strokeRatio > 0 && luminance(o.stroke) > 0.15 && luminance(o.stroke) < 0.9 ? o.stroke : '#ff3b30';
+        el.__burst = [addBox(el, 'tt-burst', 'left:-.3em;right:-.3em;top:-.55em;bottom:-.55em;z-index:0;background:#111111;clip-path:' + pts(50, 36) + ';'),
+          addBox(el, 'tt-burst', 'left:-.3em;right:-.3em;top:-.55em;bottom:-.55em;z-index:1;background:' + col + ';clip-path:' + pts(46, 32) + ';')];
+        el.style.position = 'relative';
+      },
+      frame: function (el, t, timing) {
+        var fill = el.querySelector('.fill');
+        var intro = timing.settle, outLen = timing.fadeEnd - timing.fadeStart;
+        var bs = 1, br = 0, ts = 1, op = 1;
+        if (t < intro) { var p = clamp(t / (intro * 0.75), 0, 1); bs = Math.max(0, easeOutBack(p)); br = (1 - easeOutCubic(p)) * -40; op = clamp(t / 0.06, 0, 1); var p2 = clamp((t - intro * 0.25) / (intro * 0.6), 0, 1); ts = p2 <= 0 ? 0 : lerp(2.2, 1, easeOutCubic(p2)); }
+        var h = t >= intro && t < timing.fadeStart && !timing.still ? holdPhase(t, timing, 1.8) : 0;
+        // ช่วงค้าง: เลื่อนแฉกไปตามขอบรูปรี (ไม่หมุนทั้งกล่อง) สองแฉกพอดีรอบ แฉกยาว/สั้นสลับ → วนเนียน
+        var off = h > 0 ? (0.5 - 0.5 * Math.cos(Math.PI * h / (timing.loop || 1.8))) * 2 : 0;
+        if (t >= timing.fadeStart) { var q = clamp((t - timing.fadeStart) / (outLen * 0.9), 0, 1); bs = 1 - easeInBack(q); ts = 1 - easeInBack(clamp(q * 1.2, 0, 1)); op = 1 - clamp((q - 0.6) / 0.4, 0, 1); }
+        if (t >= timing.fadeEnd) op = 0;
+        if (el.__burst && el.__pts) { el.__burst[0].style.clipPath = el.__pts(50, 36, off); el.__burst[1].style.clipPath = el.__pts(46, 32, off); }
+        (el.__burst || []).forEach(function (b) { b.style.transform = 'rotate(' + br.toFixed(3) + 'deg) scale(' + Math.max(0, bs).toFixed(4) + ')'; });
+        fill.style.transform = 'scale(' + Math.max(0, ts).toFixed(4) + ')';
+        fill.style.opacity = ts <= 0 ? '0' : '1';
+        return { transform: 'none', opacity: op };
+      },
+    },
   };
 
   var NAMES = Object.keys(MOTIONS);

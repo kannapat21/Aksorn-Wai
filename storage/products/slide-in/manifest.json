@@ -1,0 +1,162 @@
+{
+  "slug": "slide-in",
+  "text": "รีวิวจริง",
+  "fill": "#FFFFFF",
+  "stroke": "#111111",
+  "motion": "slide",
+  "fps": 60,
+  "duration": 3,
+  "timing": {
+    "popUp": 0.3,
+    "settle": 0.7,
+    "fadeStart": 2.5,
+    "fadeEnd": 2.9833333333333334,
+    "loop": 0
+  },
+  "parts": {
+    "introSeconds": 0.7,
+    "outroSeconds": 0.5,
+    "holdFrame": 42
+  },
+  "renderedAt": "2026-11-27T09:24:57.106Z",
+  "formats": {
+    "mp4_green": {
+      "ext": "mp4",
+      "label": "MP4 พื้นเขียว (Chroma Key)"
+    },
+    "mp4_black": {
+      "ext": "mp4",
+      "label": "MP4 พื้นดำ (Screen/Add)"
+    },
+    "prores4444": {
+      "ext": "mov",
+      "label": "MOV ProRes 4444 โปร่งใส"
+    },
+    "webm_alpha": {
+      "ext": "webm",
+      "label": "WebM VP9 โปร่งใส"
+    },
+    "parts_green": {
+      "ext": "mp4",
+      "label": "ส่วนเข้า/ออก MP4 พื้นเขียว"
+    },
+    "parts_prores": {
+      "ext": "mov",
+      "label": "ส่วนเข้า/ออก MOV ProRes 4444 โปร่งใส"
+    },
+    "still_png": {
+      "ext": "png",
+      "label": "ภาพนิ่ง PNG โปร่งใส (ยืดได้)"
+    }
+  },
+  "files": [
+    {
+      "format": "mp4_green",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "slide-in_mp4_green_1080x1920.mp4",
+      "bytes": 176564
+    },
+    {
+      "format": "mp4_black",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "slide-in_mp4_black_1080x1920.mp4",
+      "bytes": 121964
+    },
+    {
+      "format": "webm_alpha",
+      "part": "full",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "slide-in_webm_alpha_1080x1920.webm",
+      "bytes": 302140
+    },
+    {
+      "format": "parts_green",
+      "part": "intro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "slide-in_parts_green_intro_1080x1920.mp4",
+      "bytes": 95669
+    },
+    {
+      "format": "parts_green",
+      "part": "outro",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "slide-in_parts_green_outro_1080x1920.mp4",
+      "bytes": 72782
+    },
+    {
+      "format": "still_png",
+      "part": "hold",
+      "size": "vertical",
+      "width": 1080,
+      "height": 1920,
+      "file": "slide-in_still_1080x1920.png",
+      "bytes": 39339
+    },
+    {
+      "format": "mp4_green",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "slide-in_mp4_green_1920x1080.mp4",
+      "bytes": 178920
+    },
+    {
+      "format": "mp4_black",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "slide-in_mp4_black_1920x1080.mp4",
+      "bytes": 121485
+    },
+    {
+      "format": "webm_alpha",
+      "part": "full",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "slide-in_webm_alpha_1920x1080.webm",
+      "bytes": 323217
+    },
+    {
+      "format": "parts_green",
+      "part": "intro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "slide-in_parts_green_intro_1920x1080.mp4",
+      "bytes": 97338
+    },
+    {
+      "format": "parts_green",
+      "part": "outro",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "slide-in_parts_green_outro_1920x1080.mp4",
+      "bytes": 76351
+    },
+    {
+      "format": "still_png",
+      "part": "hold",
+      "size": "horizontal",
+      "width": 1920,
+      "height": 1080,
+      "file": "slide-in_still_1920x1080.png",
+      "bytes": 39145
+    }
+  ]
+}
