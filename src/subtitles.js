@@ -237,7 +237,7 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
       else await burn(q.get.get(job.id), onProgress);
     } catch (e) {
       log(`[subtitles] ${phase === 'asr' ? 'ถอดเสียง' : 'สร้างคลิป'}ไม่สำเร็จ ${job.id}: ${String(e.message).split('\n')[0]}`);
-      q.fail.run(e.userMessage || (phase === 'asr' ? 'ถอดเสียงไม่สำเร็จ กรุณาลองใหม่ หรือติดต่อร้าน' : 'สร้างคลิปไม่สำเร็จ กรุณาลองใหม่ หรือติดต่อร้าน'), now(), now(), job.id);
+      q.fail.run(e.userMessage || (phase === 'asr' ? 'ถอดเสียงไม่สำเร็จ กรุณาลองใหม่ หรือทักเพจ อักษรไหว' : 'สร้างคลิปไม่สำเร็จ กรุณาลองใหม่ หรือทักเพจ อักษรไหว'), now(), now(), job.id);
       fs.rmSync(outOf(job), { force: true });
     } finally {
       fs.rmSync(path.join(dirOf(job.id), 'audio.wav'), { force: true });

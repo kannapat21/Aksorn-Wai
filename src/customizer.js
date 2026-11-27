@@ -196,7 +196,7 @@ function createCustomizer({ db, cfg, log, now, renderer, toolsOk }) {
       log(`[custom] เสร็จ ${job.id}`);
     } catch (e) {
       log(`[custom] ล้มเหลว ${job.id}: ${e.message}`);
-      q.fail.run('เรนเดอร์ไม่สำเร็จ กรุณาลองใหม่ หรือติดต่อร้าน', now(), job.id);
+      q.fail.run('เรนเดอร์ไม่สำเร็จ กรุณาลองใหม่ หรือทักเพจ อักษรไหว', now(), job.id);
       fs.rmSync(outDir(job.id), { recursive: true, force: true });
     } finally {
       running--;

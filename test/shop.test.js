@@ -458,6 +458,13 @@ test('หน้าสาธารณะ: /license, สัญญาฟอนต�
   assert.equal(contact.status, 200);
   assert.match(await contact.text(), /ติดต่อร้าน/);
   assert.match(home, /href="\/contact"/);
+  // เพจ Facebook อักษรไหว: ลิงก์ท้ายเว็บ + หน้าติดต่อ เปิดแท็บใหม่ (noopener)
+  const fbRe = /href="https:\/\/www\.facebook\.com\/profile\.php\?id=61596788079753" target="_blank" rel="noopener noreferrer"/;
+  assert.match(home, fbRe);
+  assert.match(home, /ทักเพจ อักษรไหว/);
+  const contactHtml = await (await fetch(`${base}/contact`)).text();
+  assert.match(contactHtml, fbRe);
+  assert.match(contactHtml, /มีปัญหาหรืออยากสอบถาม ทักมาที่เพจ <b>อักษรไหว<\/b>/);
   // หน้าสิทธิ์ลิสต์ฟอนต์ของร้านทุกตัว พร้อมลิงก์สัญญา OFL ที่เปิดได้จริง
   const licHtml = await (await fetch(`${base}/license`)).text();
   for (const f of cfg.fonts) {
@@ -1900,4 +1907,12 @@ test('แบบที่ไม่มี ProRes สำเร็จรูป: ค�
   assert.match(page, /filetype=alt/, 'ยังมีปุ่ม MP4 พื้นเขียว');
   const capcut = await (await c.req(`/library/${id}?editor=capcut_mobile&size=vertical`)).text();
   assert.doesNotMatch(capcut, /ต้องการ MP4/);
+});
+
+test('CONTACT_FACEBOOK: ค่าเริ่มต้น = เพจ อักษรไหว, ตั้งเองได้, off = ซ่อน, ไม่รับลิงก์ที่ไม่ใช่ https', () => {
+  const fb = (v) => loadConfig({ CONTACT_FACEBOOK: v }).legal.facebook;
+  assert.equal(fb(''), 'https://www.facebook.com/profile.php?id=61596788079753');
+  assert.equal(fb('https://www.facebook.com/aksornwai'), 'https://www.facebook.com/aksornwai');
+  assert.equal(fb('off'), '');
+  assert.equal(fb('javascript:alert(1)'), 'https://www.facebook.com/profile.php?id=61596788079753');
 });
