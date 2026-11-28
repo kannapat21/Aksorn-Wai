@@ -97,6 +97,8 @@ function loadConfig(overrides = {}) {
       price: Math.round(Number(env.PREMIUM_PACK_PRICE || 150) * 100),
     },
     sessionDays: Number(env.SESSION_DAYS || 30),
+    // อยู่หลังพร็อกซีของโฮสต์ (Render/Cloudflare): อ่าน IP ลูกค้าและ https จาก header · Render ตั้ง RENDER=true ให้เอง
+    trustProxy: require('./proxy').proxyMode(env),
     // จำกัดคำขอทั้งเว็บต่อ IP ต่อนาที (กันสแปม/บอท) · 0 = ปิด
     rateGlobalPerMin: Number(env.RATE_GLOBAL_PER_MIN || 600),
     rateSignupPerHour: Number(env.RATE_SIGNUP_PER_HOUR || 10), // สมัครสมาชิกได้กี่ครั้งต่อ IP ต่อชั่วโมง

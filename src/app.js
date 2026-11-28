@@ -18,6 +18,7 @@ const { createSubtitles, renderCues: subRenderCues } = require('./subtitles');
 const { createTranscriber } = require('./transcribe');
 const fmtSec = (x) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, '0')}`;
 const { createStorage, productKey } = require('./storage');
+const { trustHostProxy } = require('./proxy');
 
 const MIN_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * MIN_MS;
@@ -43,6 +44,8 @@ function createApp(cfg, opts = {}) {
     res.set('Cache-Control', 'no-store');
     res.type('text/plain').send('ok');
   });
+  // Render/Cloudflare: IP จริงของลูกค้า + https มาจาก header ของพร็อกซี (ดู src/proxy.js)
+  if (cfg.trustProxy && !cfg.serverless) app.use(trustHostProxy(cfg.trustProxy, log));
   // Netlify: คำขอผ่าน CDN ของ Netlify เสมอ IP จริงของลูกค้าอยู่ใน x-nf-client-connection-ip (ใช้จำกัดจำนวนครั้ง/กันเดารหัส)
   if (cfg.serverless) {
     app.use((req, res, next) => {
@@ -263,6 +266,26 @@ function createApp(cfg, opts = {}) {
     globalHits.set(key, list);
     if (globalHits.size > 50000) globalHits.clear();
     next();
+  });
+
+  // กันฟอร์มจากเว็บอื่นยิงเข้ามา (ชั้นที่สองต่อจาก CSRF token): เบราว์เซอร์บอกที่มาของคำขอใน Sec-Fetch-Site / Origin
+  // webhook ของผู้ให้บริการจ่ายเงินมาจากเซิร์ฟเวอร์ (ตรวจด้วยลายเซ็นแทน)
+  const baseHost = (() => { try { return new URL(cfg.baseUrl).host; } catch { return ''; } })();
+  app.use((req, res, next) => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS' || req.path === '/webhooks/payment') return next();
+    const site = String(req.get('sec-fetch-site') || '').toLowerCase();
+    let cross = site === 'cross-site';
+    const origin = req.get('origin');
+    if (!cross && origin && /^https?:\/\//i.test(origin)) {
+      let host = '';
+      try { host = new URL(origin).host; } catch { host = ''; }
+      cross = host !== req.get('host') && host !== baseHost;
+    }
+    if (!cross) return next();
+    log('[security] ปฏิเสธคำขอจากเว็บอื่น');
+    req.resume();
+    if (/json/.test(req.get('accept') || '') || req.get('x-csrf-token')) return res.status(403).json({ error: 'คำขอไม่ถูกต้อง กรุณาโหลดหน้าใหม่' });
+    return res.status(403).type('text/plain; charset=utf-8').send('คำขอไม่ถูกต้อง กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง');
   });
 
   app.use((req, res, next) => {
