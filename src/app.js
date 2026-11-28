@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const express = require('express');
 
 const { openDb } = require('./db');
+const { guardAsyncRoutes } = require('./crashguard');
 const links = require('./links');
 const views = require('./views');
 const auth = require('./auth');
@@ -34,7 +35,7 @@ function createApp(cfg, opts = {}) {
   // ถึงจะตั้ง BASE_URL เป็นลิงก์ https ไว้ · ผ่านอุโมงค์ cloudflared จะได้ X-Forwarded-Proto: https จาก loopback)
   const secureFor = (res) => secureCookies && Boolean(res.req && res.req.secure);
 
-  const app = express();
+  const app = guardAsyncRoutes(express());
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');
   // จุดเช็กว่าเว็บยังตื่นอยู่ (ตัวปลุกทุก 10 นาทีเรียกที่นี่) ตอบสั้นที่สุด ไม่แตะฐานข้อมูล
@@ -1908,6 +1909,7 @@ function createApp(cfg, opts = {}) {
   app.use((err, req, res, next) => {
     if (err && err.type === 'entity.too.large' && req.path === '/library/fonts') return res.status(413).json({ error: 'ไฟล์ฟอนต์ใหญ่เกิน 5 MB' });
     log(`[error] ${err.stack || err}`);
+    if (res.headersSent) return res.end();
     send(req, res, 'message', { title: 'เกิดข้อผิดพลาด', text: 'กรุณาลองใหม่อีกครั้ง' }, 500);
   });
 

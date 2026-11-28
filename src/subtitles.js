@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const cuesLib = require('./subcues');
+const { safely } = require('./crashguard');
 
 const HOUR = 60 * 60 * 1000;
 const SIZES = ['sm', 'md', 'lg'];
@@ -334,14 +335,14 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
     log(`[subtitles] สร้างคลิปเสร็จ ${job.id} (${Math.round(r.ms / 1000)} วิ)`);
   }
 
-  function pump() {
+  const pump = safely('subtitles', () => {
     if (!toolsOk()) return;
     while (running < S.concurrency) {
       const job = q.next.get();
       if (!job) return;
-      work(job);
+      work(job).catch((e) => log(`[subtitles] งาน ${job.id} ล้ม: ${(e && e.stack) || e}`));
     }
-  }
+  }, log);
 
   async function idle() {
     for (let i = 0; i < 3000; i++) {
@@ -425,8 +426,9 @@ function createSubtitles({ db, cfg, log, now, transcriber, renderer, toolsOk, re
   }
 
   fs.mkdirSync(S.dir, { recursive: true, mode: 0o700 });
-  sweep();
-  const timer = setInterval(sweep, 10 * 60 * 1000);
+  const safeSweep = safely('subtitles sweep', sweep, log);
+  safeSweep();
+  const timer = setInterval(safeSweep, 10 * 60 * 1000);
   if (timer.unref) timer.unref();
   setImmediate(pump);
 

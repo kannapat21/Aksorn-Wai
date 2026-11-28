@@ -2,6 +2,9 @@
 const { loadConfig } = require('./config');
 const { createApp } = require('./app');
 const { checkRenderTools, installHelp } = require('../render/tools');
+const { installCrashGuard } = require('./crashguard');
+
+installCrashGuard();
 
 let cfg;
 try {

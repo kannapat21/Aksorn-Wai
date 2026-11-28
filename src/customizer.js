@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { inspectFont, FontError } = require('./fontcheck');
+const { safely } = require('./crashguard');
 
 const MAX_GRAPHEMES = 40;
 const COLOR_RE = /^#[0-9a-f]{6}$/;
@@ -205,16 +206,17 @@ function createCustomizer({ db, cfg, log, now, renderer, toolsOk }) {
   }
 
   // หยิบงานถัดไปจากคิว ถ้ายังมีช่องว่าง
-  function pump() {
+  const pump = safely('custom', () => {
     if (!toolsOk()) return;
     while (running < cfg.customConcurrency) {
       const job = q.next.get();
       if (!job) return;
       const started = work(job);
       if (!started) return;
+      started.catch((e) => log(`[custom] งาน ${job.id} ล้ม: ${(e && e.stack) || e}`));
       // work() เปลี่ยนสถานะเป็น rendering ทันทีแบบ synchronous ก่อน await แรก จึงไม่หยิบงานเดิมซ้ำ
     }
-  }
+  }, log);
 
   // รองานในคิวให้เสร็จ (ใช้ในเทสต์)
   async function idle() {
