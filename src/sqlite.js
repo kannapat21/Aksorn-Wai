@@ -29,24 +29,74 @@ function args(params, names) {
   return [params.flat()];
 }
 
+// Turso สะดุด/ทิ้ง stream ที่ว่างนานไป → libsql ใช้ stream เดิมต่อไปตลอด ทุกคำสั่งล้ม "stream not found" จนกว่าจะเปิดใหม่
+// (log จริงบน Render 2026-11-28: 502 connect to upstream failed → 404 stream not found ทุกนาที → ร้านล่ม)
+// error พวกนี้ = คำสั่งยังไม่ถูกรันบนเซิร์ฟเวอร์ จึงเปิดการเชื่อมต่อใหม่แล้วลองซ้ำได้ปลอดภัย
+const RECONNECT_RE = /stream not found|stream expired|connect to upstream failed|status=50[234]\b|Bad Gateway|Service Unavailable|Gateway Timeout|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|ENOTFOUND|EAI_AGAIN|socket hang up|connection (?:reset|closed|refused)|error sending request|operation timed out|Hrana\(Http/i;
+const isReconnectable = (e) => Boolean(e) && RECONNECT_RE.test(String((e && e.message) || e));
+
 class Statement {
-  constructor(stmt, sql) { this.stmt = stmt; this.names = namedOrder(sql); this.isPluck = false; }
-  pluck(on = true) { this.isPluck = on; this.stmt.pluck(on); return this; }
-  run(...p) { return this.stmt.run(...args(p, this.names)); }
-  get(...p) { return plain(this.stmt.get(...args(p, this.names))); }
-  all(...p) { return this.stmt.all(...args(p, this.names)).map(plain); }
+  constructor(owner, sql) {
+    this.owner = owner;
+    this.sql = sql;
+    this.names = namedOrder(sql);
+    this.isPluck = false;
+    this.gen = -1;
+    this.stmt = null;
+  }
+  raw() {
+    if (this.gen !== this.owner.gen || !this.stmt) {
+      this.stmt = this.owner.db.prepare(this.sql);
+      if (this.isPluck) this.stmt.pluck(true);
+      this.gen = this.owner.gen;
+    }
+    return this.stmt;
+  }
+  pluck(on = true) { this.isPluck = on; this.owner.retry(() => this.raw().pluck(on)); return this; }
+  run(...p) { return this.owner.retry(() => this.raw().run(...args(p, this.names))); }
+  get(...p) { return plain(this.owner.retry(() => this.raw().get(...args(p, this.names)))); }
+  all(...p) { return this.owner.retry(() => this.raw().all(...args(p, this.names))).map(plain); }
   iterate(...p) { return Array.prototype.map.call(this.all(...p), (x) => x)[Symbol.iterator](); }
 }
 
 class Database {
   constructor(file, opts = {}) {
     this.remote = /^(libsql|https?|wss?):\/\//.test(file);
-    this.db = new Libsql(file, this.remote ? { authToken: opts.authToken || undefined } : {});
+    this.Driver = opts.driver || Libsql;
+    this.file = file;
+    this.authToken = opts.authToken;
+    this.log = opts.log || console.log;
+    this.retries = opts.retries == null ? 2 : opts.retries;
+    this.gen = 0;
+    this.reconnects = 0;
+    this.connPragmas = [];
+    this.db = this.open();
     this.name = file;
   }
-  prepare(sql) { return new Statement(this.db.prepare(sql), sql); }
-  exec(sql) { return this.db.exec(sql); }
+  open() { return new this.Driver(this.file, this.remote ? { authToken: this.authToken || undefined } : {}); }
+  reconnect(reason) {
+    try { this.db.close(); } catch { /* ปิดไปแล้ว */ }
+    this.db = this.open();
+    this.gen++;
+    this.reconnects++;
+    for (const p of this.connPragmas) { try { this.db.exec(`PRAGMA ${p}`); } catch { /* ไม่เป็นไร */ } }
+    this.log(`[db] เชื่อมต่อฐานข้อมูลใหม่ (${String(reason).split('\n')[0].slice(0, 160)})`);
+  }
+  // ลองคำสั่งซ้ำหลังเปิดการเชื่อมต่อใหม่ เฉพาะฐานข้อมูลบนคลาวด์ + error ที่แปลว่าเน็ต/stream หลุด
+  retry(fn) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return fn();
+      } catch (e) {
+        if (!this.remote || attempt >= this.retries || !isReconnectable(e)) throw e;
+        this.reconnect(e.message || e);
+      }
+    }
+  }
+  prepare(sql) { return new Statement(this, sql); }
+  exec(sql) { return this.retry(() => this.db.exec(sql)); }
   pragma(source, options = {}) {
+    if (/=/.test(source) && !this.connPragmas.includes(source)) this.connPragmas.push(source);
     const rows = this.prepare(`PRAGMA ${source}`).all();
     if (options.simple) return rows.length ? rows[0][Object.keys(rows[0])[0]] : undefined;
     return rows;
@@ -71,4 +121,4 @@ class Database {
   close() { this.db.close(); }
 }
 
-module.exports = { Database };
+module.exports = { Database, isReconnectable };
