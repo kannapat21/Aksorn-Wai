@@ -506,12 +506,11 @@ html, body { overflow-x: clip; }
 .lib-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); margin-top: 18px; }
 .lib-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; transition: transform .25s var(--ease), box-shadow .25s; }
 .lib-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
-.lib-thumb img { aspect-ratio: 16/9; width: 100%; object-fit: cover; background: #111; }
 .lib-body { padding: 14px; }
 .lib-body h3 { margin: 0; }
 .lib-body p { margin: 2px 0 12px; }
 .lib-item-head { display: grid; grid-template-columns: 200px 1fr; gap: 18px; align-items: center; margin: 8px 0 8px; }
-.lib-item-head img { border-radius: var(--radius-sm); aspect-ratio: 16/9; object-fit: cover; background: #111; }
+.lib-item-thumb { border-radius: var(--radius-sm); }
 .lib-item-head h1 { margin: 2px 0; }
 @media (max-width: 560px) { .lib-item-head { grid-template-columns: 1fr; } }
 .editor-pick { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; margin: 18px 0; }
@@ -523,7 +522,6 @@ a.chip { text-decoration: none; }
 .menu summary { cursor: pointer; }
 img { height: auto; }
 .lib-thumb { display: block; }
-.lib-thumb img, .lib-item-head img { width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
 
 /* =================================================================
    รอบ 5: ปรับแต่งแอนิเมชัน + เวอร์ชันของฉัน
@@ -766,9 +764,8 @@ mark.fill-me { background: var(--warn-soft); color: var(--ink); border: 1px dash
 main { animation: page-in .3s var(--ease); } /* แค่ความทึบ: ถ้าใช้ transform ปุ่ม/แผงที่ติดขอบจอ (position: fixed) ข้างในจะเลื่อนหลุดตำแหน่ง */
 @keyframes page-in { from { opacity: 0; } }
 /* โครงร่างระหว่างโหลดรูป */
-.thumb, .lib-thumb, .lib-item-head img { background: linear-gradient(100deg, var(--surface-2) 30%, color-mix(in srgb, var(--surface-2) 60%, var(--surface)) 50%, var(--surface-2) 70%) 0 0 / 200% 100%; animation: skel 1.2s linear infinite; }
-.thumb:has(img.loaded), .lib-thumb:has(img.loaded) { animation: none; }
-.lib-item-head img.loaded { animation: none; }
+.thumb { background: linear-gradient(100deg, var(--surface-2) 30%, color-mix(in srgb, var(--surface-2) 60%, var(--surface)) 50%, var(--surface-2) 70%) 0 0 / 200% 100%; animation: skel 1.2s linear infinite; }
+.thumb:has(img.loaded) { animation: none; }
 @keyframes skel { to { background-position: -200% 0; } }
 img[loading="lazy"] { transition: opacity .35s; }
 img[loading="lazy"]:not(.loaded) { opacity: 0; }
@@ -917,7 +914,7 @@ img[loading="lazy"]:not(.loaded) { opacity: 0; }
 }
 @keyframes wiz-in-r { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
 @keyframes wiz-in-l { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .cz-step { animation: none !important; } main { animation: none; } .thumb, .lib-thumb, .lib-item-head img { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .cz-step { animation: none !important; } main { animation: none; } .thumb { animation: none; } }
 .style-add { flex: none; white-space: nowrap; }
 @media (max-width: 720px) { .styles-head a { margin-left: 0; } .verify-bar { font-size: .82rem; padding: 8px 12px; } }
 .cz-form .styles-bar { margin: 0 0 14px; padding: 12px; background: var(--surface-2); border-color: transparent; }

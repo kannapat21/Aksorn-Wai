@@ -1779,6 +1779,10 @@ test('ของฟรี: กดรับ → เข้าคลังทัน�
   const lib = await (await c.req(loc)).text();
   assert.match(lib, /ได้รับแล้ว ฟรี!/);
   assert.match(lib, /รับฟรีเมื่อ/);
+  // พรีวิวในคลังเล่นวนเหมือนการ์ดหน้าหลัก (data-hover-play + วิดีโอ)
+  assert.match(lib, /class="thumb lib-item-thumb" data-hover-play><img [^>]+><video data-src="\/previews\/follow-now_horizontal\.mp4" muted loop playsinline/);
+  const shelf = await (await c.req('/library')).text();
+  assert.match(shelf, /class="lib-thumb thumb" data-hover-play[^>]*><img [^>]+><video data-src="\/previews\/follow-now_horizontal\.mp4" muted loop playsinline/);
   // กดซ้ำ: ไม่สร้างรายการใหม่
   const again = await c.post('/checkout', { product: 'follow-now' });
   assert.equal(again.headers.get('location'), `/library/${id}`);

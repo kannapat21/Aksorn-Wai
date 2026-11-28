@@ -805,7 +805,7 @@ function library({ cfg, user, csrf, items, open = [], customs = [], fonts, limit
 </section>` : '';
   const list = items.map(({ order, p }) => `
     <article class="lib-card reveal">
-      <a href="/library/${esc(order.id)}" class="lib-thumb"><img src="/previews/${esc(p.slug)}_horizontal.jpg" alt="" loading="lazy" width="960" height="540"></a>
+      <a href="/library/${esc(order.id)}" class="lib-thumb thumb" data-hover-play aria-label="${esc(p.title)}"><img src="/previews/${esc(p.slug)}_horizontal.jpg" alt="" loading="lazy" width="960" height="540"><video data-src="/previews/${esc(p.slug)}_horizontal.mp4" muted loop playsinline preload="none"></video></a>
       <div class="lib-body">
         <h3>${esc(p.title)}</h3>
         <p class="muted small">${order.provider === 'free' ? 'รับฟรีเมื่อ' : order.provider === 'pack' ? 'ได้จากแพ็กพรีเมียม' : 'ซื้อเมื่อ'} ${esc(thDate(order.paid_at || order.created_at))} · รหัส ${esc(order.id.slice(0, 8))}</p>
@@ -865,7 +865,7 @@ function libraryItem({ cfg, user, csrf, order, p, editorId, left, size = 'vertic
 <nav class="crumb" aria-label="ตำแหน่งหน้า"><a href="/library">คลังของฉัน</a><span>/</span><span aria-current="page">${esc(p.title)}</span></nav>
 ${claimed && order.provider === 'free' ? `<p class="claimed-bar" role="status">${ICON.check}<span><b>ได้รับแล้ว ฟรี!</b> "${esc(p.title)}" อยู่ในคลังของคุณ โหลดหรือปรับแต่งได้เลย</span></p>` : ''}
 <div class="lib-item-head">
-  <img src="/previews/${esc(p.slug)}_horizontal.jpg" alt="" width="960" height="540">
+  <div class="thumb lib-item-thumb" data-hover-play><img src="/previews/${esc(p.slug)}_horizontal.jpg" alt="" width="960" height="540"><video data-src="/previews/${esc(p.slug)}_horizontal.mp4" muted loop playsinline preload="none"></video></div>
   <div>
     <p class="eyebrow">อยู่ในคลังของคุณ · ใช้ได้ตลอด</p>
     <h1>${esc(p.title)}</h1>
